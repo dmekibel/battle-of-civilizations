@@ -43,9 +43,10 @@ import {
   type Session,
 } from '../engine';
 import { NO_EFFECTS, hexOnMap, mapSize, renderBoard, screenToGround, viewCube, type Camera, type Effects, type Overlay } from './board';
-import { errorText, logText, playerName, reasonText, t, unitName, type Lang } from './i18n';
+import { errorText, logText, playerName, reasonText, t, unitName, type Key, type Lang } from './i18n';
 import { EMBLEM, unitIcon } from './symbols';
 import { isMuted, sound, toggleMute } from './sound';
+import { DADS_RULES, RECOMMENDED, applySettings, loadSettings, saveSettings, type DiceId, type MapId, type Settings } from './settings';
 
 const app = document.getElementById('app')!;
 
@@ -72,6 +73,7 @@ interface Saved {
   state: GameState;
   cover: boolean;
   mode: Mode;
+  settings?: Settings;
 }
 
 function loadGame(): Saved | null {
@@ -89,7 +91,7 @@ function loadGame(): Saved | null {
 
 function saveGame() {
   try {
-    const data: Saved = { board: [CONFIG.board.cols, CONFIG.board.rows], state: sess.state, cover, mode };
+    const data: Saved = { board: [CONFIG.board.cols, CONFIG.board.rows], state: sess.state, cover, mode, settings };
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
   } catch {
     /* storage full or blocked: play on without saving */
@@ -97,7 +99,12 @@ function saveGame() {
 }
 
 const saved = loadGame();
+/** The battle's settings; a saved game brings its own, a new one starts from the last used. */
+let settings: Settings = saved?.settings ?? loadSettings();
+applySettings(settings);
 let sess: Session = startSession(saved?.state ?? newGame());
+/** The "New battle" screen, shown after picking how to play. */
+let setupOpen = false;
 let selected: string | null = null;
 let lang: Lang = loadLang();
 let message: string | null = null;
@@ -499,6 +506,54 @@ function draftSheet(s: GameState): string {
   </div>`;
 }
 
+/** The optional rules as shown on the New battle screen, with the value each switches to. */
+const RULES: { key: keyof Settings['options']; on: Settings['options'][keyof Settings['options']] }[] = [
+  { key: 'routAt', on: 0.5 },
+  { key: 'shieldWall', on: true },
+  { key: 'spears', on: true },
+  { key: 'charge', on: true },
+  { key: 'kingAura', on: true },
+  { key: 'zoneOfControl', on: true },
+  { key: 'longShotFrom', on: 3 },
+  { key: 'volleys', on: 6 },
+  { key: 'carryMax', on: 3 },
+  { key: 'firstTurnBonus', on: 2 },
+];
+
+function setupScreen(): string {
+  const chips = (field: string, values: [string, string][], current: string) =>
+    `<div class="chips">${values
+      .map(([v, label]) => `<button data-act="set" data-field="${field}" data-value="${v}" class="${v === current ? 'on' : ''}" aria-pressed="${v === current}">${label}</button>`)
+      .join('')}</div>`;
+  const isDad = RULES.every((r) => settings.options[r.key] === DADS_RULES[r.key]);
+  const isRec = RULES.every((r) => settings.options[r.key] === RECOMMENDED[r.key]);
+  const rules = RULES.map((r) => {
+    const on = settings.options[r.key] !== DADS_RULES[r.key];
+    return `<button data-act="opt" data-key="${r.key}" class="rule ${on ? 'on' : ''}" aria-pressed="${on}">
+      <span class="switch" aria-hidden="true"><i></i></span>
+      <span class="what"><b>${t(lang, `rule_${r.key}` as Key)}</b><small>${t(lang, `ruleHelp_${r.key}` as Key)}</small></span>
+    </button>`;
+  }).join('');
+  return `<div class="sheet"><div class="sheet-body setup">
+    <h2>${t(lang, 'newBattle')}</h2>
+    <div class="sheet-scroll">
+      <h3>${t(lang, 'armyPoints')}</h3>
+      ${chips('budget', [['20', `20 · ${t(lang, 'skirmish')}`], ['30', '30'], ['50', '50'], ['80', `80 · ${t(lang, 'epic')}`]], String(settings.budget))}
+      <h3>${t(lang, 'map')}</h3>
+      ${chips('map', [['river', t(lang, 'mapRiver')], ['open', t(lang, 'mapOpen')], ['forest', t(lang, 'mapForest')], ['random', t(lang, 'mapRandom')]], settings.map)}
+      <h3>${t(lang, 'pointsEachTurn')}</h3>
+      ${chips('dice', [['3d6', t(lang, 'dice3')], ['2d6', t(lang, 'dice2')], ['fixed', t(lang, 'diceFixed')]], settings.dice)}
+      <h3>${t(lang, 'rules')}</h3>
+      <div class="chips">
+        <button data-act="preset" data-value="dad" class="${isDad ? 'on' : ''}" aria-pressed="${isDad}">${t(lang, 'presetDad')}</button>
+        <button data-act="preset" data-value="recommended" class="${isRec ? 'on' : ''}" aria-pressed="${isRec}">${t(lang, 'presetRecommended')}</button>
+      </div>
+      <div class="rules">${rules}</div>
+    </div>
+    <div class="sheet-foot"><button data-act="begin" class="primary wide">${t(lang, 'startBattle')} →</button></div>
+  </div></div>`;
+}
+
 function startScreen(): string {
   const pick = (l: Lang, label: string) =>
     `<button data-act="set-lang" data-lang="${l}" class="${lang === l ? 'on' : ''}" aria-pressed="${lang === l}">${label}</button>`;
@@ -738,9 +793,10 @@ function draw() {
       <footer class="bar">${bar(s)}</footer>
       ${withPanel() ? `<aside class="side">${menuBody(s)}</aside>` : ''}
     </div>
-    ${s.phase === 'draft' && !cover && !choosing ? draftSheet(s) : ''}
-    ${cover && s.phase !== 'over' && !choosing ? passScreen(s) : ''}
+    ${s.phase === 'draft' && !cover && !choosing && !setupOpen ? draftSheet(s) : ''}
+    ${cover && s.phase !== 'over' && !choosing && !setupOpen ? passScreen(s) : ''}
     ${choosing ? startScreen() : ''}
+    ${setupOpen ? setupScreen() : ''}
     ${over}
     ${menuOpen && !withPanel() ? menu(s) : ''}`;
   app.classList.toggle('upside', upsideDown());
@@ -866,7 +922,7 @@ function onDeployHex(s: GameState, hex: { col: number; row: number }) {
 
 function onHex(col: number, row: number) {
   const s = sess.state;
-  if (rolling || s.phase === 'over' || cover || choosing || aiTurn(s)) return;
+  if (rolling || s.phase === 'over' || cover || choosing || setupOpen || aiTurn(s)) return;
   const hex = { col, row };
   if (s.phase === 'deploy') return onDeployHex(s, hex);
   if (s.phase === 'draft') return;
@@ -958,6 +1014,33 @@ app.addEventListener('click', (e) => {
     }
     case 'mode':
       mode = btn!.getAttribute('data-mode') === 'ai' ? 'ai' : 'pvp';
+      choosing = false;
+      setupOpen = true;
+      settings = loadSettings();
+      return render();
+    case 'set': {
+      // One choice on the New battle screen: army points, map or points per turn.
+      const field = btn!.getAttribute('data-field');
+      const value = btn!.getAttribute('data-value')!;
+      if (field === 'budget') settings = { ...settings, budget: Number(value) };
+      if (field === 'map') settings = { ...settings, map: value as MapId };
+      if (field === 'dice') settings = { ...settings, dice: value as DiceId };
+      return render();
+    }
+    case 'preset':
+      settings = { ...settings, options: { ...(btn!.getAttribute('data-value') === 'recommended' ? RECOMMENDED : DADS_RULES) } };
+      return render();
+    case 'opt': {
+      const k = btn!.getAttribute('data-key') as keyof Settings['options'];
+      const rule = RULES.find((r) => r.key === k)!;
+      const on = settings.options[k] !== DADS_RULES[k];
+      settings = { ...settings, options: { ...settings.options, [k]: on ? DADS_RULES[k] : rule.on } };
+      return render();
+    }
+    case 'begin':
+      setupOpen = false;
+      saveSettings(settings);
+      applySettings(settings);
       return restart(newGame());
     case 'take':
       return void run((s) => takeHex(s));

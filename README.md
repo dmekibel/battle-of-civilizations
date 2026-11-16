@@ -65,6 +65,8 @@ Speed ratio heavy infantry : light infantry : heavy cavalry : light cavalry = 1 
 
 **Against the computer.** Pick it on the start screen: you lead Novgorod, the computer leads the Teutonic Order. It builds and places its own army, then plays greedily one step at a time: it takes the best kill or hit it can see, otherwise marches its army together towards the enemy King (crossing at the bridges), keeps archers at shooting range and its King out of reach. It doesn't plan ahead, so it can be beaten. Code: `src/engine/ai.ts`.
 
+**New battle screen.** After choosing how to play you set: army points (20 skirmish, 30, 50, 80 epic), map (River crossing, Open field, Great forest, Random), points each turn (3 dice, 2 dice, or always 10 with no luck), and the optional rules, one switch each or two presets: *Dad's rules* (all off, the default) and *Recommended* (morale, shield wall, spears, charge, long shots, save points, catch-up). The choices are remembered and saved with the game.
+
 **Quick battle** (in the menu) skips setup with a fixed army: 1 King, 4 heavy infantry, 4 light infantry, 2 heavy cavalry, 2 light cavalry, 2 archers.
 
 **Rule switches in config.** Capture on/off, King kill on/off, several moves per piece per turn, several attacks per piece per turn, moving after attacking, passing through your own pieces, attack cost, archer cost/range/damage, dice count and sides, board size, river column, bridge rows, forest hexes, starting positions.

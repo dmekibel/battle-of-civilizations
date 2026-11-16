@@ -241,11 +241,11 @@ function withLog(s: GameState, e: LogEntry): GameState {
 
 export function rollDice(s: GameState, rng: Rng = Math.random, cfg: GameConfig = CONFIG): Result {
   if (s.phase !== 'roll') return fail('wrongPhase');
-  const dice = Array.from({ length: cfg.dice.count }, () => 1 + Math.floor(rng() * cfg.dice.sides));
+  const dice = cfg.dice.fixed ? [] : Array.from({ length: cfg.dice.count }, () => 1 + Math.floor(rng() * cfg.dice.sides));
   const carried = s.carry?.[s.current] ?? 0;
   // The second player's first turn gets the optional catch-up bonus.
   const bonus = s.turn === 1 && s.current === 'blue' ? cfg.options.firstTurnBonus : 0;
-  const total = dice.reduce((a, b) => a + b, 0) + carried + bonus;
+  const total = (cfg.dice.fixed ?? dice.reduce((a, b) => a + b, 0)) + carried + bonus;
   // Remember both armies' size when the battle starts, for the morale rule.
   const startValue = s.startValue ?? { red: armyValue(s, 'red', cfg), blue: armyValue(s, 'blue', cfg) };
   const next: GameState = { ...s, dice, points: total, phase: 'act', startValue, carry: { red: 0, blue: 0, ...s.carry, [s.current]: 0 } };

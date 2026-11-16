@@ -55,7 +55,8 @@ export interface GameConfig {
     forests: [number, number][];
   };
   terrain: Record<TerrainId, TerrainRules>;
-  dice: { count: number; sides: number };
+  /** Points each turn: roll `count` dice of `sides` sides, or a fixed number when `fixed` is set (no luck). */
+  dice: { count: number; sides: number; fixed?: number | null };
   units: Record<UnitTypeId, UnitRules>;
   combat: {
     /** Movement points spent per melee attack. */

@@ -69,7 +69,7 @@ describe('optional rules', () => {
     const s = scenario(cfg, [['red', 'lightCavalry', 3, 3], ['blue', 'heavyInfantry', 3, 4]]);
     const a = ok(attack(s, s.units[0].id, s.units[1].id, cfg));
     expect(getUnit(a, s.units[0].id)).toBeUndefined(); // light cavalry has 1 defense
-    expect(a.log.at(-1)).toMatchObject({ counter: 1, attackerKilled: true });
+    expect(a.log[a.log.length - 1]).toMatchObject({ counter: 1, attackerKilled: true });
     const kill = scenario(cfg, [['red', 'heavyCavalry', 3, 3], ['blue', 'lightInfantry', 3, 4]]);
     expect(previewStrike(kill, kill.units[0].id, kill.units[1].id, 'attack', cfg)!.counter).toBe(0); // no hit back from the dead
   });

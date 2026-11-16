@@ -299,3 +299,20 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
    swings to their side at the same time, so the board stays where it lies on the phone. */
 .screen.flipped { transform: rotate(180deg); }
 #app.upside .cover, #app.upside .sheet, #app.upside .drawer, #app.upside .drawer-bg { transform: rotate(180deg); }
+
+/* New battle screen */
+.setup h2 { margin-bottom: 4px; }
+.setup h3 { margin: 14px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { padding: 9px 12px; font-size: 14px; border-radius: 999px; }
+.chips button.on { background: var(--gold); border-color: #f1d27a; color: #1f1b15; }
+.rules { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 12px; }
+.rule { display: flex; align-items: center; gap: 12px; text-align: left; padding: 10px 12px; border-radius: 12px; font-weight: 400; }
+.rule .what { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rule .what b { font-size: 15px; }
+.rule .what small { font-size: 12.5px; color: var(--muted); line-height: 1.35; }
+.switch { flex: none; width: 40px; height: 24px; border-radius: 12px; background: var(--track); position: relative; transition: background .15s; }
+.switch i { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--ink); transition: transform .15s; }
+.rule.on { border-color: var(--gold); }
+.rule.on .switch { background: var(--gold); }
+.rule.on .switch i { transform: translateX(16px); background: #1f1b15; }
