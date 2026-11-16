@@ -77,6 +77,8 @@ Speed ratio heavy infantry : light infantry : heavy cavalry : light cavalry = 1 
 - Tap a green hex to move, tap a red one to attack or shoot.
 - **Undo** steps back within the current turn (never re-rolls the dice).
 - Tapping one of your pieces before rolling rolls the dice for you.
+- When you have no points left (or none your pieces can use), the turn ends by itself after a moment; Undo in that moment cancels it.
+- **⬇** puts your army at the bottom of the screen. In a two-player game, **🔄 Face the player** (menu) turns the board to whoever's turn it is.
 - **End turn** passes the screen to the other player. With points still usable, the first press warns and the button turns into **End anyway**.
 - **On a computer** (wide screen): the pieces list, log and settings stay open in a side panel. Keys: Space roll, Enter end turn, U or Ctrl+Z undo, + / − zoom, Esc deselect. Drag the map with the mouse; a trackpad pinch zooms it.
 - **Camera:** turn the board to any angle and change the tilt. Buttons ⟲ ⟳ ⤒ ⤓ ⌂ in the corner of the board; on a phone twist two fingers to turn and slide them up or down to tilt; with a mouse right-drag (or Shift + drag); keys Q / W turn, Z / X tilt, C resets. Pieces always face you.

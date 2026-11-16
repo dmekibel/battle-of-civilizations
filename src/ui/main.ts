@@ -156,6 +156,24 @@ function saveCam() {
   }
 }
 const clampPitch = (p: number) => Math.min(1, Math.max(0, p));
+
+/** The camera turn that puts this side's army at the bottom of the screen, enemy at the top. */
+function yawFor(p: Player): number {
+  // Portrait already shows Novgorod at the bottom; landscape has it on the left.
+  const novgorodBottom = portrait ? 0 : -Math.PI / 2;
+  return p === 'red' ? novgorodBottom : novgorodBottom + Math.PI;
+}
+
+/** Optional: in a two-player game, turn the board to face whoever's turn it is. */
+const FACE_KEY = 'boc-face';
+let faceTurn = (() => {
+  try {
+    return localStorage.getItem(FACE_KEY) === '1';
+  } catch {
+    return false;
+  }
+})();
+let facedFor: Player | null = null;
 const view = () => ({ portrait, tilt, cam });
 
 /** 2.5D board (tilted, pieces standing) or the flat map; remembered per device. */
@@ -423,6 +441,7 @@ function menuBody(s: GameState): string {
   return `<div class="drawer-buttons">
       <button data-act="lang">${t(lang, 'language')}</button>
       <button data-act="view">${tilt ? t(lang, 'viewTilt') : t(lang, 'viewFlat')}</button>
+      ${mode === 'pvp' ? `<button data-act="face">${faceTurn ? t(lang, 'faceOn') : t(lang, 'faceOff')}</button>` : ''}
       <button data-act="mute">${isMuted() ? t(lang, 'soundOff') : t(lang, 'soundOn')}</button>
       <button data-act="quick">${t(lang, 'quick')}</button>
       <button data-act="new">${confirmNew ? t(lang, 'confirmNew') : t(lang, 'newGame')}</button>
@@ -523,6 +542,12 @@ function effects(s: GameState): Effects {
 
 function draw() {
   const s = sess.state;
+  // Two players with "face the player" on: swing the board round when the turn changes hands.
+  if (faceTurn && mode === 'pvp' && !setupPhase(s) && facedFor !== s.current) {
+    facedFor = s.current;
+    cam = { ...cam, yaw: yawFor(s.current) };
+    saveCam();
+  }
   const fx = effects(s);
   portrait = isPortrait();
   desktop = isDesktop();
@@ -573,6 +598,7 @@ function draw() {
           <button data-act="cam-right" title="${t(lang, 'camRight')}" aria-label="${t(lang, 'camRight')}">⟳</button>
           <button data-act="cam-up" title="${t(lang, 'camSteeper')}" aria-label="${t(lang, 'camSteeper')}" ${tilt && cam.pitch < 1 ? '' : 'disabled'}>⤒</button>
           <button data-act="cam-down" title="${t(lang, 'camFlatter')}" aria-label="${t(lang, 'camFlatter')}" ${tilt && cam.pitch > 0 ? '' : 'disabled'}>⤓</button>
+          <button data-act="cam-mine" title="${t(lang, 'camMine')}" aria-label="${t(lang, 'camMine')}">⬇</button>
           <button data-act="cam-reset" title="${t(lang, 'camReset')}" aria-label="${t(lang, 'camReset')}">⌂</button>
         </div>
         <div class="zoom">
@@ -628,8 +654,26 @@ function run(act: (s: GameState) => Result, checkpoint = false): boolean {
   const { sess: next, result } = apply(sess, act, checkpoint);
   sess = next;
   message = result.ok ? null : errorText(lang, result.error);
+  if (result.ok) autoEndIfDone();
   render();
   return result.ok;
+}
+
+/** When the player can't do anything more (no points, or none their pieces can use), the
+ *  turn ends by itself after a moment, so the last move is seen and can still be undone. */
+function autoEndIfDone() {
+  const s = sess.state;
+  if (s.phase !== 'act' || s.advance || aiTurn(s)) return;
+  const mine = s.units.filter((u) => u.owner === s.current).length;
+  if (s.points > 0 && spentUnits(s).size < mine) return;
+  const at = s;
+  message = t(lang, 'outOfPoints');
+  setTimeout(() => {
+    // Only if nothing happened meanwhile (an undo, for example, cancels it).
+    if (sess.state !== at) return;
+    selected = null;
+    run((st) => endTurn(st), true);
+  }, 1400);
 }
 
 function restart(state: GameState) {
@@ -805,6 +849,22 @@ app.addEventListener('click', (e) => {
     case 'cam-down':
       cam = { ...cam, pitch: clampPitch(cam.pitch + (act === 'cam-up' ? 0.15 : -0.15)) };
       saveCam();
+      return render();
+    case 'cam-mine': {
+      // Your army at the bottom; against the computer "you" are always Novgorod.
+      const me = mode === 'ai' ? 'red' : sess.state.current;
+      cam = { ...cam, yaw: yawFor(me) };
+      saveCam();
+      return render();
+    }
+    case 'face':
+      faceTurn = !faceTurn;
+      try {
+        localStorage.setItem(FACE_KEY, faceTurn ? '1' : '0');
+      } catch {
+        /* keep the choice for this visit only */
+      }
+      facedFor = null;
       return render();
     case 'cam-reset':
       cam = { ...CAM_DEFAULT };
@@ -1018,6 +1078,7 @@ document.addEventListener('keydown', (e) => {
   if (k === 'z') return click('cam-down');
   if (k === 'x') return click('cam-up');
   if (k === 'c') return click('cam-reset');
+  if (k === 'v') return click('cam-mine');
   if (k === 'f') return click('fullscreen');
   if (k === 't') return click('take');
   if (k === 'a') return click(sess.state.phase === 'deploy' ? 'auto' : '');
