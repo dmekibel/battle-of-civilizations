@@ -531,59 +531,143 @@ const RULES: { key: keyof Settings['options']; on: Settings['options'][keyof Set
   { key: 'firstTurnBonus', on: 2 },
 ];
 
+/** Which side's army the New battle screen is choosing, and whether the detailed rules are open. */
+let pickSide: Player = 'red';
+let rulesOpen = false;
+
+/** Small white glyphs (24 x 24) for the rule rows, drawn on a coloured square. */
+const RULE_ICON: Record<keyof Settings['options'], string> = {
+  toughness: '<path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.5-7 10-7 10z"/>',
+  shieldWall: '<path d="M3 5h8v5q0 5-4 7q-4-2-4-7zM13 5h8v5q0 5-4 7q-4-2-4-7z"/>',
+  spears: '<path d="M5 19L17 7M17 7l3-3-1 5zM8 19l-3 0 0-3" fill="none"/>',
+  charge: '<path d="M13 3L5 13h6l-1 8 8-10h-6z"/>',
+  kingAura: '<path d="M5 15V8l3.5 3L12 6l3.5 5L19 8v7z"/><path d="M3 19h18" fill="none"/>',
+  zoneOfControl: '<path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z" fill="none"/><path d="M8 12h8" fill="none"/>',
+  longShotFrom: '<circle cx="12" cy="12" r="8" fill="none"/><circle cx="12" cy="12" r="3"/>',
+  volleys: '<path d="M6 21L18 3M9 21L21 3M3 21L15 3" fill="none"/>',
+  carryMax: '<ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5" fill="none"/>',
+  firstTurnBonus: '<path d="M12 5v14M5 12h14" fill="none"/>',
+  routAt: '<path d="M6 21V3M6 4h11l-3 4 3 4H6" />',
+};
+
+const RULE_GROUPS: { title: Key; color: string; keys: (keyof Settings['options'])[] }[] = [
+  { title: 'groupCombat', color: '#c2453a', keys: ['toughness', 'shieldWall', 'spears', 'charge', 'kingAura'] },
+  { title: 'groupRanged', color: '#3f8f5a', keys: ['longShotFrom', 'volleys'] },
+  { title: 'groupMove', color: '#3a6fb0', keys: ['zoneOfControl'] },
+  { title: 'groupTurn', color: '#a8811a', keys: ['routAt', 'carryMax', 'firstTurnBonus'] },
+];
+
+/** A tiny picture of each map type for the map tiles. */
+function mapThumb(m: MapId): string {
+  const tree = (x: number, y: number) => `<circle cx="${x}" cy="${y}" r="3.2" fill="#2f5a22"/>`;
+  const inner =
+    m === 'river'
+      ? `<rect x="33" y="0" width="6" height="44" fill="#4f8fc4"/><rect x="31" y="9" width="10" height="4" fill="#8a6038"/><rect x="31" y="31" width="10" height="4" fill="#8a6038"/>${tree(14, 12)}${tree(58, 32)}`
+      : m === 'open'
+        ? `${tree(20, 30)}${tree(52, 14)}`
+        : m === 'forest'
+          ? [[10, 10], [20, 22], [12, 34], [30, 12], [42, 30], [52, 10], [62, 24], [56, 36], [28, 34]].map(([x, y]) => tree(x, y)).join('')
+          : `<text x="36" y="30" text-anchor="middle" font-size="22" font-weight="700" fill="#f1e8d2">?</text>`;
+  return `<svg viewBox="0 0 72 44" width="72" height="44" aria-hidden="true"><rect width="72" height="44" rx="6" fill="#6f9a4a"/>${inner}</svg>`;
+}
+
 function setupScreen(): string {
-  const chips = (field: string, values: [string, string][], current: string) =>
-    `<div class="chips">${values
-      .map(([v, label]) => `<button data-act="set" data-field="${field}" data-value="${v}" class="${v === current ? 'on' : ''}" aria-pressed="${v === current}">${label}</button>`)
+  const seg = (field: string, values: [string, string][], current: string) =>
+    `<div class="seg" role="radiogroup">${values
+      .map(([v, label]) => `<button role="radio" data-act="set" data-field="${field}" data-value="${v}" class="${v === current ? 'on' : ''}" aria-checked="${v === current}">${label}</button>`)
       .join('')}</div>`;
   const isDad = RULES.every((r) => settings.options[r.key] === DADS_RULES[r.key]);
   const isRec = RULES.every((r) => settings.options[r.key] === RECOMMENDED[r.key]);
-  const rules = RULES.map((r) => {
-    const on = settings.options[r.key] !== DADS_RULES[r.key];
-    return `<button data-act="opt" data-key="${r.key}" class="rule ${on ? 'on' : ''}" aria-pressed="${on}">
-      <span class="switch" aria-hidden="true"><i></i></span>
-      <span class="what"><b>${t(lang, `rule_${r.key}` as Key)}</b><small>${t(lang, `ruleHelp_${r.key}` as Key)}</small></span>
-    </button>`;
+  const onCount = RULES.filter((r) => settings.options[r.key] !== DADS_RULES[r.key]).length;
+
+  // The face-off: each side's coat of arms, name and who plays it. Tap one to pick its army.
+  const side = (p: Player, who: string) => {
+    const f = FACTIONS[settings.sides[p]];
+    const on = pickSide === p;
+    return `<button data-act="pick-side" data-side="${p}" class="vs-card ${on ? 'on' : ''}" aria-pressed="${on}" style="--fc:${f.color}">
+      <span class="vs-who">${who}</span>${f.emblem}<b>${f.name[lang]}</b></button>`;
+  };
+  const tiles = FACTION_ORDER.map((id) => {
+    const f = FACTIONS[id];
+    const mine = settings.sides[pickSide] === id;
+    const theirs = settings.sides[other(pickSide)] === id;
+    return `<button data-act="faction" data-side="${pickSide}" data-value="${id}" class="ftile ${mine ? 'on' : ''} ${theirs ? 'taken' : ''}" aria-pressed="${mine}" style="--fc:${f.color}">
+      ${f.emblem}<span>${f.name[lang]}</span></button>`;
   }).join('');
-  const factionPicker = (side: Player, label: string) => `
-      <h3>${label}</h3>
-      <div class="chips">${FACTION_ORDER.map((f) => {
-        const on = settings.sides[side] === f;
-        return `<button data-act="faction" data-side="${side}" data-value="${f}" class="${on ? 'on' : ''}" aria-pressed="${on}"><span class="fdot" style="background:${FACTIONS[f].color}"></span>${FACTIONS[f].name[lang]}</button>`;
-      }).join('')}</div>
-      <p class="blurb">${FACTIONS[settings.sides[side]].blurb[lang]}</p>`;
+
+  const mapTiles = (['river', 'open', 'forest', 'random'] as MapId[])
+    .map((m) => {
+      const label = t(lang, `map${m[0].toUpperCase()}${m.slice(1)}` as Key);
+      return `<button data-act="set" data-field="map" data-value="${m}" class="mtile ${settings.map === m ? 'on' : ''}" aria-pressed="${settings.map === m}">${mapThumb(m)}<span>${label}</span></button>`;
+    })
+    .join('');
+
+  const preset = (value: string, on: boolean, title: string, sub: string, icon: string) =>
+    `<button data-act="preset" data-value="${value}" class="preset ${on ? 'on' : ''}" aria-pressed="${on}">
+      <span class="picon" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22">${icon}</svg></span>
+      <b>${title}</b><small>${sub}</small></button>`;
+
+  const groups = RULE_GROUPS.map((g) => `
+      <div class="rgroup"><h4>${t(lang, g.title)}</h4><div class="rlist">${g.keys
+        .map((k) => {
+          const on = settings.options[k] !== DADS_RULES[k];
+          return `<button data-act="opt" data-key="${k}" class="rule ${on ? 'on' : ''}" role="switch" aria-checked="${on}">
+            <span class="ricon" style="background:${g.color}" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18">${RULE_ICON[k]}</svg></span>
+            <span class="what"><b>${t(lang, `rule_${k}` as Key)}</b><small>${t(lang, `ruleHelp_${k}` as Key)}</small></span>
+            <span class="switch" aria-hidden="true"><i></i></span>
+          </button>`;
+        })
+        .join('')}</div></div>`).join('');
+
   return `<div class="sheet"><div class="sheet-body setup">
     <h2>${t(lang, 'newBattle')}</h2>
     <div class="sheet-scroll">
-      ${factionPicker('red', mode === 'ai' ? t(lang, 'sideYou') : t(lang, 'sideFirst'))}
-      ${factionPicker('blue', mode === 'ai' ? t(lang, 'sideComputer') : t(lang, 'sideSecond'))}
-      <h3>${t(lang, 'armyPoints')}</h3>
-      ${chips('budget', [['20', `20 · ${t(lang, 'skirmish')}`], ['30', '30'], ['50', '50'], ['80', `80 · ${t(lang, 'epic')}`]], String(settings.budget))}
-      <h3>${t(lang, 'map')}</h3>
-      ${chips('map', [['river', t(lang, 'mapRiver')], ['open', t(lang, 'mapOpen')], ['forest', t(lang, 'mapForest')], ['random', t(lang, 'mapRandom')]], settings.map)}
-      <h3>${t(lang, 'pointsEachTurn')}</h3>
-      ${chips('dice', [['3d6', t(lang, 'dice3')], ['2d6', t(lang, 'dice2')], ['fixed', t(lang, 'diceFixed')]], settings.dice)}
-      <h3>${t(lang, 'rules')}</h3>
-      <div class="chips">
-        <button data-act="preset" data-value="dad" class="${isDad ? 'on' : ''}" aria-pressed="${isDad}">${t(lang, 'presetDad')}</button>
-        <button data-act="preset" data-value="recommended" class="${isRec ? 'on' : ''}" aria-pressed="${isRec}">${t(lang, 'presetRecommended')}</button>
+      <div class="vs">
+        ${side('red', mode === 'ai' ? t(lang, 'sideYou') : t(lang, 'sideFirst'))}
+        <span class="vs-mid">${t(lang, 'vs')}</span>
+        ${side('blue', mode === 'ai' ? t(lang, 'sideComputer') : t(lang, 'sideSecond'))}
       </div>
-      <div class="rules">${rules}</div>
+      <div class="ftiles">${tiles}</div>
+      <p class="blurb">${FACTIONS[settings.sides[pickSide]].blurb[lang]}</p>
+
+      <h3>${t(lang, 'map')}</h3>
+      <div class="mtiles">${mapTiles}</div>
+
+      <h3>${t(lang, 'armyPoints')}</h3>
+      ${seg('budget', [['20', `20 <small>${t(lang, 'skirmish')}</small>`], ['30', '30'], ['50', '50'], ['80', `80 <small>${t(lang, 'epic')}</small>`]], String(settings.budget))}
+
+      <h3>${t(lang, 'pointsEachTurn')}</h3>
+      ${seg('dice', [['3d6', t(lang, 'dice3')], ['2d6', t(lang, 'dice2')], ['fixed', t(lang, 'diceFixedShort')]], settings.dice)}
+
+      <h3>${t(lang, 'rules')}</h3>
+      <div class="presets">
+        ${preset('dad', isDad, t(lang, 'presetDad'), t(lang, 'presetSimpleSub'), '<rect x="4" y="4" width="16" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="2" fill="currentColor"/>')}
+        ${preset('recommended', isRec, t(lang, 'presetRecommended'), t(lang, 'presetRecSub'), '<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z" fill="currentColor"/>')}
+      </div>
+      <button data-act="rules-open" class="disclose ${rulesOpen ? 'open' : ''}" aria-expanded="${rulesOpen}">
+        <span>${t(lang, 'customize')}</span><small>${!isDad && !isRec ? `${t(lang, 'presetCustom')} · ` : ''}${onCount} ${t(lang, 'rulesOnCount')}</small><i aria-hidden="true">›</i>
+      </button>
+      ${rulesOpen ? `<div class="rgroups">${groups}</div>` : ''}
     </div>
-    <div class="sheet-foot"><button data-act="begin" class="primary wide">${t(lang, 'startBattle')} →</button></div>
+    <div class="sheet-foot"><button data-act="begin" class="primary wide">${t(lang, 'startBattle')}</button></div>
   </div></div>`;
 }
 
 function startScreen(): string {
   const pick = (l: Lang, label: string) =>
     `<button data-act="set-lang" data-lang="${l}" class="${lang === l ? 'on' : ''}" aria-pressed="${lang === l}">${label}</button>`;
+  const icon = (d: string) => `<span class="cicon" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22">${d}</svg></span>`;
+  const people = '<circle cx="8" cy="8" r="3.2"/><circle cx="16.5" cy="8" r="3.2"/><path d="M2.5 19c.6-3.4 2.8-5.2 5.5-5.2s4.9 1.8 5.5 5.2zM11.5 19c.5-3 2.4-5.2 5-5.2 2.7 0 4.6 1.8 5.2 5.2z"/>';
+  const robot = '<rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="3.5" r="1.6"/><circle cx="9.3" cy="13.5" r="1.5" fill="var(--panel-2)"/><circle cx="14.7" cy="13.5" r="1.5" fill="var(--panel-2)"/>';
   return `<div class="cover"><div class="card start">
-    <div class="langs">${pick('en', 'English')}${pick('ru', 'Русский')}</div>
-    <div class="emblem">${factionOf('red').emblem}${factionOf('blue').emblem}</div>
-    <h2>${t(lang, 'title')}</h2>
-    <p>${t(lang, 'chooseMode')}</p>
-    <button data-act="mode" data-mode="pvp" class="choice"><b>${t(lang, 'twoPlayers')}</b><span>${t(lang, 'twoPlayersSub')}</span></button>
-    <button data-act="mode" data-mode="ai" class="choice"><b>${t(lang, 'vsComputer')}</b><span>${t(lang, 'vsComputerSub')}</span></button>
+    <div class="seg langs" role="radiogroup">${pick('en', 'English')}${pick('ru', 'Русский')}</div>
+    <div class="hero">
+      <div class="emblem">${factionOf('red').emblem}<span class="hero-vs">${t(lang, 'vs')}</span>${factionOf('blue').emblem}</div>
+      <h2>${t(lang, 'title')}</h2>
+      <p>${t(lang, 'chooseMode')}</p>
+    </div>
+    <button data-act="mode" data-mode="pvp" class="choice">${icon(people)}<span class="ctext"><b>${t(lang, 'twoPlayers')}</b><span>${t(lang, 'twoPlayersSub')}</span></span><i aria-hidden="true">›</i></button>
+    <button data-act="mode" data-mode="ai" class="choice">${icon(robot)}<span class="ctext"><b>${t(lang, 'vsComputer')}</b><span>${t(lang, 'vsComputerSub')}</span></span><i aria-hidden="true">›</i></button>
   </div></div>`;
 }
 
@@ -1080,6 +1164,12 @@ app.addEventListener('click', (e) => {
       settings = { ...settings, sides: sidesNext };
       return render();
     }
+    case 'pick-side':
+      pickSide = btn!.getAttribute('data-side') as Player;
+      return render();
+    case 'rules-open':
+      rulesOpen = !rulesOpen;
+      return render();
     case 'preset':
       settings = { ...settings, options: { ...(btn!.getAttribute('data-value') === 'recommended' ? RECOMMENDED : DADS_RULES) } };
       return render();
