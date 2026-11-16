@@ -653,6 +653,15 @@ function setupScreen(): string {
   </div></div>`;
 }
 
+/** The game's mark (same as the app icon): a shield split crimson and black, crown and cross. */
+const LOGO = `<svg viewBox="0 0 60 70" width="96" height="112" aria-hidden="true">
+  <defs><clipPath id="logo-clip"><path d="M4 4H56V30Q56 56 30 66Q4 56 4 30Z"/></clipPath></defs>
+  <g clip-path="url(#logo-clip)"><rect x="0" y="0" width="30" height="70" fill="#a8201a"/><rect x="30" y="0" width="30" height="70" fill="#1b1b1d"/></g>
+  <path d="M4 4H56V30Q56 56 30 66Q4 56 4 30Z" fill="none" stroke="#e1b12c" stroke-width="3"/>
+  <path d="M10 33V25L13.5 28.5L17 22L20.5 28.5L24 25V33Z" fill="#e1b12c"/>
+  <path d="M40 22H46V26.5H50.5V32.5H46V37H40V32.5H35.5V26.5H40Z" fill="#f4f1e8"/>
+</svg>`;
+
 function startScreen(): string {
   const pick = (l: Lang, label: string) =>
     `<button data-act="set-lang" data-lang="${l}" class="${lang === l ? 'on' : ''}" aria-pressed="${lang === l}">${label}</button>`;
@@ -662,7 +671,7 @@ function startScreen(): string {
   return `<div class="cover"><div class="card start">
     <div class="seg langs" role="radiogroup">${pick('en', 'English')}${pick('ru', 'Русский')}</div>
     <div class="hero">
-      <div class="emblem">${factionOf('red').emblem}<span class="hero-vs">${t(lang, 'vs')}</span>${factionOf('blue').emblem}</div>
+      <div class="logo">${LOGO}</div>
       <h2>${t(lang, 'title')}</h2>
       <p>${t(lang, 'chooseMode')}</p>
     </div>
@@ -674,7 +683,7 @@ function startScreen(): string {
 function passScreen(s: GameState): string {
   if (s.phase === 'roll') {
     return `<div class="cover"><div class="card">
-      <div class="emblem">${factionOf('red').emblem}${factionOf('blue').emblem}</div>
+      <div class="emblem">${factionOf('red').emblem}<span class="hero-vs">${t(lang, 'vs')}</span>${factionOf('blue').emblem}</div>
       <h2>${t(lang, 'battle')}</h2>
       <p>${t(lang, 'battleText')} <b class="${s.current}">${playerName(lang, s.current)}</b>.</p>
       <button data-act="ack" class="primary wide">${t(lang, 'startBattle')}</button>
@@ -697,14 +706,32 @@ function menuBody(s: GameState): string {
     .reverse()
     .map((e) => `<li><span class="dot ${e.player}"></span><span class="tn">${e.turn}</span>${logText(lang, e)}</li>`)
     .join('');
-  return `<div class="drawer-buttons">
-      <button data-act="lang">${t(lang, 'language')}</button>
-      <button data-act="view">${tilt ? t(lang, 'viewTilt') : t(lang, 'viewFlat')}</button>
-      <button data-act="cam-reset">${t(lang, 'camResetMenu')}</button>
-      ${mode === 'pvp' ? `<button data-act="table">${table === 'pass' ? t(lang, 'tablePass') : t(lang, 'tableAcross')}</button>` : ''}
-      <button data-act="mute">${isMuted() ? t(lang, 'soundOff') : t(lang, 'soundOn')}</button>
-      <button data-act="quick">${t(lang, 'quick')}</button>
-      <button data-act="new">${confirmNew ? t(lang, 'confirmNew') : t(lang, 'newGame')}</button>
+  // iOS-style settings rows: a coloured icon, a name, and the current value or a switch.
+  const row = (act: string, color: string, glyph: string, title: string, value = '', sw?: boolean, cls = '') =>
+    `<button data-act="${act}" class="mrow ${cls}"${sw === undefined ? '' : ` role="switch" aria-checked="${sw}"`}>
+      <span class="ricon" style="background:${color}" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18">${glyph}</svg></span>
+      <span class="mtitle">${title}</span>
+      ${sw === undefined ? `<span class="mval">${value}</span><i aria-hidden="true">›</i>` : `<span class="switch ${sw ? 'is-on' : ''}" aria-hidden="true"><i></i></span>`}
+    </button>`;
+  const G = {
+    globe: '<circle cx="12" cy="12" r="8.5" fill="none"/><path d="M3.5 12h17M12 3.5c3 3 3 14 0 17M12 3.5c-3 3-3 14 0 17" fill="none"/>',
+    cube: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z" fill="none"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9" fill="none"/>',
+    target: '<circle cx="12" cy="12" r="7" fill="none"/><path d="M12 2v5M12 17v5M2 12h5M17 12h5" fill="none"/>',
+    seats: '<circle cx="12" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><rect x="7" y="10" width="10" height="4" rx="1" fill="none"/>',
+    sound: '<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9c1.5 1.5 1.5 4.5 0 6M18.5 6.5c3 3 3 8 0 11" fill="none"/>',
+    bolt: '<path d="M13 3L5 13h6l-1 8 8-10h-6z"/>',
+    plus: '<path d="M12 5v14M5 12h14" fill="none"/>',
+  };
+  return `<div class="mgroup">
+      ${row('lang', '#3a6fb0', G.globe, t(lang, 'rowLanguage'), lang === 'en' ? 'English' : 'Русский')}
+      ${row('view', '#7a5bb0', G.cube, t(lang, 'rowView'), tilt ? t(lang, 'view25') : t(lang, 'viewFlatShort'))}
+      ${row('cam-reset', '#5b6b7a', G.target, t(lang, 'camResetMenu'))}
+      ${mode === 'pvp' ? row('table', '#a8811a', G.seats, t(lang, 'rowSeating'), table === 'pass' ? t(lang, 'seatPass') : t(lang, 'seatAcross')) : ''}
+      ${row('mute', '#3f8f5a', G.sound, t(lang, 'rowSound'), '', !isMuted())}
+    </div>
+    <div class="mgroup">
+      ${row('quick', '#c2453a', G.bolt, t(lang, 'quick'))}
+      ${row('new', '#c2453a', G.plus, confirmNew ? t(lang, 'confirmNew') : t(lang, 'newGame'), '', undefined, confirmNew ? 'danger' : '')}
     </div>
     <section><h3>${t(lang, 'pieces')}</h3><ul class="legend">${legendList(s.current)}</ul>${statKey()}<p class="note">${t(lang, 'legendNote')}</p></section>
     <section><h3>${t(lang, 'log')}</h3><ol class="log">${log || `<li class="empty">${t(lang, 'emptyLog')}</li>`}</ol></section>

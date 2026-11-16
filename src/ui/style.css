@@ -195,7 +195,7 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 .card, .sheet-body { background: var(--paper); border-radius: 16px; padding: 22px; width: min(440px, 100%); }
 .card { text-align: center; }
 .card h2 { font: 400 34px/1.1 var(--title); margin: 4px 0 8px; }
-.card .emblem { display: flex; justify-content: center; gap: 14px; margin-bottom: 6px; }
+.card .emblem { display: flex; justify-content: center; align-items: center; gap: 14px; margin-bottom: 6px; }
 .card p { margin: 0 0 16px; color: var(--muted); }
 .card .small { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; }
 
@@ -235,7 +235,7 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 .card.start p { margin: 0 0 4px; }
 .langs { align-self: center; width: min(260px, 100%); }
 .hero { text-align: center; padding: 18px 0 10px; }
-.hero .emblem { align-items: center; gap: 12px; }
+.hero .logo svg { filter: drop-shadow(0 8px 16px rgba(0,0,0,.55)); }
 .hero .emblem svg { width: 72px; height: 84px; filter: drop-shadow(0 6px 12px rgba(0,0,0,.5)); }
 .hero-vs { font: 400 20px var(--title); color: var(--gold); text-transform: uppercase; }
 .hero h2 { justify-content: center; font-size: 30px; margin: 10px 0 6px; }
@@ -287,8 +287,15 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
   display: flex; flex-direction: column; gap: 14px;
 }
 .drawer-head { display: flex; justify-content: space-between; align-items: center; font: 400 20px var(--title); }
-.drawer-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
-.drawer-buttons button { flex: 1 1 auto; font-size: 14px; padding: 10px; }
+.mgroup { flex: none; background: var(--panel-2); border-radius: 14px; overflow: hidden; }
+.mrow { width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 0; border-radius: 0; background: transparent; font-weight: 400; text-align: left; font-size: 15px; }
+.mrow + .mrow { border-top: 1px solid var(--line); }
+.mrow .mtitle { flex: 1; }
+.mrow .mval { color: var(--muted); font-size: 14px; }
+.mrow > i { font-style: normal; font-size: 20px; color: var(--muted); }
+.mrow.danger .mtitle { color: #ff8a7a; font-weight: 700; }
+.switch.is-on { background: #3fae5a; }
+.switch.is-on i { transform: translateX(18px); background: #fff; }
 .drawer h3 { margin: 0 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
 .legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .legend li { display: flex; align-items: center; gap: 8px; }
