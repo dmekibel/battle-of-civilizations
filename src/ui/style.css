@@ -136,13 +136,34 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 .meter { height: 6px; background: #ebe3cc; border-radius: 3px; overflow: hidden; margin-top: 4px; }
 .meter i { display: block; height: 100%; background: var(--gold); transition: width .2s; }
 .buy { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.buy li { display: flex; align-items: center; gap: 8px; }
+.buy li { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto auto; grid-template-areas: 'icon name price step' 'icon stats stats stats'; align-items: center; gap: 2px 8px; padding: 7px 0; border-top: 1px solid #efe7d0; }
+.buy li > svg { grid-area: icon; align-self: start; }
+.buy .name { grid-area: name; font-size: 15px; line-height: 1.2; display: flex; flex-direction: column; }
+.buy .price { grid-area: price; }
+.buy .stepper { grid-area: step; }
+.buy .stats { grid-area: stats; margin: 0; }
+.free-badge { opacity: .5; }
+.buy li:first-child { border-top: 0; }
 .buy svg { width: 42px; height: 38px; flex: none; }
 .what { display: flex; flex-direction: column; min-width: 0; flex: 1; font-size: 14px; line-height: 1.25; }
-.what span { font-size: 11.5px; color: var(--muted); }
 .stepper { display: flex; align-items: center; gap: 4px; }
 .stepper button { width: 38px; height: 38px; padding: 0; font-size: 20px; }
 .stepper output { min-width: 24px; text-align: center; font: 700 17px 'PT Serif', Georgia, serif; font-variant-numeric: tabular-nums; }
+/* Stat chips: one colour per stat, same order everywhere. */
+.stats { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.info .stats { margin: 0 0 0 4px; vertical-align: middle; }
+.st { display: inline-flex; align-items: center; gap: 4px; font: 700 14px/1 'PT Sans', sans-serif; font-style: normal; padding: 4px 8px; border-radius: 999px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.st i { font: 700 10px/1 'PT Sans', sans-serif; font-style: normal; letter-spacing: .06em; opacity: .85; }
+.st.atk { background: #fbe1d6; color: #b2400f; }
+.st.def { background: #d9ecf2; color: #1f5f78; }
+.st.mov { background: #e7efd6; color: #4d6a1c; }
+.st.rng { background: #ece2f6; color: #6b3fa0; }
+.key { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--muted); margin: 0 0 12px; }
+.key span { display: inline-flex; align-items: center; gap: 4px; }
+.key .st { padding: 2px 5px; font-size: 11px; }
+.price { flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 50%; background: #f6e3a8; border: 2px solid #c99a00; color: #6b4e00; font: 700 18px/1 'PT Serif', Georgia, serif; }
+.price small { font: 700 9px/1 'PT Sans', sans-serif; text-transform: uppercase; letter-spacing: .04em; }
+.free { font: 400 12px/1.3 'PT Sans', sans-serif; color: var(--muted); margin-top: 2px; }
 .error { color: var(--red); margin: 0 0 10px; font-size: 14px; }
 
 /* Menu drawer */
@@ -162,7 +183,6 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 .legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .legend li { display: flex; align-items: center; gap: 8px; }
 .legend li div { display: flex; flex-direction: column; font-size: 13px; line-height: 1.25; }
-.legend li span { color: var(--muted); font-size: 12px; }
 .note { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
 .log { list-style: none; margin: 0; padding: 0; font-size: 13px; }
 .log li { display: flex; align-items: center; gap: 6px; padding: 3px 0; border-top: 1px dashed #ebe3cc; }

@@ -84,17 +84,32 @@ function die(face: number | null, spin: boolean): string {
   return `<div class="die ${spin ? 'spin' : ''} ${face ? '' : 'blank'}">${cells}</div>`;
 }
 
-function stats(type: UnitTypeId, withHp = true): string {
+/** Coloured stat chips, always in the same order: attack, defense, move, range. */
+function stats(type: UnitTypeId, defenseLeft?: number): string {
   const r = CONFIG.units[type];
-  const fight = r.attack > 0 ? `${t(lang, 'atk')} ${r.attack}` : t(lang, 'noMelee');
-  const shot = r.ranged ? ` · ${t(lang, 'shot')} ${r.ranged.minRange}–${r.ranged.maxRange}` : '';
-  return `${r.moveCost} ${t(lang, 'perHex')} · ${fight}${withHp ? ` · ${t(lang, 'hp')} ${r.hp}` : ''}${shot}`;
+  const def = defenseLeft === undefined ? `${r.hp}` : `${defenseLeft}/${r.hp}`;
+  return `<span class="stats">
+    <span class="st atk" title="${t(lang, 'keyAtk')}"><i>${t(lang, 'tagAtk')}</i>${r.attack > 0 ? r.attack : '–'}</span>
+    <span class="st def" title="${t(lang, 'keyDef')}"><i>${t(lang, 'tagDef')}</i>${def}</span>
+    <span class="st mov" title="${t(lang, 'keyMove')}"><i>${t(lang, 'tagMove')}</i>${r.moveCost}</span>
+    ${r.ranged ? `<span class="st rng" title="${t(lang, 'keyRange')}"><i>${t(lang, 'tagRange')}</i>${r.ranged.minRange}–${r.ranged.maxRange}</span>` : ''}
+  </span>`;
+}
+
+/** What the chip colours mean. */
+function statKey(): string {
+  return `<div class="key">
+    <span><i class="st atk">${t(lang, 'tagAtk')}</i> ${t(lang, 'keyAtk')}</span>
+    <span><i class="st def">${t(lang, 'tagDef')}</i> ${t(lang, 'keyDef')}</span>
+    <span><i class="st mov">${t(lang, 'tagMove')}</i> ${t(lang, 'keyMove')}</span>
+    <span><i class="st rng">${t(lang, 'tagRange')}</i> ${t(lang, 'keyRange')}</span>
+  </div>`;
 }
 
 function unitInfo(s: GameState, id: string): string {
   const u = getUnit(s, id);
   if (!u) return '';
-  return `<b class="${u.owner}">${unitName(lang, u.type)}</b> · ${t(lang, 'hp')} ${u.hp}/${CONFIG.units[u.type].hp} · ${stats(u.type, false)}`;
+  return `<b class="${u.owner}">${unitName(lang, u.type)}</b> ${stats(u.type, u.hp)}`;
 }
 
 function previewText(s: GameState, targetId: string, p: AttackPreview): string {
@@ -123,7 +138,7 @@ function overlay(s: GameState): Overlay {
 
 function legendList(owner: Player): string {
   return LEGEND_ORDER.map(
-    (type) => `<li>${unitIcon(type, owner)}<div><b>${unitName(lang, type)}</b><span>${stats(type)}</span></div></li>`,
+    (type) => `<li>${unitIcon(type, owner)}<div><b>${unitName(lang, type)}</b>${stats(type)}</div></li>`,
   ).join('');
 }
 
@@ -137,12 +152,14 @@ function draftSheet(s: GameState): string {
     const price = CONFIG.army.cost[type];
     return `<li>
       ${unitIcon(type, s.current)}
-      <div class="what"><b>${unitName(lang, type)}</b><span>${t(lang, 'power')} ${price} · ${stats(type)}</span></div>
+      <b class="name">${unitName(lang, type)}</b>
+      <span class="price" title="${t(lang, 'power')}">${price}<small>${t(lang, 'pts')}</small></span>
       <div class="stepper">
         <button data-act="less" data-type="${type}" ${n ? '' : 'disabled'} aria-label="−">−</button>
         <output>${n}</output>
         <button data-act="more" data-type="${type}" ${price <= left ? '' : 'disabled'} aria-label="+">+</button>
       </div>
+      ${stats(type)}
     </li>`;
   }).join('');
   return `<div class="sheet ${s.current}">
@@ -151,9 +168,10 @@ function draftSheet(s: GameState): string {
       <div class="budget"><b>${left}</b> / ${CONFIG.army.budget} ${t(lang, 'pointsLeft')}
         <div class="meter"><i style="width:${(spent / CONFIG.army.budget) * 100}%"></i></div></div>
       <ul class="buy">
-        <li class="king">${unitIcon('king', s.current)}<div class="what"><b>${unitName(lang, 'king')}</b><span>${t(lang, 'kingFree')}</span></div><div class="stepper"><output>1</output></div></li>
+        <li class="king">${unitIcon('king', s.current)}<b class="name">${unitName(lang, 'king')}<span class="free">${t(lang, 'kingFree')}</span></b><span class="price free-badge">0<small>${t(lang, 'pts')}</small></span><div class="stepper"><output>1</output></div>${stats('king')}</li>
         ${rows}
       </ul>
+      ${statKey()}
       ${message ? `<p class="error">${message}</p>` : ''}
       <button data-act="draft" class="primary wide">${t(lang, 'toDeploy')} →</button>
     </div>
@@ -191,7 +209,7 @@ function menu(s: GameState): string {
       <button data-act="quick">${t(lang, 'quick')}</button>
       <button data-act="new">${confirmNew ? t(lang, 'confirmNew') : t(lang, 'newGame')}</button>
     </div>
-    <section><h3>${t(lang, 'pieces')}</h3><ul class="legend">${legendList(s.current)}</ul><p class="note">${t(lang, 'legendNote')}</p></section>
+    <section><h3>${t(lang, 'pieces')}</h3><ul class="legend">${legendList(s.current)}</ul>${statKey()}<p class="note">${t(lang, 'legendNote')}</p></section>
     <section><h3>${t(lang, 'log')}</h3><ol class="log">${log || `<li class="empty">${t(lang, 'emptyLog')}</li>`}</ol></section>
   </aside>`;
 }
