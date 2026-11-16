@@ -644,14 +644,13 @@ function bar(s: GameState): string {
         <button data-act="done" class="primary" ${left.length ? 'disabled' : ''}>${t(lang, 'done')} →</button>
       </div>`;
   }
-  if (s.phase === 'roll') return `<div class="row"><button data-act="roll" class="primary" ${rolling ? 'disabled' : ''}>🎲 ${t(lang, 'roll')}</button></div>`;
+  if (s.phase === 'roll') return `<div class="row"><button data-act="roll" class="primary" ${rolling ? 'disabled' : ''}>${t(lang, 'roll')}</button></div>`;
   if (s.phase === 'act') {
     const take = s.advance
-      ? `<div class="row"><button data-act="take" class="primary">⚔ ${t(lang, 'takeHex')}</button></div>`
+      ? `<div class="row"><button data-act="take" class="primary">${t(lang, 'takeHex')}</button></div>`
       : '';
     return `${take}<div class="row">
       <button data-act="undo" ${canUndo(sess) ? '' : 'disabled'}>↶ ${t(lang, 'undo')}</button>
-      <button data-act="next" class="narrow" title="${t(lang, 'nextPiece')}" aria-label="${t(lang, 'nextPiece')}">⏭</button>
       <button data-act="end" class="${s.advance ? '' : 'primary'} ${confirmEnd ? 'warn' : ''}">${confirmEnd ? t(lang, 'endAnyway') : t(lang, 'endTurn')} →</button>
     </div>`;
   }
@@ -796,7 +795,6 @@ function draw() {
         <div class="stage">${renderBoard(s, overlay(s), view(), fx)}</div>
         <div class="viewcube" title="${t(lang, 'cubeHelp')}" aria-label="${t(lang, 'cubeHelp')}">${viewCube(view())}</div>
         <div class="cam" aria-label="${t(lang, 'camera')}">
-          <button data-act="danger" class="${dangerOn ? 'on' : ''}" title="${t(lang, 'threatView')}" aria-label="${t(lang, 'threatView')}" aria-pressed="${dangerOn}">⚠</button>
           <button data-act="cam-flip" title="${t(lang, 'camFlip')}" aria-label="${t(lang, 'camFlip')}">⇅</button>
         </div>
         <div class="zoom">

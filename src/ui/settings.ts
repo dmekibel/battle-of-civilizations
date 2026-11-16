@@ -4,7 +4,7 @@
 
 import { CONFIG, type GameConfig } from '../config';
 import type { Player } from '../engine';
-import { setSides, type FactionId } from './factions';
+import { setSides, sides, type FactionId } from './factions';
 
 export type MapId = 'river' | 'open' | 'forest' | 'random';
 export type DiceId = '3d6' | '2d6' | 'fixed';
@@ -103,4 +103,5 @@ export function applySettings(s: Settings) {
   CONFIG.dice = s.dice === 'fixed' ? { count: 0, sides: 6, fixed: 10 } : s.dice === '2d6' ? { count: 2, sides: 6, fixed: null } : { count: 3, sides: 6, fixed: null };
   CONFIG.options = { ...s.options };
   setSides(s.sides ?? DEFAULT_SETTINGS.sides);
+  s.sides = { ...sides };
 }

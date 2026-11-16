@@ -5,7 +5,7 @@ import type { UnitTypeId } from '../config';
 import type { ArmyCounts, Player } from '../engine';
 import type { Lang } from './i18n';
 
-export type FactionId = 'novgorod' | 'teutonic' | 'mongols' | 'japanese' | 'frontier' | 'lakota';
+export type FactionId = 'novgorod' | 'teutonic' | 'mongols' | 'japanese' | 'frontier' | 'comanche';
 
 export interface Faction {
   name: Record<Lang, string>;
@@ -18,7 +18,7 @@ export interface Faction {
   /** One line on how the army plays, for the New battle screen. */
   blurb: Record<Lang, string>;
   emblem: string;
-  /** Some armies call shared pieces by their own names (a Lakota King is a Chief). */
+  /** Some armies call shared pieces by their own names (a Comanche King is a Chief). */
   names?: Partial<Record<UnitTypeId, Record<Lang, string>>>;
   /** The King's picture: a crown unless the army has its own leader's sign. */
   kingMark?: 'star' | 'feather';
@@ -29,7 +29,7 @@ const shield = (fill: string, rim: string, inner: string) =>
 
 export const FACTIONS: Record<FactionId, Faction> = {
   novgorod: {
-    name: { en: 'Novgorod', ru: 'Новгород' },
+    name: { en: 'Russians', ru: 'Русь' },
     color: '#a8201a',
     text: '#ec6a5c',
     roster: ['lightInfantry', 'heavyInfantry', 'archer', 'lightCavalry', 'heavyCavalry'],
@@ -37,7 +37,7 @@ export const FACTIONS: Record<FactionId, Faction> = {
     emblem: shield('#a8201a', '#d9a521', '<path d="M15 44L15 24L22.5 32L30 18L37.5 32L45 24L45 44Z" fill="#e8b923" stroke="#8a6410" stroke-width="1.5" stroke-linejoin="round"/>'),
   },
   teutonic: {
-    name: { en: 'Teutonic Order', ru: 'Тевтонский орден' },
+    name: { en: 'German Knights', ru: 'Немецкие рыцари' },
     color: '#1b1b1d',
     text: '#e9e4d6',
     roster: ['lightInfantry', 'heavyInfantry', 'archer', 'lightCavalry', 'heavyCavalry'],
@@ -74,12 +74,12 @@ export const FACTIONS: Record<FactionId, Faction> = {
     },
     kingMark: 'star',
   },
-  lakota: {
-    name: { en: 'Lakota', ru: 'Лакота' },
+  comanche: {
+    name: { en: 'Comanche', ru: 'Команчи' },
     color: '#1f8a8a',
     text: '#7fd6d0',
     roster: ['lightInfantry', 'archer', 'lightCavalry', 'horseArcher'],
-    blurb: { en: 'Plains horse nation: fast mounted warriors and archers, no heavy troops.', ru: 'Народ равнин: быстрые конные воины и лучники, без тяжёлых войск.' },
+    blurb: { en: 'Lords of the Southern Plains, the finest riders of the West: fast mounted warriors and archers, no heavy troops.', ru: 'Хозяева южных равнин, лучшие всадники Запада: быстрые конные воины и лучники, без тяжёлых войск.' },
     emblem: shield('#1f8a8a', '#e9e4d6', '<circle cx="30" cy="30" r="11" fill="none" stroke="#e9e4d6" stroke-width="3"/><path d="M30 41V58M24 46L30 41L36 46" stroke="#e9e4d6" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M41 22Q50 16 52 8Q44 12 41 22Z" fill="#e1b12c"/>'),
     names: {
       king: { en: 'Chief', ru: 'Вождь' },
@@ -91,13 +91,20 @@ export const FACTIONS: Record<FactionId, Faction> = {
   },
 };
 
-export const FACTION_ORDER: FactionId[] = ['novgorod', 'teutonic', 'mongols', 'japanese', 'frontier', 'lakota'];
+export const FACTION_ORDER: FactionId[] = ['novgorod', 'teutonic', 'mongols', 'japanese', 'frontier', 'comanche'];
 
 /** Which faction each side leads in the current battle. */
 export let sides: Record<Player, FactionId> = { red: 'novgorod', blue: 'teutonic' };
 
+/** Older saves may name an army that was renamed or removed. */
+function known(id: string, fallback: FactionId): FactionId {
+  const f = id === 'lakota' ? 'comanche' : id;
+  return f in FACTIONS ? (f as FactionId) : fallback;
+}
+
 /** Sets both sides' factions and repaints the colours the page uses for them. */
-export function setSides(next: Record<Player, FactionId>) {
+export function setSides(wanted: Record<Player, string>) {
+  const next = { red: known(wanted.red, 'novgorod'), blue: known(wanted.blue, 'teutonic') };
   sides = next;
   const root = document.documentElement.style;
   root.setProperty('--red', FACTIONS[next.red].color);
