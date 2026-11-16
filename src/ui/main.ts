@@ -118,6 +118,9 @@ let prevPos = new Map<string, Hex>(sess.state.units.map((u) => [u.id, u.pos]));
 
 const isPortrait = () => window.innerHeight > window.innerWidth;
 let portrait = isPortrait();
+/** Wide landscape screens get a permanent side panel instead of the ☰ drawer. */
+const isDesktop = () => window.innerWidth >= 1000 && window.innerHeight >= 560 && !isPortrait();
+let desktop = isDesktop();
 /** Steps for the + / − buttons; pinching can stop anywhere between the first and last. */
 const ZOOMS = [1, 1.6, 2.4, 3.2];
 const [ZOOM_MIN, ZOOM_MAX] = [ZOOMS[0], ZOOMS[ZOOMS.length - 1]];
@@ -321,17 +324,15 @@ function passScreen(s: GameState): string {
   </div></div>`;
 }
 
-function menu(s: GameState): string {
+/** Settings, the pieces list and the log: in the ☰ drawer on phones, always visible on desktop. */
+function menuBody(s: GameState): string {
   const log = s.log
     .filter((e) => e.kind !== 'endTurn')
     .slice()
     .reverse()
     .map((e) => `<li><span class="dot ${e.player}"></span><span class="tn">${e.turn}</span>${logText(lang, e)}</li>`)
     .join('');
-  return `<div class="drawer-bg" data-act="menu"></div>
-  <aside class="drawer">
-    <div class="drawer-head"><b>${t(lang, 'title')}</b><button data-act="menu" class="ghost">${t(lang, 'close')}</button></div>
-    <div class="drawer-buttons">
+  return `<div class="drawer-buttons">
       <button data-act="lang">${t(lang, 'language')}</button>
       <button data-act="mute">${isMuted() ? t(lang, 'soundOff') : t(lang, 'soundOn')}</button>
       <button data-act="quick">${t(lang, 'quick')}</button>
@@ -339,6 +340,14 @@ function menu(s: GameState): string {
     </div>
     <section><h3>${t(lang, 'pieces')}</h3><ul class="legend">${legendList(s.current)}</ul>${statKey()}<p class="note">${t(lang, 'legendNote')}</p></section>
     <section><h3>${t(lang, 'log')}</h3><ol class="log">${log || `<li class="empty">${t(lang, 'emptyLog')}</li>`}</ol></section>
+    ${desktop ? `<p class="keys">${t(lang, 'keys')}</p>` : ''}`;
+}
+
+function menu(s: GameState): string {
+  return `<div class="drawer-bg" data-act="menu"></div>
+  <aside class="drawer">
+    <div class="drawer-head"><b>${t(lang, 'title')}</b><button data-act="menu" class="ghost">${t(lang, 'close')}</button></div>
+    ${menuBody(s)}
   </aside>`;
 }
 
@@ -391,7 +400,16 @@ function setZoom(next: number) {
   zoom = next;
   draw();
   const s2 = app.querySelector<HTMLElement>('.stage');
-  if (s2) {
+  if (!s2) return;
+  // With a piece selected, keep that piece in the middle; otherwise keep the same middle.
+  const u = selected ? getUnit(sess.state, selected) : undefined;
+  const hex = u && app.querySelector(`.hex[data-col="${u.pos.col}"][data-row="${u.pos.row}"]`);
+  if (hex) {
+    const h = hex.getBoundingClientRect();
+    const box = s2.getBoundingClientRect();
+    s2.scrollLeft += h.left + h.width / 2 - (box.left + box.width / 2);
+    s2.scrollTop += h.top + h.height / 2 - (box.top + box.height / 2);
+  } else {
     s2.scrollLeft = fx * s2.scrollWidth - s2.clientWidth / 2;
     s2.scrollTop = fy * s2.scrollHeight - s2.clientHeight / 2;
   }
@@ -418,6 +436,7 @@ function draw() {
   const s = sess.state;
   const fx = effects(s);
   portrait = isPortrait();
+  desktop = isDesktop();
   const faces = rolling ? rollFaces : s.dice;
   const bump = s.points !== lastPoints ? 'bump' : '';
   lastPoints = s.points;
@@ -449,12 +468,12 @@ function draw() {
       : '';
 
   app.innerHTML = `
-    <div class="screen ${portrait ? 'portrait' : 'landscape'} ${s.current}">
+    <div class="screen ${portrait ? 'portrait' : 'landscape'} ${desktop ? 'desktop' : ''} ${s.current}">
       <header class="hud">
         <div class="who"><span class="dot ${s.current}"></span><span>${playerName(lang, s.current)}<small>${battle ? `${t(lang, 'turn')} ${s.turn}` : t(lang, 'setup')}</small></span></div>
         <div class="dice">${battle ? [0, 1, 2].slice(0, CONFIG.dice.count).map((i) => die(faces?.[i] ?? null, rolling)).join('') : ''}</div>
         ${right}
-        <button data-act="menu" class="ghost icon" aria-label="${t(lang, 'menu')}">☰</button>
+        ${desktop ? '' : `<button data-act="menu" class="ghost icon" aria-label="${t(lang, 'menu')}">☰</button>`}
       </header>
       <div class="stage-wrap">
         <div class="stage" style="--z:${zoom}">${renderBoard(s, overlay(s), { portrait }, fx)}</div>
@@ -465,12 +484,13 @@ function draw() {
       </div>
       <p class="info" id="info">${info}</p>
       <footer class="bar">${bar(s)}</footer>
+      ${desktop ? `<aside class="side">${menuBody(s)}</aside>` : ''}
     </div>
     ${s.phase === 'draft' && !cover && !choosing ? draftSheet(s) : ''}
     ${cover && s.phase !== 'over' && !choosing ? passScreen(s) : ''}
     ${choosing ? startScreen() : ''}
     ${over}
-    ${menuOpen ? menu(s) : ''}`;
+    ${menuOpen && !desktop ? menu(s) : ''}`;
   document.documentElement.lang = lang;
   document.title = t(lang, 'title');
   saveGame();
@@ -790,7 +810,66 @@ app.addEventListener(
 );
 let wheelEnd = 0;
 
+// ---------- desktop: keyboard and drag-to-pan ----------
+
+document.addEventListener('keydown', (e) => {
+  const tag = (e.target as HTMLElement).tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+  const click = (act: string) => app.querySelector<HTMLButtonElement>(`[data-act="${act}"]:not(:disabled)`)?.click();
+  const k = e.key.toLowerCase();
+  if ((e.metaKey || e.ctrlKey) && k === 'z') {
+    e.preventDefault();
+    return click('undo');
+  }
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (k === ' ' || k === 'r') {
+    e.preventDefault();
+    return click(app.querySelector('.cover [data-act="ack"]') ? 'ack' : 'roll');
+  }
+  if (k === 'enter' || k === 'e') return click(app.querySelector('.cover [data-act="ack"]') ? 'ack' : sess.state.phase === 'deploy' ? 'done' : 'end');
+  if (k === 'u') return click('undo');
+  if (k === 't') return click('take');
+  if (k === 'a') return click(sess.state.phase === 'deploy' ? 'auto' : '');
+  if (k === '+' || k === '=') return click('zoom-in');
+  if (k === '-' || k === '_') return click('zoom-out');
+  if (k === 'escape') {
+    if (menuOpen) menuOpen = false;
+    selected = null;
+    message = null;
+    return render();
+  }
+});
+
+/** Click and drag the map with the mouse to move around when zoomed in. */
+let drag: { x: number; y: number; left: number; top: number; moved: boolean } | null = null;
+app.addEventListener('mousedown', (e) => {
+  const st = (e.target as Element).closest<HTMLElement>('.stage');
+  if (!st || e.button !== 0) return;
+  drag = { x: e.clientX, y: e.clientY, left: st.scrollLeft, top: st.scrollTop, moved: false };
+});
+window.addEventListener('mousemove', (e) => {
+  if (!drag) return;
+  const dx = e.clientX - drag.x;
+  const dy = e.clientY - drag.y;
+  if (!drag.moved && Math.hypot(dx, dy) < 6) return;
+  drag.moved = true;
+  const st = app.querySelector<HTMLElement>('.stage');
+  if (!st) return;
+  st.scrollLeft = drag.left - dx;
+  st.scrollTop = drag.top - dy;
+  st.classList.add('dragging');
+});
+window.addEventListener('mouseup', () => {
+  if (drag?.moved) {
+    app.querySelector('.stage')?.classList.remove('dragging');
+    // Swallow the click that ends a drag so it doesn't move or select a piece.
+    window.addEventListener('click', (ev) => ev.stopPropagation(), { capture: true, once: true });
+  }
+  drag = null;
+});
+
 window.addEventListener('resize', () => {
+  if (isDesktop() !== desktop && !rolling) return render();
   if (isPortrait() !== portrait && !rolling) render();
 });
 

@@ -56,6 +56,24 @@ body {
   grid-template-columns: minmax(0, 1fr) clamp(190px, 26vw, 320px);
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
+/* Desktop: a fixed side panel with the pieces, the log and the settings always on show. */
+.screen.desktop {
+  grid-template-areas: 'stage hud' 'stage info' 'stage bar' 'stage side';
+  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  gap: 10px;
+  padding: 14px;
+}
+.desktop .hud { padding: 10px 12px 10px 16px; }
+.desktop .info { min-height: 3.2em; font-size: 14px; }
+.side { grid-area: side; min-height: 0; overflow-y: auto; background: var(--paper); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 14px; overscroll-behavior: contain; }
+.side h3 { margin: 0 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.keys { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
+.stage.dragging, .stage.dragging * { cursor: grabbing !important; }
+@media (hover: hover) and (pointer: fine) {
+  .board .hex:hover { filter: brightness(1.15); }
+  button:not(:disabled):hover { filter: brightness(1.15); }
+}
 
 .hud { grid-area: hud; display: flex; align-items: center; gap: 10px; background: var(--paper); border-radius: 12px; padding: 6px 8px 6px 12px; border-left: 6px solid var(--red); }
 .screen.blue .hud { border-left-color: var(--blue-text); }
