@@ -7,7 +7,11 @@ export type UnitTypeId =
   | 'lightInfantry'
   | 'heavyCavalry'
   | 'lightCavalry'
-  | 'archer';
+  | 'archer'
+  // Faction pieces: Mongol horse archers, Japanese samurai and ashigaru spearmen.
+  | 'horseArcher'
+  | 'samurai'
+  | 'ashigaru';
 
 export type TerrainId = 'plain' | 'forest' | 'river' | 'bridge';
 
@@ -39,6 +43,10 @@ export interface UnitRules {
   ranged: RangedRules | null;
   /** Heavy units draw with a filled symbol, light units with an outline. */
   heavy: boolean;
+  /** Mounted: counts as cavalry for spears, charges and spearmen. */
+  mounted?: boolean;
+  /** Spearmen: double damage against mounted pieces. */
+  antiCavalry?: boolean;
 }
 
 export type Placement = [type: UnitTypeId, col: number, row: number];
@@ -151,8 +159,13 @@ export const CONFIG: GameConfig = {
     king: { moveCost: 6, attack: 1, hp: 2, ranged: null, heavy: true },
     heavyInfantry: { moveCost: 6, attack: 1, hp: 2, ranged: null, heavy: true },
     lightInfantry: { moveCost: 3, attack: 1, hp: 1, ranged: null, heavy: false },
-    heavyCavalry: { moveCost: 2, attack: 2, hp: 2, ranged: null, heavy: true },
-    lightCavalry: { moveCost: 1, attack: 1, hp: 1, ranged: null, heavy: false },
+    heavyCavalry: { moveCost: 2, attack: 2, hp: 2, ranged: null, heavy: true, mounted: true },
+    lightCavalry: { moveCost: 1, attack: 1, hp: 1, ranged: null, heavy: false, mounted: true },
+    // Mongols: fast riders who shoot from the saddle (shorter range than foot archers).
+    horseArcher: { moveCost: 1, attack: 1, hp: 1, ranged: { cost: 2, minRange: 2, maxRange: 4, damage: 1 }, heavy: false, mounted: true },
+    // Japanese: samurai fight hard and move like light infantry; ashigaru are cheap spearmen.
+    samurai: { moveCost: 3, attack: 2, hp: 2, ranged: null, heavy: true },
+    ashigaru: { moveCost: 3, attack: 1, hp: 1, ranged: null, heavy: false, antiCavalry: true },
     // Melee for archers is an open question; 0 = they only shoot.
     archer: {
       moveCost: 4,
@@ -179,7 +192,7 @@ export const CONFIG: GameConfig = {
   },
   army: {
     budget: 50,
-    cost: { lightInfantry: 1, heavyInfantry: 2, archer: 3, lightCavalry: 3, heavyCavalry: 4 },
+    cost: { lightInfantry: 1, heavyInfantry: 2, archer: 3, lightCavalry: 3, heavyCavalry: 4, horseArcher: 4, samurai: 4, ashigaru: 1 },
   },
   // 5 columns leave room for the largest possible army (50 light infantry and the King).
   deploy: { depth: 5 },

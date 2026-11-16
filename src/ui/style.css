@@ -190,8 +190,8 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
   overflow-y: auto;
 }
 .cover { background: #2b2620; }
-.cover.red { background: radial-gradient(circle at 50% 30%, #5a1d18, #1f1a16 70%); }
-.cover.blue { background: radial-gradient(circle at 50% 30%, #4a4a4a, #141414 70%); }
+.cover.red { background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--red) 45%, #1f1a16), #1f1a16 70%); }
+.cover.blue { background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--blue-text) 30%, #1f1a16), #141414 70%); }
 .card, .sheet-body { background: var(--paper); border-radius: 16px; padding: 22px; width: min(440px, 100%); }
 .card { text-align: center; }
 .card h2 { font: 400 34px/1.1 var(--title); margin: 4px 0 8px; }
@@ -316,3 +316,5 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 .rule.on { border-color: var(--gold); }
 .rule.on .switch { background: var(--gold); }
 .rule.on .switch i { transform: translateX(16px); background: #1f1b15; }
+.fdot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: 0; box-shadow: 0 0 0 1.5px rgba(241, 232, 210, .6); }
+.blurb { margin: 6px 2px 0; font-size: 12.5px; color: var(--muted); }

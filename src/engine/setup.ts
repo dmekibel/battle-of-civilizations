@@ -75,7 +75,7 @@ export function liftUnit(s: GameState, unitId: string): Result {
 // heavy infantry holds the front centre, light infantry extends the line, archers stand
 // one rank behind the infantry, cavalry guards the wings (light cavalry furthest out),
 // and the King stays at the back in the middle.
-const DEPLOY_ORDER: UnitTypeId[] = ['king', 'heavyInfantry', 'archer', 'lightInfantry', 'heavyCavalry', 'lightCavalry'];
+const DEPLOY_ORDER: UnitTypeId[] = ['king', 'heavyInfantry', 'samurai', 'archer', 'lightInfantry', 'ashigaru', 'heavyCavalry', 'lightCavalry', 'horseArcher'];
 
 function formationScore(type: UnitTypeId, depth: number, front: number, lateral: number, maxLateral: number): number {
   const wing = maxLateral - lateral; // 0 at the very edge of the board
@@ -83,13 +83,16 @@ function formationScore(type: UnitTypeId, depth: number, front: number, lateral:
     case 'king':
       return depth * 10 + lateral;
     case 'heavyInfantry':
+    case 'samurai':
     case 'lightInfantry':
+    case 'ashigaru':
       return (front - depth) * 10 + lateral;
     case 'archer':
       return Math.abs(front - 1 - depth) * 10 + lateral;
     case 'heavyCavalry':
       return Math.abs(front - 1 - depth) * 3 + Math.max(0, wing - 2) * 6;
     case 'lightCavalry':
+    case 'horseArcher':
       return wing * 10 + (front - depth) * 2;
   }
 }
@@ -127,18 +130,24 @@ export function autoDeploy(s: GameState, cfg: GameConfig = CONFIG): Result {
   return { ok: true, state };
 }
 
-/** Share of the budget a balanced army spends on each kind of piece. */
+/** Share of the budget a balanced army spends on each kind of piece (rescaled to the pieces on offer). */
 const ARMY_MIX: Record<keyof ArmyCounts, number> = {
   heavyInfantry: 0.3,
+  samurai: 0.3,
   archer: 0.2,
   heavyCavalry: 0.2,
+  horseArcher: 0.25,
   lightInfantry: 0.15,
+  ashigaru: 0.15,
   lightCavalry: 0.15,
 };
 
+/** The pieces most armies can buy (factions add or swap some). */
+export const STANDARD_ROSTER: (keyof ArmyCounts)[] = ['lightInfantry', 'heavyInfantry', 'archer', 'lightCavalry', 'heavyCavalry'];
+
 /** A balanced army that spends the budget: each step buys whatever is furthest below its share. */
-export function suggestArmy(rng: Rng = Math.random, cfg: GameConfig = CONFIG): ArmyCounts {
-  const types = Object.keys(ARMY_MIX) as (keyof ArmyCounts)[];
+export function suggestArmy(rng: Rng = Math.random, cfg: GameConfig = CONFIG, roster: (keyof ArmyCounts)[] = STANDARD_ROSTER): ArmyCounts {
+  const types = roster;
   // A little randomness so two auto armies are rarely identical.
   const want = Object.fromEntries(types.map((t) => [t, ARMY_MIX[t] * (0.75 + rng() * 0.5)])) as Record<keyof ArmyCounts, number>;
   const total = types.reduce((a, t) => a + want[t], 0);

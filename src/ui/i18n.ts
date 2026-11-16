@@ -1,6 +1,7 @@
 import type { UnitTypeId } from '../config';
 import type { ErrorCode, LogEntry, Player, WinReason } from '../engine';
 import type { Hex } from '../engine';
+import { factionOf } from './factions';
 
 export type Lang = 'ru' | 'en';
 
@@ -84,6 +85,10 @@ const STR = {
     nextPiece: 'Следующая фигура (N)',
     spearsBack: 'копья ударят в ответ',
     newBattle: 'Новая битва',
+    sideYou: 'Вы',
+    sideComputer: 'Компьютер',
+    sideFirst: 'Первый игрок',
+    sideSecond: 'Второй игрок',
     armyPoints: 'Очки на армию',
     skirmish: 'стычка',
     epic: 'эпос',
@@ -219,6 +224,10 @@ const STR = {
     nextPiece: 'Next piece (N)',
     spearsBack: 'spears hit back',
     newBattle: 'New battle',
+    sideYou: 'You',
+    sideComputer: 'Computer',
+    sideFirst: 'First player',
+    sideSecond: 'Second player',
     armyPoints: 'Army points',
     skirmish: 'skirmish',
     epic: 'epic',
@@ -287,6 +296,9 @@ const UNITS: Record<Lang, Record<UnitTypeId, string>> = {
     heavyCavalry: 'Тяжёлая кавалерия',
     lightCavalry: 'Лёгкая кавалерия',
     archer: 'Лучники',
+    horseArcher: 'Конные лучники',
+    samurai: 'Самураи',
+    ashigaru: 'Асигару',
   },
   en: {
     king: 'King',
@@ -295,6 +307,9 @@ const UNITS: Record<Lang, Record<UnitTypeId, string>> = {
     heavyCavalry: 'Heavy cavalry',
     lightCavalry: 'Light cavalry',
     archer: 'Archers',
+    horseArcher: 'Horse archers',
+    samurai: 'Samurai',
+    ashigaru: 'Ashigaru spearmen',
   },
 };
 
@@ -360,7 +375,8 @@ export const t = (l: Lang, k: Key) => STR[l][k];
 export const unitName = (l: Lang, u: UnitTypeId) => UNITS[l][u];
 export const errorText = (l: Lang, e: ErrorCode) => ERRORS[l][e];
 export const reasonText = (l: Lang, r: WinReason) => REASONS[l][r];
-export const playerName = (l: Lang, p: Player) => STR[l][p];
+/** A side is called by the faction it leads. */
+export const playerName = (l: Lang, p: Player) => factionOf(p).name[l];
 
 /** Board coordinate like "D5": column letter, row number. */
 export const hexName = (h: Hex) => `${String.fromCharCode(65 + h.col)}${h.row + 1}`;

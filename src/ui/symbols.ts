@@ -3,15 +3,10 @@
 
 import { CONFIG, type UnitTypeId } from '../config';
 import type { Player } from '../engine';
+import { factionOf } from './factions';
 
-// Novgorod: crimson. Teutonic Order: black (their white mantles with the black cross).
-export const ARMY_COLOR: Record<Player, string> = { red: '#a8201a', blue: '#1b1b1d' };
-
-/** Coat of arms for each side, for the pass-the-phone and battle screens. */
-export const EMBLEM: Record<Player, string> = {
-  red: `<svg viewBox="0 0 60 70" width="60" height="70" aria-hidden="true"><path d="M4 4H56V30Q56 56 30 66Q4 56 4 30Z" fill="#a8201a" stroke="#d9a521" stroke-width="3"/><path d="M15 44L15 24L22.5 32L30 18L37.5 32L45 24L45 44Z" fill="#e8b923" stroke="#8a6410" stroke-width="1.5" stroke-linejoin="round"/></svg>`,
-  blue: `<svg viewBox="0 0 60 70" width="60" height="70" aria-hidden="true"><path d="M4 4H56V30Q56 56 30 66Q4 56 4 30Z" fill="#f4f1e8" stroke="#1b1b1d" stroke-width="3"/><path d="M24 12H36L33 28H48V40H33L36 58H24L27 40H12V28H27Z" fill="#1b1b1d"/></svg>`,
-};
+/** A side's army colour comes from the faction it leads. */
+export const armyColor = (p: Player) => factionOf(p).color;
 
 const W = 40;
 const H = 28;
@@ -38,6 +33,15 @@ function picture(type: UnitTypeId, ink: string): string {
       return `${HORSE(ink, -3)}<path d="M-16 -2L17 -12" stroke="${ink}" stroke-width="2.2" stroke-linecap="round"/>`;
     case 'lightCavalry':
       return HORSE(ink, -3);
+    case 'horseArcher':
+      // A horse with a bow above its back.
+      return `${HORSE(ink, -6)}<path d="M6 -14Q16 -5 6 4" fill="none" stroke="${ink}" stroke-width="2" stroke-linecap="round"/><path d="M6 -14L6 4" stroke="${ink}" stroke-width="1.2"/>`;
+    case 'samurai':
+      // A katana: a long, slightly curved blade with a round guard.
+      return `<path d="M-11 10Q1 4 12 -11" fill="none" stroke="${ink}" stroke-width="2.4" stroke-linecap="round"/><circle cx="-5" cy="6.3" r="2.6" fill="none" stroke="${ink}" stroke-width="1.8"/>`;
+    case 'ashigaru':
+      // A yari: a tall straight spear with a cross-bar.
+      return `<path d="M0 12V-8M-5 -5H5" stroke="${ink}" stroke-width="2.2" stroke-linecap="round"/><path d="M0 -14L-3 -7H3Z" fill="${ink}"/>`;
     case 'archer':
       // Bow drawn with an arrow on the string.
       return `<path d="M-4 -12Q10 0 -4 12" fill="none" stroke="${ink}" stroke-width="2.2" stroke-linecap="round"/>` +
@@ -48,7 +52,7 @@ function picture(type: UnitTypeId, ink: string): string {
 /** A piece: a square counter with its picture. Heavy pieces are filled in the army colour,
  *  light pieces white with a coloured outline. A wounded piece (below full defense) gets a red edge. */
 export function unitSymbol(type: UnitTypeId, owner: Player, hp: number): string {
-  const color = ARMY_COLOR[owner];
+  const color = armyColor(owner);
   const heavy = CONFIG.units[type].heavy;
   const wounded = hp < CONFIG.units[type].hp;
   const box = `<rect x="${-W / 2}" y="${-H / 2}" width="${W}" height="${H}" rx="3" fill="${heavy ? color : '#fffdf6'}" stroke="${wounded ? '#ff4d3d' : color}" stroke-width="${wounded ? 3.2 : 2.4}"/>`;

@@ -121,8 +121,8 @@ export function reachable(s: GameState, unitId: string, cfg: GameConfig = CONFIG
 
 const enemyNext = (s: GameState, h: Hex, owner: Player) => s.units.some((e) => e.owner !== owner && distance(e.pos, h) === 1);
 
-const CAVALRY = new Set(['heavyCavalry', 'lightCavalry']);
-const INFANTRY = new Set(['heavyInfantry', 'lightInfantry']);
+const mounted = (u: Unit, cfg: GameConfig) => !!cfg.units[u.type].mounted;
+const INFANTRY = new Set(['heavyInfantry', 'lightInfantry', 'samurai', 'ashigaru']);
 
 /** Points value of an army (its King not counted), for the morale rule. */
 export function armyValue(s: GameState, p: Player, cfg: GameConfig = CONFIG): number {
@@ -155,7 +155,7 @@ function damageOn(s: GameState, target: Unit, raw: number, cfg: GameConfig) {
 /** Melee bonuses from the optional rules: cavalry charge and the King's command. */
 function meleeBonus(s: GameState, a: Unit, cfg: GameConfig): number {
   let bonus = 0;
-  if (cfg.options.charge && CAVALRY.has(a.type) && (a.ran ?? 0) >= 3) bonus += 1;
+  if (cfg.options.charge && mounted(a, cfg) && (a.ran ?? 0) >= 3) bonus += 1;
   if (cfg.options.kingAura && a.type !== 'king') {
     const king = kingOf(s, a.owner);
     if (king && distance(king.pos, a.pos) <= 2) bonus += 1;
@@ -185,6 +185,8 @@ function checkStrike(
     if (distance(a.pos, t.pos) !== 1) return 'notAdjacent';
     cost = cfg.combat.attackCost;
     raw = rules.attack + meleeBonus(s, a, cfg);
+    // Spearmen hit riders twice as hard.
+    if (rules.antiCavalry && mounted(t, cfg)) raw *= 2;
   } else {
     const r = rules.ranged;
     if (!r) return 'cannotShoot';
@@ -198,7 +200,7 @@ function checkStrike(
   if (s.points < cost) return 'notEnoughPoints';
   const damage = damageOn(s, t, raw, cfg);
   // Spears: cavalry charging into infantry takes a hit back, unless the infantry falls.
-  const counter = kind === 'attack' && cfg.options.spears && CAVALRY.has(a.type) && INFANTRY.has(t.type) && t.hp > damage ? 1 : 0;
+  const counter = kind === 'attack' && cfg.options.spears && mounted(a, cfg) && INFANTRY.has(t.type) && t.hp > damage ? 1 : 0;
   return { a, t, cost, damage, counter };
 }
 

@@ -3,6 +3,8 @@
 // starts and saved with it, so a reloaded game keeps its own settings.
 
 import { CONFIG, type GameConfig } from '../config';
+import type { Player } from '../engine';
+import { setSides, type FactionId } from './factions';
 
 export type MapId = 'river' | 'open' | 'forest' | 'random';
 export type DiceId = '3d6' | '2d6' | 'fixed';
@@ -12,6 +14,8 @@ export interface Settings {
   map: MapId;
   dice: DiceId;
   options: GameConfig['options'];
+  /** The faction each side leads (Novgorod side moves first). */
+  sides: Record<Player, FactionId>;
 }
 
 /** Dad's rules exactly: nothing optional switched on. */
@@ -29,14 +33,14 @@ export const RECOMMENDED: GameConfig['options'] = {
   charge: true,
 };
 
-export const DEFAULT_SETTINGS: Settings = { budget: 50, map: 'river', dice: '3d6', options: { ...DADS_RULES } };
+export const DEFAULT_SETTINGS: Settings = { budget: 50, map: 'river', dice: '3d6', options: { ...DADS_RULES }, sides: { red: 'novgorod', blue: 'teutonic' } };
 
 const KEY = 'boc-settings';
 
 export function loadSettings(): Settings {
   try {
     const s = JSON.parse(localStorage.getItem(KEY) ?? 'null');
-    if (s && typeof s.budget === 'number') return { ...DEFAULT_SETTINGS, ...s, options: { ...DADS_RULES, ...s.options } };
+    if (s && typeof s.budget === 'number') return { ...DEFAULT_SETTINGS, ...s, options: { ...DADS_RULES, ...s.options }, sides: { ...DEFAULT_SETTINGS.sides, ...s.sides } };
   } catch {
     /* fall through to the defaults */
   }
@@ -98,4 +102,5 @@ export function applySettings(s: Settings) {
   CONFIG.board = boardFor(s.map);
   CONFIG.dice = s.dice === 'fixed' ? { count: 0, sides: 6, fixed: 10 } : s.dice === '2d6' ? { count: 2, sides: 6, fixed: null } : { count: 3, sides: 6, fixed: null };
   CONFIG.options = { ...s.options };
+  setSides(s.sides ?? DEFAULT_SETTINGS.sides);
 }

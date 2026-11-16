@@ -6,7 +6,7 @@
 import { CONFIG, type TerrainId, type UnitTypeId } from '../config';
 import type { AttackPreview, GameState, Hex, Player, Reach } from '../engine';
 import { hexName } from './i18n';
-import { ARMY_COLOR, unitSymbol } from './symbols';
+import { armyColor, unitSymbol } from './symbols';
 
 const S = 34; // hex radius in SVG units
 const R3 = Math.sqrt(3);
@@ -235,7 +235,7 @@ function piece(type: UnitTypeId, owner: Player, hp: number, L: Lens, [sx, sy]: P
   if (!L.tilt) return `<g transform="translate(${sx} ${sy}) scale(${k.toFixed(3)})"><g class="${cls}">${counter}</g></g>`;
   return `<g transform="translate(${sx} ${sy})"><g class="${cls}">
     <ellipse cx="${5 * k}" cy="${1 * k}" rx="${19 * k}" ry="${5.5 * k}" fill="#000" opacity=".35"/>
-    <rect x="${-16.4 * k}" y="${-4 * k}" width="${32.8 * k}" height="${4 * k}" rx="${1.5 * k}" fill="${ARMY_COLOR[owner]}" filter="brightness(.6)" opacity=".9"/>
+    <rect x="${-16.4 * k}" y="${-4 * k}" width="${32.8 * k}" height="${4 * k}" rx="${1.5 * k}" fill="${armyColor(owner)}" filter="brightness(.6)" opacity=".9"/>
     <g transform="translate(0 ${-15.5 * k}) scale(${0.82 * k})">${counter}</g>
   </g></g>`;
 }
@@ -266,7 +266,7 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
   }
 
   if (o.zone) {
-    const c = ARMY_COLOR[o.zone.owner];
+    const c = armyColor(o.zone.owner);
     for (const hex of o.zone.hexes) {
       ground.push(`<polygon points="${corners(hex, v, L, S - 2)}" fill="${c}" fill-opacity=".14" stroke="${c}" stroke-opacity=".55" stroke-width="1.5"/>`);
     }

@@ -44,7 +44,8 @@ import {
 } from '../engine';
 import { NO_EFFECTS, hexOnMap, mapSize, renderBoard, screenToGround, viewCube, type Camera, type Effects, type Overlay } from './board';
 import { errorText, logText, playerName, reasonText, t, unitName, type Key, type Lang } from './i18n';
-import { EMBLEM, unitIcon } from './symbols';
+import { unitIcon } from './symbols';
+import { FACTIONS, FACTION_ORDER, factionOf, rosterOf, type FactionId } from './factions';
 import { isMuted, sound, toggleMute } from './sound';
 import { DADS_RULES, RECOMMENDED, applySettings, loadSettings, saveSettings, type DiceId, type MapId, type Settings } from './settings';
 
@@ -249,9 +250,9 @@ let tilt = (() => {
 const [ZOOM_MIN, ZOOM_MAX] = [0.7, 4];
 
 type Buyable = keyof ArmyCounts;
-const BUY_ORDER: Buyable[] = ['lightInfantry', 'heavyInfantry', 'archer', 'lightCavalry', 'heavyCavalry'];
-const TRAY_ORDER: UnitTypeId[] = ['king', 'heavyCavalry', 'lightCavalry', 'heavyInfantry', 'lightInfantry', 'archer'];
-const LEGEND_ORDER: UnitTypeId[] = ['king', ...BUY_ORDER];
+/** The side to move's faction decides what it can buy and what the pieces list shows. */
+const buyOrder = () => rosterOf(sess.state.current) as Buyable[];
+const TRAY_ORDER: UnitTypeId[] = ['king', 'heavyCavalry', 'lightCavalry', 'horseArcher', 'heavyInfantry', 'samurai', 'lightInfantry', 'ashigaru', 'archer'];
 
 // ---------- view helpers ----------
 
@@ -409,7 +410,7 @@ function shotZone(s: GameState, u: Unit): Hex[] {
 }
 
 function legendList(owner: Player): string {
-  return LEGEND_ORDER.map(
+  return (['king', ...rosterOf(owner)] as UnitTypeId[]).map(
     (type) => `<li>${unitIcon(type, owner)}<div><b>${unitName(lang, type)}</b>${stats(type)}</div></li>`,
   ).join('');
 }
@@ -418,8 +419,8 @@ function legendList(owner: Player): string {
 
 /** The whole army as small pieces, grouped by type: shown at the bottom of the builder. */
 function armyPreview(owner: Player): string {
-  const total = 1 + BUY_ORDER.reduce((a, t2) => a + (draft[t2] ?? 0), 0);
-  const groups = (['king', ...BUY_ORDER] as UnitTypeId[])
+  const total = 1 + buyOrder().reduce((a, t2) => a + (draft[t2] ?? 0), 0);
+  const groups = (['king', ...buyOrder()] as UnitTypeId[])
     .map((type) => {
       const n = type === 'king' ? 1 : draft[type as Buyable] ?? 0;
       return n ? `<span class="group">${Array.from({ length: n }, () => unitIcon(type, owner)).join('')}</span>` : '';
@@ -453,7 +454,7 @@ function onSlide(input: HTMLInputElement) {
   const left = CONFIG.army.budget - armyCost(draft);
   app.querySelector('#left')!.textContent = String(left);
   (app.querySelector('#meter') as HTMLElement).style.width = `${((CONFIG.army.budget - left) / CONFIG.army.budget) * 100}%`;
-  for (const t2 of BUY_ORDER) {
+  for (const t2 of buyOrder()) {
     const r = app.querySelector(`[data-row="${t2}"]`)!;
     (r.querySelector('input') as HTMLInputElement).style.cssText = sliderFill(t2);
     (r.querySelector('[data-act="less"]') as HTMLButtonElement).disabled = !(draft[t2] ?? 0);
@@ -465,7 +466,7 @@ function onSlide(input: HTMLInputElement) {
 function draftSheet(s: GameState): string {
   const spent = armyCost(draft);
   const left = CONFIG.army.budget - spent;
-  const rows = BUY_ORDER.map((type) => {
+  const rows = buyOrder().map((type) => {
     const n = draft[type] ?? 0;
     const price = CONFIG.army.cost[type];
     return `<li data-row="${type}">
@@ -534,9 +535,18 @@ function setupScreen(): string {
       <span class="what"><b>${t(lang, `rule_${r.key}` as Key)}</b><small>${t(lang, `ruleHelp_${r.key}` as Key)}</small></span>
     </button>`;
   }).join('');
+  const factionPicker = (side: Player, label: string) => `
+      <h3>${label}</h3>
+      <div class="chips">${FACTION_ORDER.map((f) => {
+        const on = settings.sides[side] === f;
+        return `<button data-act="faction" data-side="${side}" data-value="${f}" class="${on ? 'on' : ''}" aria-pressed="${on}"><span class="fdot" style="background:${FACTIONS[f].color}"></span>${FACTIONS[f].name[lang]}</button>`;
+      }).join('')}</div>
+      <p class="blurb">${FACTIONS[settings.sides[side]].blurb[lang]}</p>`;
   return `<div class="sheet"><div class="sheet-body setup">
     <h2>${t(lang, 'newBattle')}</h2>
     <div class="sheet-scroll">
+      ${factionPicker('red', mode === 'ai' ? t(lang, 'sideYou') : t(lang, 'sideFirst'))}
+      ${factionPicker('blue', mode === 'ai' ? t(lang, 'sideComputer') : t(lang, 'sideSecond'))}
       <h3>${t(lang, 'armyPoints')}</h3>
       ${chips('budget', [['20', `20 · ${t(lang, 'skirmish')}`], ['30', '30'], ['50', '50'], ['80', `80 · ${t(lang, 'epic')}`]], String(settings.budget))}
       <h3>${t(lang, 'map')}</h3>
@@ -559,7 +569,7 @@ function startScreen(): string {
     `<button data-act="set-lang" data-lang="${l}" class="${lang === l ? 'on' : ''}" aria-pressed="${lang === l}">${label}</button>`;
   return `<div class="cover"><div class="card start">
     <div class="langs">${pick('en', 'English')}${pick('ru', 'Русский')}</div>
-    <div class="emblem">${EMBLEM.red}${EMBLEM.blue}</div>
+    <div class="emblem">${factionOf('red').emblem}${factionOf('blue').emblem}</div>
     <h2>${t(lang, 'title')}</h2>
     <p>${t(lang, 'chooseMode')}</p>
     <button data-act="mode" data-mode="pvp" class="choice"><b>${t(lang, 'twoPlayers')}</b><span>${t(lang, 'twoPlayersSub')}</span></button>
@@ -570,14 +580,14 @@ function startScreen(): string {
 function passScreen(s: GameState): string {
   if (s.phase === 'roll') {
     return `<div class="cover"><div class="card">
-      <div class="emblem">${EMBLEM.red}${EMBLEM.blue}</div>
+      <div class="emblem">${factionOf('red').emblem}${factionOf('blue').emblem}</div>
       <h2>${t(lang, 'battle')}</h2>
       <p>${t(lang, 'battleText')} <b class="${s.current}">${playerName(lang, s.current)}</b>.</p>
       <button data-act="ack" class="primary wide">${t(lang, 'startBattle')}</button>
     </div></div>`;
   }
   return `<div class="cover ${s.current}"><div class="card">
-    <div class="emblem">${EMBLEM[s.current]}</div>
+    <div class="emblem">${factionOf(s.current).emblem}</div>
     <p class="small">${t(lang, 'handTo')}</p>
     <h2 class="${s.current}">${playerName(lang, s.current)}</h2>
     <p>${playerName(lang, other(s.current))} — ${t(lang, 'noPeek')}</p>
@@ -760,7 +770,7 @@ function draw() {
   const over =
     s.phase === 'over' && s.winner
       ? `<div class="cover ${s.winner}"><div class="card ${s.winner}">
-           <div class="emblem">${EMBLEM[s.winner]}</div>
+           <div class="emblem">${factionOf(s.winner).emblem}</div>
            <h2 class="${s.winner}">${playerName(lang, s.winner)} ${t(lang, 'wins')}</h2>
            <p>${reasonText(lang, s.winReason!)}</p>
            <button data-act="restart" class="primary wide">${t(lang, 'newGame')}</button>
@@ -823,7 +833,7 @@ function scheduleRoll() {
 
 /** The computer builds and places its army at once (the player never sees it happen). */
 function aiSetup() {
-  const steps: ((s: GameState) => Result)[] = [(s) => draftArmy(s, suggestArmy()), (s) => autoDeploy(s), (s) => finishDeploy(s)];
+  const steps: ((s: GameState) => Result)[] = [(s) => draftArmy(s, suggestArmy(Math.random, CONFIG, rosterOf(s.current) as Buyable[])), (s) => autoDeploy(s), (s) => finishDeploy(s)];
   for (const step of steps) {
     const { sess: next, result } = apply(sess, step, true);
     if (!result.ok) return;
@@ -995,12 +1005,12 @@ app.addEventListener('click', (e) => {
       }
       return;
     case 'auto-army':
-      draft = suggestArmy();
+      draft = suggestArmy(Math.random, CONFIG, buyOrder());
       message = null;
       return render();
     case 'auto-all': {
       // Build a balanced army, place it in formation and hand over, all in one tap.
-      draft = suggestArmy();
+      draft = suggestArmy(Math.random, CONFIG, buyOrder());
       if (!run((s) => draftArmy(s, draft))) return;
       draft = {};
       run((s) => autoDeploy(s));
@@ -1025,6 +1035,16 @@ app.addEventListener('click', (e) => {
       if (field === 'budget') settings = { ...settings, budget: Number(value) };
       if (field === 'map') settings = { ...settings, map: value as MapId };
       if (field === 'dice') settings = { ...settings, dice: value as DiceId };
+      return render();
+    }
+    case 'faction': {
+      // Both sides can't lead the same army: picking the other side's faction swaps them.
+      const side = btn!.getAttribute('data-side') as Player;
+      const f = btn!.getAttribute('data-value') as FactionId;
+      const otherSide = other(side);
+      const sidesNext = { ...settings.sides, [side]: f };
+      if (settings.sides[otherSide] === f) sidesNext[otherSide] = settings.sides[side];
+      settings = { ...settings, sides: sidesNext };
       return render();
     }
     case 'preset':

@@ -1,0 +1,79 @@
+// The armies a side can lead. The rules engine only knows "red" (moves first) and "blue";
+// a faction gives a side its name, colours, coat of arms and the pieces it can buy.
+
+import type { UnitTypeId } from '../config';
+import type { ArmyCounts, Player } from '../engine';
+import type { Lang } from './i18n';
+
+export type FactionId = 'novgorod' | 'teutonic' | 'mongols' | 'japanese';
+
+export interface Faction {
+  name: Record<Lang, string>;
+  /** The army's colour on pieces and banners. */
+  color: string;
+  /** A lighter version for text on the dark panels. */
+  text: string;
+  /** What this army can buy (its King always comes free). */
+  roster: (keyof ArmyCounts)[];
+  /** One line on how the army plays, for the New battle screen. */
+  blurb: Record<Lang, string>;
+  emblem: string;
+}
+
+const shield = (fill: string, rim: string, inner: string) =>
+  `<svg viewBox="0 0 60 70" width="60" height="70" aria-hidden="true"><path d="M4 4H56V30Q56 56 30 66Q4 56 4 30Z" fill="${fill}" stroke="${rim}" stroke-width="3"/>${inner}</svg>`;
+
+export const FACTIONS: Record<FactionId, Faction> = {
+  novgorod: {
+    name: { en: 'Novgorod', ru: 'Новгород' },
+    color: '#a8201a',
+    text: '#ec6a5c',
+    roster: ['lightInfantry', 'heavyInfantry', 'archer', 'lightCavalry', 'heavyCavalry'],
+    blurb: { en: 'Balanced Rus army: spearmen, archers and druzhina riders.', ru: 'Сбалансированное русское войско: копейщики, лучники и дружина.' },
+    emblem: shield('#a8201a', '#d9a521', '<path d="M15 44L15 24L22.5 32L30 18L37.5 32L45 24L45 44Z" fill="#e8b923" stroke="#8a6410" stroke-width="1.5" stroke-linejoin="round"/>'),
+  },
+  teutonic: {
+    name: { en: 'Teutonic Order', ru: 'Тевтонский орден' },
+    color: '#1b1b1d',
+    text: '#e9e4d6',
+    roster: ['lightInfantry', 'heavyInfantry', 'archer', 'lightCavalry', 'heavyCavalry'],
+    blurb: { en: 'Crusader knights: heavy cavalry and disciplined foot.', ru: 'Рыцари-крестоносцы: тяжёлая конница и стойкая пехота.' },
+    emblem: shield('#f4f1e8', '#1b1b1d', '<path d="M24 12H36L33 28H48V40H33L36 58H24L27 40H12V28H27Z" fill="#1b1b1d"/>'),
+  },
+  mongols: {
+    name: { en: 'Mongols', ru: 'Монголы' },
+    color: '#1f5fa8',
+    text: '#86b9f0',
+    roster: ['lightInfantry', 'archer', 'lightCavalry', 'heavyCavalry', 'horseArcher'],
+    blurb: { en: 'Horse archers: shoot and ride. Few foot soldiers, no heavy infantry.', ru: 'Конные лучники: стреляют на скаку. Мало пехоты, нет тяжёлой пехоты.' },
+    emblem: shield('#1f5fa8', '#e1b12c', '<circle cx="30" cy="27" r="8" fill="#e1b12c"/><path d="M20 44Q30 36 40 44Q30 40 20 44Z" fill="#e1b12c"/><path d="M22 50H38" stroke="#e1b12c" stroke-width="3"/>'),
+  },
+  japanese: {
+    name: { en: 'Japan', ru: 'Япония' },
+    color: '#5b2a86',
+    text: '#c7a6ef',
+    roster: ['ashigaru', 'samurai', 'archer', 'lightCavalry', 'heavyCavalry'],
+    blurb: { en: 'Samurai who hit hard, and cheap ashigaru spearmen that stop cavalry.', ru: 'Самураи бьют сильно, дешёвые асигару с копьями останавливают конницу.' },
+    emblem: shield('#f4f1e8', '#5b2a86', '<circle cx="30" cy="31" r="15" fill="none" stroke="#5b2a86" stroke-width="3"/><circle cx="30" cy="23" r="4" fill="#5b2a86"/><circle cx="23" cy="35" r="4" fill="#5b2a86"/><circle cx="37" cy="35" r="4" fill="#5b2a86"/>'),
+  },
+};
+
+export const FACTION_ORDER: FactionId[] = ['novgorod', 'teutonic', 'mongols', 'japanese'];
+
+/** Which faction each side leads in the current battle. */
+export let sides: Record<Player, FactionId> = { red: 'novgorod', blue: 'teutonic' };
+
+/** Sets both sides' factions and repaints the colours the page uses for them. */
+export function setSides(next: Record<Player, FactionId>) {
+  sides = next;
+  const root = document.documentElement.style;
+  root.setProperty('--red', FACTIONS[next.red].color);
+  root.setProperty('--red-text', FACTIONS[next.red].text);
+  root.setProperty('--blue', FACTIONS[next.blue].color);
+  root.setProperty('--blue-text', FACTIONS[next.blue].text);
+}
+
+export const factionOf = (p: Player) => FACTIONS[sides[p]];
+
+/** Pieces in the order the army builder and the pieces list show them. */
+export const rosterOf = (p: Player): UnitTypeId[] => factionOf(p).roster;
