@@ -31,25 +31,27 @@ function corners(h: Hex, v: View, r = S): string {
   }).join(' ');
 }
 
-const FILL: Record<TerrainId, string> = {
-  plain: '#ece4c8',
-  forest: '#9cb38a',
-  river: '#8fbcdc',
-  bridge: '#8fbcdc',
-};
+// Grass in three close shades so the field doesn't look flat; the shade is fixed per hex.
+const GRASS = ['#7fa35a', '#87ab61', '#789b53'];
+
+function fill(t: TerrainId, h: Hex): string {
+  if (t === 'plain') return GRASS[(h.col * 7 + h.row * 13 + ((h.col * h.row) % 5)) % GRASS.length];
+  if (t === 'forest') return '#3d6530';
+  return '#5f9ccc'; // river and the water under a bridge
+}
 
 function decor(t: TerrainId, h: Hex, v: View): string {
   const [x, y] = center(h, v);
   if (t === 'forest') {
     const tree = (dx: number, dy: number, s: number) =>
-      `<path d="M${x + dx} ${y + dy - 11 * s}L${x + dx + 8 * s} ${y + dy + 5 * s}L${x + dx - 8 * s} ${y + dy + 5 * s}Z" fill="#3f6b3a"/>` +
+      `<path d="M${x + dx} ${y + dy - 11 * s}L${x + dx + 8 * s} ${y + dy + 5 * s}L${x + dx - 8 * s} ${y + dy + 5 * s}Z" fill="#24421d"/>` +
       `<rect x="${x + dx - 1.5 * s}" y="${y + dy + 5 * s}" width="${3 * s}" height="${5 * s}" fill="#5b4126"/>`;
     return tree(-9, 2, 0.85) + tree(9, 4, 0.75) + tree(1, -8, 0.9);
   }
   // River and bridge follow the map's turn; trees stay upright.
   const turn = v.portrait ? ` transform="rotate(-90 ${x} ${y})"` : '';
   if (t === 'river') {
-    return `<path${turn} d="M${x - 4} ${y - 22}Q${x + 6} ${y - 11} ${x - 2} ${y}T${x} ${y + 22}" stroke="#d9ecf7" stroke-width="2" fill="none" opacity=".8"/>`;
+    return `<path${turn} d="M${x - 4} ${y - 22}Q${x + 6} ${y - 11} ${x - 2} ${y}T${x} ${y + 22}" stroke="#cfe6f6" stroke-width="2" fill="none" opacity=".8"/>`;
   }
   if (t === 'bridge') {
     const planks = Array.from({ length: 6 }, (_, i) => {
@@ -73,7 +75,6 @@ export interface Overlay {
 
 export function renderBoard(s: GameState, o: Overlay, v: View): string {
   const parts: string[] = [];
-  const tint = ARMY_COLOR[s.current];
 
   for (let r = 0; r < s.board.length; r++) {
     for (let c = 0; c < s.board[r].length; c++) {
@@ -81,7 +82,7 @@ export function renderBoard(s: GameState, o: Overlay, v: View): string {
       const t = s.board[r][c];
       const [x, y] = center(hex, v);
       parts.push(
-        `<polygon class="hex" data-col="${c}" data-row="${r}" points="${corners(hex, v)}" fill="${FILL[t]}" stroke="#b9ad86" stroke-width="1"/>`,
+        `<polygon class="hex" data-col="${c}" data-row="${r}" points="${corners(hex, v)}" fill="${fill(t, hex)}" stroke="#5d7f40" stroke-width="1"/>`,
         decor(t, hex, v),
         `<text x="${x}" y="${y - S * 0.62}" class="coord">${hexName(hex)}</text>`,
       );
@@ -98,7 +99,7 @@ export function renderBoard(s: GameState, o: Overlay, v: View): string {
   for (const { hex, cost } of o.reach.values()) {
     const [x, y] = center(hex, v);
     parts.push(
-      `<polygon points="${corners(hex, v, S - 3)}" fill="${tint}" fill-opacity=".16" stroke="#2f7d32" stroke-width="2.5"/>`,
+      `<polygon points="${corners(hex, v, S - 3)}" fill="#fffbe0" fill-opacity=".28" stroke="#fff3a6" stroke-width="2.5"/>`,
       `<text x="${x}" y="${y + 5}" class="cost">−${cost}</text>`,
     );
   }

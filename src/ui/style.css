@@ -3,11 +3,11 @@
 /* Full-screen table: the board takes every spare pixel; controls sit at the edges
    (top and bottom in portrait, a side column in landscape). */
 :root {
-  --bg: #d9cfb0;
-  --paper: #fffdf6;
+  --bg: #26321d;
+  --paper: #efe3c2;
   --ink: #2b2620;
-  --muted: #7a7062;
-  --line: #d8cdb0;
+  --muted: #6e6146;
+  --line: #cdbb8e;
   --red: #b3261e;
   --blue: #1f56a8;
   --gold: #c99a00;
@@ -68,8 +68,8 @@ body {
 .zoom button { width: 44px; height: 44px; padding: 0; font-size: 22px; line-height: 1; border-radius: 50%; background: rgba(255, 253, 246, .92); box-shadow: 0 2px 6px rgba(43, 38, 32, .25); }
 .board .hex { cursor: pointer; }
 .board *:not(.hex) { pointer-events: none; }
-.board .coord { font: 7px 'PT Sans', sans-serif; fill: #6f6650; opacity: .45; text-anchor: middle; }
-.board .cost { font: 700 11px 'PT Sans', sans-serif; fill: #2f7d32; text-anchor: middle; }
+.board .coord { font: 7px 'PT Sans', sans-serif; fill: #2b4220; opacity: .4; text-anchor: middle; }
+.board .cost { font: 700 12px 'PT Sans', sans-serif; fill: #fffbe0; stroke: #2b4220; stroke-width: 2.5px; paint-order: stroke; text-anchor: middle; }
 .board .badge text { font: 700 11px 'PT Sans', sans-serif; fill: #fff; text-anchor: middle; }
 
 .info { grid-area: info; margin: 0; background: var(--paper); border-radius: 10px; padding: 6px 10px; font-size: 13px; min-height: 2.2em; }
