@@ -79,6 +79,7 @@ Speed ratio heavy infantry : light infantry : heavy cavalry : light cavalry = 1 
 - Tapping one of your pieces before rolling rolls the dice for you.
 - **End turn** passes the screen to the other player. With points still usable, the first press warns and the button turns into **End anyway**.
 - **On a computer** (wide screen): the pieces list, log and settings stay open in a side panel. Keys: Space roll, Enter end turn, U or Ctrl+Z undo, + / − zoom, Esc deselect. Drag the map with the mouse; a trackpad pinch zooms it.
+- **Camera:** turn the board to any angle and change the tilt. Buttons ⟲ ⟳ ⤒ ⤓ ⌂ in the corner of the board; on a phone twist two fingers to turn and slide them up or down to tilt; with a mouse right-drag (or Shift + drag); keys Q / W turn, Z / X tilt, C resets. Pieces always face you.
 - **2.5D view** (default): the board tilts back like a table and the pieces, trees and bridges stand up. Switch to the flat map in the menu (🗺 View).
 - The log lists every roll, move and hit. **EN / RU** switches the language (in the menu ☰).
 

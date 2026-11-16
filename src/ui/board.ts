@@ -1,7 +1,7 @@
 // Draws the board as one SVG string. The grid is flat-top hexes with odd columns shifted
 // down; in portrait the whole map turns 90° so the armies face each other top and bottom.
-// In 2.5D the map is then tilted back like a table seen from a chair: far rows are
-// squashed and smaller, and pieces, trees and bridges stand up from the ground.
+// In 2.5D the map is then turned and tilted by the camera like a table seen from a chair:
+// far rows are squashed and smaller, and pieces, trees and bridges stand up from the ground.
 
 import { CONFIG, type TerrainId, type UnitTypeId } from '../config';
 import type { AttackPreview, GameState, Hex, Player, Reach } from '../engine';
@@ -13,10 +13,18 @@ const R3 = Math.sqrt(3);
 const W = S * 1.5 * (CONFIG.board.cols - 1) + 2 * S;
 const H = R3 * S * (CONFIG.board.rows + 0.5);
 
+/** Where the camera looks from: `yaw` turns the board (radians), `pitch` 0..1 tilts it from
+ *  gently sloped to steep. Pieces always stand facing the viewer. */
+export interface Camera {
+  yaw: number;
+  pitch: number;
+}
+
 export interface View {
   portrait: boolean;
-  /** 2.5D: tilted board with standing pieces. */
+  /** 2.5D: tilted board with standing pieces. Off = straight down from above. */
   tilt: boolean;
+  cam: Camera;
 }
 
 type Pt = [number, number];
@@ -25,8 +33,10 @@ type Pt = [number, number];
 interface Lens {
   /** Flat map point -> screen point. */
   pt: (x: number, y: number) => Pt;
-  /** How big things are at this flat depth (1 at the front, smaller further back). */
-  size: (y: number) => number;
+  /** How big things look at this point (1 = the middle of the board). */
+  size: (x: number, y: number) => number;
+  /** How near the viewer this point is; larger is nearer. Used to paint back to front. */
+  depth: (x: number, y: number) => number;
   width: number;
   height: number;
   tilt: boolean;
@@ -34,17 +44,41 @@ interface Lens {
 
 function lens(v: View): Lens {
   const [fw, fh] = v.portrait ? [H, W] : [W, H];
-  if (!v.tilt) return { pt: (x, y) => [x, y], size: () => 1, width: fw, height: fh, tilt: false };
+  const [cx, cy] = [fw / 2, fh / 2];
+  const radius = Math.hypot(fw, fh) / 2;
+  const [cos, sin] = [Math.cos(v.cam.yaw), Math.sin(v.cam.yaw)];
+  // Tilt from 22° (almost top-down) to 64° (looking across the table).
   // A tall phone screen gets a gentler tilt so the board still fills it.
-  const [squash, far] = v.portrait ? [0.82, 0.86] : [0.54, 0.74];
-  const lift = 64; // room above the back row for standing pieces
-  const size = (y: number) => far + (1 - far) * (y / fh);
+  const pitch = v.portrait ? v.cam.pitch * 0.5 : v.cam.pitch;
+  const angle = v.tilt ? ((22 + 42 * pitch) * Math.PI) / 180 : 0;
+  const squash = Math.cos(angle);
+  const persp = 0.34 * Math.sin(angle); // far side shrinks more the steeper the tilt
+  const raw = (x: number, y: number) => {
+    const dx = x - cx;
+    const dy = y - cy;
+    const rx = dx * cos - dy * sin;
+    const ry = dx * sin + dy * cos;
+    const k = 1 + persp * (ry / radius);
+    return [rx * k, ry * squash * k, k, ry] as const;
+  };
+  // Fit the view box around the turned board, with room above for standing pieces.
+  const edges = [raw(0, 0), raw(fw, 0), raw(fw, fh), raw(0, fh)];
+  const minX = Math.min(...edges.map((e) => e[0]));
+  const maxX = Math.max(...edges.map((e) => e[0]));
+  const minY = Math.min(...edges.map((e) => e[1]));
+  const maxY = Math.max(...edges.map((e) => e[1]));
+  const side = 24;
+  const top = v.tilt ? 64 : 24;
   return {
-    pt: (x, y) => [fw / 2 + (x - fw / 2) * size(y), lift + y * squash * (0.86 + 0.14 * size(y))],
-    size,
-    width: fw,
-    height: lift + fh * squash + 24,
-    tilt: true,
+    pt: (x, y) => {
+      const [X, Y] = raw(x, y);
+      return [X - minX + side, Y - minY + top];
+    },
+    size: (x, y) => raw(x, y)[2],
+    depth: (x, y) => raw(x, y)[3],
+    width: maxX - minX + side * 2,
+    height: maxY - minY + top + 24,
+    tilt: v.tilt,
   };
 }
 
@@ -115,10 +149,10 @@ function trees(h: Hex, v: View, L: Lens): Standing[] {
   const spots = [[-13, -2, 0.95], [12, -5, 0.9], [0, -13, 1], [-6, 12, 0.85], [11, 11, 0.8]] as const;
   return spots.map(([dx, dy, sz], i) => {
     const [tx, ty] = L.pt(x + dx, y + dy);
-    const k = L.size(y + dy) * sz;
+    const k = L.size(x + dx, y + dy) * sz;
     const leafy = (h.col * 3 + h.row * 5 + i) % 3 === 0;
     const shadow = `<ellipse cx="${tx + 4 * k}" cy="${ty + 1}" rx="${10 * k}" ry="${3.5 * k}" fill="#000" opacity="${L.tilt ? 0.3 : 0.18}"/>`;
-    return { depth: y + dy, svg: shadow + (leafy ? oak(tx, ty, k, L.tilt) : pine(tx, ty, k, L.tilt)) };
+    return { depth: L.depth(x + dx, y + dy), svg: shadow + (leafy ? oak(tx, ty, k, L.tilt) : pine(tx, ty, k, L.tilt)) };
   });
 }
 
@@ -127,10 +161,10 @@ function bridge(h: Hex, v: View, L: Lens): Standing {
   // The deck runs across the river: along x in landscape, along y once the map is turned.
   const [hw, hh] = v.portrait ? [11, 34] : [34, 11];
   const quad = [L.pt(x - hw, y - hh), L.pt(x + hw, y - hh), L.pt(x + hw, y + hh), L.pt(x - hw, y + hh)];
-  const rise = L.tilt ? 5 * L.size(y) : 0;
+  const rise = L.tilt ? 5 * L.size(x, y) : 0;
   const deck = quad.map(([px, py]) => fmt([px, py - rise])).join(' ');
   const side = L.tilt ? `<polygon points="${fmt([quad[3][0], quad[3][1] - rise])} ${fmt([quad[2][0], quad[2][1] - rise])} ${fmt(quad[2])} ${fmt(quad[3])}" fill="#6b4a2b"/>` : '';
-  return { depth: y, svg: `${side}<polygon points="${deck}" fill="#a77b4f" stroke="#6b4a2b" stroke-width="1.5"/>` };
+  return { depth: L.depth(x, y), svg: `${side}<polygon points="${deck}" fill="#a77b4f" stroke="#6b4a2b" stroke-width="1.5"/>` };
 }
 
 function riverRipple(h: Hex, v: View, L: Lens): string {
@@ -197,7 +231,7 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
       const [lx, ly] = L.pt(x, y - S * 0.62);
       ground.push(
         `<polygon class="hex" data-col="${c}" data-row="${r}" points="${corners(hex, v, L)}" fill="${fill(t, hex)}" stroke="#5d7f40" stroke-width="1"/>`,
-        `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" class="coord" style="font-size:${(7 * L.size(y)).toFixed(1)}px">${hexName(hex)}</text>`,
+        `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" class="coord" style="font-size:${(7 * L.size(x, y)).toFixed(1)}px">${hexName(hex)}</text>`,
       );
       if (t === 'river') ground.push(riverRipple(hex, v, L));
       if (t === 'forest') standing.push(...trees(hex, v, L));
@@ -245,7 +279,7 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
     if (u.owner === o.hide) continue;
     const [x, y] = flat(u.pos, v);
     const at = L.pt(x, y);
-    const k = L.size(y);
+    const k = L.size(x, y);
     if (u.id === o.selected) ground.push(`<polygon points="${corners(u.pos, v, L, S - 2)}" fill="#ffe27a" fill-opacity=".6" stroke="#c99a00" stroke-width="3"/>`);
     const p = o.targets.get(u.id);
     if (p) ground.push(`<polygon points="${corners(u.pos, v, L, S - 3)}" fill="#e53935" fill-opacity=".2" stroke="#d32f2f" stroke-width="3" stroke-dasharray="6 4"/>`);
@@ -258,7 +292,7 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
     }
     // In 2.5D a standing piece can cover the hex behind it, so the piece itself is tappable too.
     if (L.tilt) svg = `<g class="tap" data-col="${u.pos.col}" data-row="${u.pos.row}">${svg}</g>`;
-    standing.push({ depth: y, svg });
+    standing.push({ depth: L.depth(x, y), svg });
     if (p) {
       const by = at[1] - lift(L, k) - 17 * k;
       top.push(`<g transform="translate(${(at[0] + 17 * k).toFixed(1)} ${by.toFixed(1)})" class="badge"><circle r="10" fill="#d32f2f"/><text y="4">${p.kills ? '✕' : `−${p.damage}`}</text></g>`);
@@ -269,14 +303,14 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
   for (const h of fx.hits) {
     const [x, y] = flat(h.at, v);
     const [hx, hy] = L.pt(x, y);
-    const k = L.size(y);
+    const k = L.size(x, y);
     if (h.shotFrom) {
       const [fx0, fy0] = flat(h.shotFrom, v);
       const [sx, sy] = L.pt(fx0, fy0);
-      const sl = lift(L, L.size(fy0));
+      const sl = lift(L, L.size(fx0, fy0));
       top.push(`<line class="arrow" x1="${sx}" y1="${sy - sl}" x2="${hx}" y2="${hy - lift(L, k)}" stroke="#3a2a14" stroke-width="2.5" stroke-linecap="round"/>`);
     }
-    if (h.killed) standing.push({ depth: y, svg: piece(h.type, h.owner, 0, L, [hx, hy], k, 'ghost') });
+    if (h.killed) standing.push({ depth: L.depth(x, y), svg: piece(h.type, h.owner, 0, L, [hx, hy], k, 'ghost') });
     top.push(`<text class="float" x="${hx}" y="${hy - lift(L, k) - 8}">${h.killed ? '✕' : `−${h.damage}`}</text>`);
   }
 
