@@ -90,6 +90,29 @@ export interface GameConfig {
     /** How many columns from your own edge you may set up in. */
     depth: number;
   };
+  /** Optional rules, all off by default (Dad's rules). Each can be switched on per battle. */
+  options: {
+    /** Extra points for the second player on their first turn, to even out moving first. */
+    firstTurnBonus: number;
+    /** Unused points carried to your next turn, up to this many. 0 = none. */
+    carryMax: number;
+    /** Morale: a side whose losses reach this share of its army's points routs and loses (e.g. 0.5). */
+    routAt: number | null;
+    /** Shield wall: heavy infantry next to another friendly heavy infantry takes 1 less damage. */
+    shieldWall: boolean;
+    /** Spears: cavalry attacking infantry in melee takes 1 damage back. */
+    spears: boolean;
+    /** Long shots: shooting further than this many hexes costs double points. */
+    longShotFrom: number | null;
+    /** Arrows run out: each archer can shoot this many times per battle. */
+    volleys: number | null;
+    /** Charge: cavalry that moved 3+ hexes this turn hits for +1. */
+    charge: boolean;
+    /** Command: pieces within 2 hexes of their own King hit for +1. */
+    kingAura: boolean;
+    /** Zone of control: a piece moving next to an enemy must stop there. */
+    zoneOfControl: boolean;
+  };
   /** Quick-battle army for Red (and tests). Blue gets the mirror image (col -> cols - 1 - col). */
   setup: Placement[];
 }
@@ -141,6 +164,18 @@ export const CONFIG: GameConfig = {
   combat: { attackCost: 1, multipleAttacksPerUnit: true, moveAfterAttack: true, advanceAfterKill: 'must' },
   movement: { passThroughFriendly: true, multipleMovesPerUnit: true },
   win: { killKing: true, captureKing: true },
+  options: {
+    firstTurnBonus: 0,
+    carryMax: 0,
+    routAt: null,
+    shieldWall: false,
+    spears: false,
+    longShotFrom: null,
+    volleys: null,
+    charge: false,
+    kingAura: false,
+    zoneOfControl: false,
+  },
   army: {
     budget: 50,
     cost: { lightInfantry: 1, heavyInfantry: 2, archer: 3, lightCavalry: 3, heavyCavalry: 4 },

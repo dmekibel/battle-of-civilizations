@@ -82,6 +82,7 @@ const STR = {
     camMine: 'Моя армия внизу (V)',
     camFlip: 'Перевернуть доску (V)',
     nextPiece: 'Следующая фигура (N)',
+    spearsBack: 'копья ударят в ответ',
     threatView: 'Угроза: где враг может ударить (H)',
     threatHelp: 'Красным — клетки, по которым враг сможет ударить в свой ход при среднем броске (10 очков).',
     cubeHelp: 'Тяните куб, чтобы вращать и наклонять доску',
@@ -180,6 +181,7 @@ const STR = {
     camMine: 'My army at the bottom (V)',
     camFlip: 'Flip the board (V)',
     nextPiece: 'Next piece (N)',
+    spearsBack: 'spears hit back',
     threatView: 'Threat view: where the enemy can hit (H)',
     threatHelp: 'Red hexes are where the enemy could hit on its next turn with an average roll (10 points).',
     cubeHelp: 'Drag the cube to orbit and tilt the board',
@@ -248,6 +250,7 @@ const ERRORS: Record<Lang, Record<ErrorCode, string>> = {
     occupied: 'Клетка занята.',
     reserveNotEmpty: 'Сначала расставьте все фигуры.',
     nothingToTake: 'Занять нечего.',
+    outOfArrows: 'У этих лучников кончились стрелы.',
   },
   en: {
     wrongPhase: 'You can’t do that right now.',
@@ -272,12 +275,13 @@ const ERRORS: Record<Lang, Record<ErrorCode, string>> = {
     occupied: 'That hex is taken.',
     reserveNotEmpty: 'Place all your pieces first.',
     nothingToTake: 'There’s no hex to take.',
+    outOfArrows: 'These archers are out of arrows.',
   },
 };
 
 const REASONS: Record<Lang, Record<WinReason, string>> = {
-  ru: { kingKilled: 'Король противника убит.', kingCaptured: 'Король противника взят в плен.' },
-  en: { kingKilled: 'The enemy King was killed.', kingCaptured: 'The enemy King was captured.' },
+  ru: { kingKilled: 'Король противника убит.', kingCaptured: 'Король противника взят в плен.', routed: 'Армия противника дрогнула и бежит.' },
+  en: { kingKilled: 'The enemy King was killed.', kingCaptured: 'The enemy King was captured.', routed: 'The enemy army broke and fled.' },
 };
 
 export const t = (l: Lang, k: Key) => STR[l][k];
@@ -300,7 +304,8 @@ export function logText(l: Lang, e: LogEntry): string {
     case 'shoot': {
       const verb = e.kind === 'attack' ? (ru ? 'бьёт' : 'hits') : ru ? 'стреляет в' : 'shoots';
       const end = e.killed ? (ru ? ', убит' : ', killed') + (e.advanced ? (ru ? ', клетка занята' : ', took the hex') : '') : '';
-      return `${unitName(l, e.unit)} ${verb} ${unitName(l, e.target).toLowerCase()}: −${e.damage} ${t(l, 'hp')}${end}`;
+      const back = e.counter ? (ru ? `; копья: −${e.counter}${e.attackerKilled ? ', атакующий погиб' : ''}` : `; spears hit back −${e.counter}${e.attackerKilled ? ', attacker killed' : ''}`) : '';
+      return `${unitName(l, e.unit)} ${verb} ${unitName(l, e.target).toLowerCase()}: −${e.damage} ${t(l, 'hp')}${end}${back}`;
     }
     case 'endTurn':
       return ru ? 'конец хода' : 'ended turn';

@@ -13,12 +13,16 @@ export interface Unit {
   moved: boolean;
   /** Set once the unit has attacked or shot this turn. */
   attacked: boolean;
+  /** Hexes moved this turn (for cavalry charges). */
+  ran?: number;
+  /** Arrows shot this battle (when volleys are limited). */
+  shots?: number;
 }
 
 /** draft = buying an army, deploy = placing it in secret, then the battle: roll / act. */
 export type Phase = 'draft' | 'deploy' | 'roll' | 'act' | 'over';
 
-export type WinReason = 'kingKilled' | 'kingCaptured';
+export type WinReason = 'kingKilled' | 'kingCaptured' | 'routed';
 
 export type LogEntry =
   | { kind: 'roll'; turn: number; player: Player; dice: number[]; total: number }
@@ -33,6 +37,9 @@ export type LogEntry =
       killed: boolean;
       /** The attacker stepped into the dead piece's hex. */
       advanced?: boolean;
+      /** Damage the attacker took back (spears against cavalry), and whether it died of it. */
+      counter?: number;
+      attackerKilled?: boolean;
       /** Where the attacker stood and where the target stood. */
       from: Hex;
       at: Hex;
@@ -56,6 +63,10 @@ export interface GameState {
   points: number;
   winner: Player | null;
   winReason: WinReason | null;
+  /** Points each side carries into its next turn (optional rule). */
+  carry?: Record<Player, number>;
+  /** Each army's points value when the battle began, for the morale rule. */
+  startValue?: Record<Player, number>;
   /** Set right after a melee kill when advancing is optional: who may step where. */
   advance: { unitId: string; to: Hex } | null;
   log: LogEntry[];
@@ -83,6 +94,7 @@ export type ErrorCode =
   | 'blocked'
   | 'occupied'
   | 'reserveNotEmpty'
-  | 'nothingToTake';
+  | 'nothingToTake'
+  | 'outOfArrows';
 
 export type Result = { ok: true; state: GameState } | { ok: false; error: ErrorCode };

@@ -290,7 +290,8 @@ function previewText(s: GameState, targetId: string, p: AttackPreview): string {
   const target = getUnit(s, targetId)!;
   const what = p.kind === 'attack' ? t(lang, 'attack') : t(lang, 'shoot');
   const end = p.kills ? `, ${t(lang, 'kills')}` : ` (${t(lang, 'hp')} ${target.hp} → ${p.hpAfter})`;
-  return `${what}: ${unitName(lang, target.type).toLowerCase()} −${p.damage} ${t(lang, 'hp')}${end} · ${t(lang, 'cost')} ${p.cost}`;
+  const back = p.counter ? ` · ${t(lang, 'spearsBack')} −${p.counter}` : '';
+  return `${what}: ${unitName(lang, target.type).toLowerCase()} −${p.damage} ${t(lang, 'hp')}${end} · ${t(lang, 'cost')} ${p.cost}${back}`;
 }
 
 const setupPhase = (s: GameState) => s.phase === 'draft' || s.phase === 'deploy';

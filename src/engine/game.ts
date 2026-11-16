@@ -101,6 +101,8 @@ export function reachable(s: GameState, unitId: string, cfg: GameConfig = CONFIG
     open.sort((a, b) => a.cost - b.cost);
     const cur = open.shift()!;
     if (cur.cost > (best.get(key(cur.hex)) ?? Infinity)) continue;
+    // Zone of control: having stepped next to an enemy, the move ends there.
+    if (cfg.options.zoneOfControl && cur.cost > 0 && enemyNext(s, cur.hex, u.owner)) continue;
     for (const n of neighbors(cur.hex)) {
       if (!onBoard(s, n)) continue;
       const t = cfg.terrain[terrainAt(s, n)];
@@ -117,6 +119,16 @@ export function reachable(s: GameState, unitId: string, cfg: GameConfig = CONFIG
   return out;
 }
 
+const enemyNext = (s: GameState, h: Hex, owner: Player) => s.units.some((e) => e.owner !== owner && distance(e.pos, h) === 1);
+
+const CAVALRY = new Set(['heavyCavalry', 'lightCavalry']);
+const INFANTRY = new Set(['heavyInfantry', 'lightInfantry']);
+
+/** Points value of an army (its King not counted), for the morale rule. */
+export function armyValue(s: GameState, p: Player, cfg: GameConfig = CONFIG): number {
+  return s.units.filter((u) => u.owner === p && u.type !== 'king').reduce((sum, u) => sum + cfg.army.cost[u.type as keyof GameConfig['army']['cost']], 0);
+}
+
 export function hasLineOfSight(s: GameState, a: Hex, b: Hex, cfg: GameConfig = CONFIG): boolean {
   return between(a, b).every((h) => !onBoard(s, h) || !cfg.terrain[terrainAt(s, h)].blocksSight);
 }
@@ -127,10 +139,28 @@ export interface AttackPreview {
   hpAfter: number;
   kills: boolean;
   cost: number;
+  /** Damage the attacker would take back (spears against cavalry). */
+  counter: number;
 }
 
+/** Damage after the target's ground and, with the shield-wall rule, its neighbours. */
 function damageOn(s: GameState, target: Unit, raw: number, cfg: GameConfig) {
-  return Math.max(0, raw - cfg.terrain[terrainAt(s, target.pos)].defenseBonus);
+  let guard = cfg.terrain[terrainAt(s, target.pos)].defenseBonus;
+  if (cfg.options.shieldWall && target.type === 'heavyInfantry') {
+    if (s.units.some((f) => f.id !== target.id && f.owner === target.owner && f.type === 'heavyInfantry' && distance(f.pos, target.pos) === 1)) guard += 1;
+  }
+  return Math.max(0, raw - guard);
+}
+
+/** Melee bonuses from the optional rules: cavalry charge and the King's command. */
+function meleeBonus(s: GameState, a: Unit, cfg: GameConfig): number {
+  let bonus = 0;
+  if (cfg.options.charge && CAVALRY.has(a.type) && (a.ran ?? 0) >= 3) bonus += 1;
+  if (cfg.options.kingAura && a.type !== 'king') {
+    const king = kingOf(s, a.owner);
+    if (king && distance(king.pos, a.pos) <= 2) bonus += 1;
+  }
+  return bonus;
 }
 
 function checkStrike(
@@ -139,7 +169,7 @@ function checkStrike(
   targetId: string,
   kind: 'attack' | 'shoot',
   cfg: GameConfig,
-): ErrorCode | { a: Unit; t: Unit; cost: number; damage: number } {
+): ErrorCode | { a: Unit; t: Unit; cost: number; damage: number; counter: number } {
   if (s.phase !== 'act') return 'wrongPhase';
   const a = getUnit(s, attackerId);
   const t = getUnit(s, targetId);
@@ -154,18 +184,22 @@ function checkStrike(
     if (rules.attack <= 0) return 'cannotMelee';
     if (distance(a.pos, t.pos) !== 1) return 'notAdjacent';
     cost = cfg.combat.attackCost;
-    raw = rules.attack;
+    raw = rules.attack + meleeBonus(s, a, cfg);
   } else {
     const r = rules.ranged;
     if (!r) return 'cannotShoot';
     const d = distance(a.pos, t.pos);
     if (d < r.minRange || d > r.maxRange) return 'outOfRange';
     if (!hasLineOfSight(s, a.pos, t.pos, cfg)) return 'noLineOfSight';
-    cost = r.cost;
+    if (cfg.options.volleys !== null && (a.shots ?? 0) >= cfg.options.volleys) return 'outOfArrows';
+    cost = r.cost * (cfg.options.longShotFrom !== null && d > cfg.options.longShotFrom ? 2 : 1);
     raw = r.damage;
   }
   if (s.points < cost) return 'notEnoughPoints';
-  return { a, t, cost, damage: damageOn(s, t, raw, cfg) };
+  const damage = damageOn(s, t, raw, cfg);
+  // Spears: cavalry charging into infantry takes a hit back, unless the infantry falls.
+  const counter = kind === 'attack' && cfg.options.spears && CAVALRY.has(a.type) && INFANTRY.has(t.type) && t.hp > damage ? 1 : 0;
+  return { a, t, cost, damage, counter };
 }
 
 export function previewStrike(
@@ -178,7 +212,7 @@ export function previewStrike(
   const c = checkStrike(s, attackerId, targetId, kind, cfg);
   if (typeof c === 'string') return null;
   const hpAfter = Math.max(0, c.t.hp - c.damage);
-  return { kind, damage: c.damage, hpAfter, kills: hpAfter === 0, cost: c.cost };
+  return { kind, damage: c.damage, hpAfter, kills: hpAfter === 0, cost: c.cost, counter: c.counter };
 }
 
 /** Enemy units this unit can hit right now, with what would happen. */
@@ -208,8 +242,13 @@ function withLog(s: GameState, e: LogEntry): GameState {
 export function rollDice(s: GameState, rng: Rng = Math.random, cfg: GameConfig = CONFIG): Result {
   if (s.phase !== 'roll') return fail('wrongPhase');
   const dice = Array.from({ length: cfg.dice.count }, () => 1 + Math.floor(rng() * cfg.dice.sides));
-  const total = dice.reduce((a, b) => a + b, 0);
-  const next: GameState = { ...s, dice, points: total, phase: 'act' };
+  const carried = s.carry?.[s.current] ?? 0;
+  // The second player's first turn gets the optional catch-up bonus.
+  const bonus = s.turn === 1 && s.current === 'blue' ? cfg.options.firstTurnBonus : 0;
+  const total = dice.reduce((a, b) => a + b, 0) + carried + bonus;
+  // Remember both armies' size when the battle starts, for the morale rule.
+  const startValue = s.startValue ?? { red: armyValue(s, 'red', cfg), blue: armyValue(s, 'blue', cfg) };
+  const next: GameState = { ...s, dice, points: total, phase: 'act', startValue, carry: { red: 0, blue: 0, ...s.carry, [s.current]: 0 } };
   return { ok: true, state: withLog(next, { kind: 'roll', turn: s.turn, player: s.current, dice, total }) };
 }
 
@@ -221,7 +260,8 @@ export function moveUnit(s: GameState, unitId: string, to: Hex, cfg: GameConfig 
   if (u.moved && !cfg.movement.multipleMovesPerUnit) return fail('alreadyMoved');
   const r = reachable(s, unitId, cfg).get(key(to));
   if (!r) return fail('unreachable');
-  const units = s.units.map((x) => (x.id === unitId ? { ...x, pos: to, moved: true } : x));
+  const hexes = Math.round(r.cost / cfg.units[u.type].moveCost);
+  const units = s.units.map((x) => (x.id === unitId ? { ...x, pos: to, moved: true, ran: (x.ran ?? 0) + hexes } : x));
   const next: GameState = { ...s, units, points: s.points - r.cost, advance: null };
   return {
     ok: true,
@@ -234,11 +274,17 @@ function strike(s: GameState, attackerId: string, targetId: string, kind: 'attac
   if (typeof c === 'string') return fail(c);
   const hp = c.t.hp - c.damage;
   const killed = hp <= 0;
-  const mode = kind === 'attack' && killed ? cfg.combat.advanceAfterKill : 'never';
+  const attackerHp = c.a.hp - c.counter;
+  const attackerKilled = attackerHp <= 0;
+  const mode = kind === 'attack' && killed && !attackerKilled ? cfg.combat.advanceAfterKill : 'never';
   const units = s.units
-    .filter((x) => !(killed && x.id === c.t.id))
+    .filter((x) => !(killed && x.id === c.t.id) && !(attackerKilled && x.id === c.a.id))
     .map((x) =>
-      x.id === c.t.id ? { ...x, hp } : x.id === c.a.id ? { ...x, attacked: true, pos: mode === 'must' ? c.t.pos : x.pos } : x,
+      x.id === c.t.id
+        ? { ...x, hp }
+        : x.id === c.a.id
+          ? { ...x, hp: attackerHp, attacked: true, pos: mode === 'must' ? c.t.pos : x.pos, shots: (x.shots ?? 0) + (kind === 'shoot' ? 1 : 0) }
+          : x,
     );
   let next = withLog(
     { ...s, units, points: s.points - c.cost, advance: mode === 'may' ? { unitId: c.a.id, to: c.t.pos } : null },
@@ -247,9 +293,20 @@ function strike(s: GameState, attackerId: string, targetId: string, kind: 'attac
       advanced: mode === 'must',
       from: c.a.pos,
       at: c.t.pos,
+      ...(c.counter ? { counter: c.counter, attackerKilled } : {}),
     },
   );
-  if (killed && c.t.type === 'king' && cfg.win.killKing) next = declareWin(next, s.current, 'kingKilled');
+  if (killed && c.t.type === 'king' && cfg.win.killKing) return { ok: true, state: declareWin(next, s.current, 'kingKilled') };
+  // Morale: an army that has lost its share of points breaks and flees.
+  if (cfg.options.routAt !== null && next.startValue) {
+    for (const p of [other(s.current), s.current] as Player[]) {
+      const start = next.startValue[p];
+      if (start > 0 && start - armyValue(next, p, cfg) >= cfg.options.routAt * start) {
+        next = declareWin(next, other(p), 'routed');
+        break;
+      }
+    }
+  }
   return { ok: true, state: next };
 }
 
@@ -292,7 +349,9 @@ export function endTurn(s: GameState, cfg: GameConfig = CONFIG): Result {
   }
   next = {
     ...next,
-    units: next.units.map((u) => ({ ...u, moved: false, attacked: false })),
+    // Leftover points carry over when that optional rule is on.
+    carry: { red: 0, blue: 0, ...next.carry, [s.current]: Math.min(cfg.options.carryMax, s.points) },
+    units: next.units.map((u) => ({ ...u, moved: false, attacked: false, ran: 0 })),
     current: other(s.current),
     turn: s.current === 'blue' ? s.turn + 1 : s.turn,
     phase: 'roll',
