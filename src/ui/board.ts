@@ -13,11 +13,16 @@ const R3 = Math.sqrt(3);
 const W = S * 1.5 * (CONFIG.board.cols - 1) + 2 * S;
 const H = R3 * S * (CONFIG.board.rows + 0.5);
 
-/** Where the camera looks from: `yaw` turns the board (radians), `pitch` 0..1 tilts it from
- *  gently sloped to steep. Pieces always stand facing the viewer. */
+/** A real perspective camera over the board, like a 3D program. It looks at a point on the
+ *  ground (`x`, `y` in flat map units, null = the board's middle), orbits that point (`yaw`,
+ *  radians; `pitch` 0..1 from gently sloped to steep), and `zoom` brings it closer.
+ *  Pieces and trees always stand facing the viewer. */
 export interface Camera {
   yaw: number;
   pitch: number;
+  zoom: number;
+  x: number | null;
+  y: number | null;
 }
 
 export interface View {
@@ -25,63 +30,81 @@ export interface View {
   /** 2.5D: tilted board with standing pieces. Off = straight down from above. */
   tilt: boolean;
   cam: Camera;
+  /** Size of the drawing area in screen pixels; the picture fills it exactly. */
+  vw: number;
+  vh: number;
 }
 
 type Pt = [number, number];
 
 /** Everything needed to turn flat map positions into screen positions for one render. */
 interface Lens {
-  /** Flat map point -> screen point. */
+  /** Flat map point -> screen point (pixels). */
   pt: (x: number, y: number) => Pt;
-  /** How big things look at this point (1 = the middle of the board). */
+  /** How big things look at this point, in pixels per map unit. */
   size: (x: number, y: number) => number;
   /** How near the viewer this point is; larger is nearer. Used to paint back to front. */
   depth: (x: number, y: number) => number;
+  /** Screen point -> the point on the ground under it. */
+  ground: (X: number, Y: number) => Pt;
   width: number;
   height: number;
   tilt: boolean;
 }
 
+/** Flat map size for this orientation (portrait turns the map 90°). */
+export const mapSize = (portrait: boolean): Pt => (portrait ? [H, W] : [W, H]);
+
 function lens(v: View): Lens {
-  const [fw, fh] = v.portrait ? [H, W] : [W, H];
-  const [cx, cy] = [fw / 2, fh / 2];
+  const [fw, fh] = mapSize(v.portrait);
   const radius = Math.hypot(fw, fh) / 2;
+  const tx = v.cam.x ?? fw / 2;
+  const ty = v.cam.y ?? fh / 2;
   const [cos, sin] = [Math.cos(v.cam.yaw), Math.sin(v.cam.yaw)];
-  // Tilt from 22° (almost top-down) to 64° (looking across the table).
   // A tall phone screen gets a gentler tilt so the board still fills it.
   const pitch = v.portrait ? v.cam.pitch * 0.5 : v.cam.pitch;
+  // Tilt from 22° (almost top-down) to 64° (looking across the table); flat view looks straight down.
   const angle = v.tilt ? ((22 + 42 * pitch) * Math.PI) / 180 : 0;
-  const squash = Math.cos(angle);
-  const persp = 0.34 * Math.sin(angle); // far side shrinks more the steeper the tilt
+  const [cosA, sinA] = [Math.cos(angle), Math.sin(angle)];
+  const dist = radius * 2.4; // camera distance: closer = stronger perspective
+  // At zoom 1 the whole board fits the screen; the fit doesn't change as the camera turns or tilts.
+  const fit = Math.min(v.vw / (fw * (v.tilt ? 1.12 : 1) + 60), v.vh / ((v.tilt ? fh * 0.8 : fh) + 110));
+  const scale = fit * v.cam.zoom;
+  const [cx, cy] = [v.vw / 2, v.vh / 2 + (v.tilt ? 18 : 0)];
   const raw = (x: number, y: number) => {
-    const dx = x - cx;
-    const dy = y - cy;
+    const dx = x - tx;
+    const dy = y - ty;
     const rx = dx * cos - dy * sin;
-    const ry = dx * sin + dy * cos;
-    const k = 1 + persp * (ry / radius);
-    return [rx * k, ry * squash * k, k, ry] as const;
+    const ry = dx * sin + dy * cos; // positive = towards the viewer
+    const k = dist / Math.max(dist * 0.15, dist - ry * sinA); // true perspective
+    return [cx + rx * k * scale, cy + ry * cosA * k * scale, k * scale, ry] as const;
   };
-  // The view box is the board's size seen unturned, and stays the same while the camera turns:
-  // the board spins about its middle like in a 3D program, corners swinging past the edges
-  // (the page lets the map be dragged to them). Only the tilt changes how tall it is.
-  const side = 24;
-  const top = v.tilt ? 64 : 24;
-  const width = fw + side * 2;
-  const height = fh * squash + top + 24;
-  const ox = width / 2;
-  const oy = top + (fh * squash) / 2;
   return {
     pt: (x, y) => {
       const [X, Y] = raw(x, y);
-      return [ox + X, oy + Y];
+      return [X, Y];
     },
     size: (x, y) => raw(x, y)[2],
     depth: (x, y) => raw(x, y)[3],
-    width,
-    height,
+    ground: (X, Y) => {
+      const xr = (X - cx) / scale;
+      const yr = (Y - cy) / scale;
+      const ry = (yr * dist) / Math.max(1e-3, cosA * dist + yr * sinA);
+      const k = dist / Math.max(dist * 0.15, dist - ry * sinA);
+      const rx = xr / k;
+      return [tx + rx * cos + ry * sin, ty - rx * sin + ry * cos];
+    },
+    width: v.vw,
+    height: v.vh,
     tilt: v.tilt,
   };
 }
+
+/** The point on the ground under a screen pixel, for panning and zooming about the cursor. */
+export const screenToGround = (v: View, X: number, Y: number): Pt => lens(v).ground(X, Y);
+
+/** Where a hex's centre is on the flat map, to aim the camera at a piece. */
+export const hexOnMap = (h: Hex, v: Pick<View, 'portrait'>): Pt => flat(h, v as View);
 
 /** Centre of a hex on the flat map. Portrait turns the map so Red's edge is at the bottom. */
 function flat(h: Hex, v: View): Pt {
@@ -207,7 +230,7 @@ export const NO_EFFECTS: Effects = { from: new Map(), hits: [] };
  *  with a thin edge underneath and a shadow, low enough not to hide the hex behind it. */
 function piece(type: UnitTypeId, owner: Player, hp: number, L: Lens, [sx, sy]: Pt, k: number, cls = ''): string {
   const counter = unitSymbol(type, owner, hp);
-  if (!L.tilt) return `<g transform="translate(${sx} ${sy})"><g class="${cls}">${counter}</g></g>`;
+  if (!L.tilt) return `<g transform="translate(${sx} ${sy}) scale(${k.toFixed(3)})"><g class="${cls}">${counter}</g></g>`;
   return `<g transform="translate(${sx} ${sy})"><g class="${cls}">
     <ellipse cx="${5 * k}" cy="${1 * k}" rx="${19 * k}" ry="${5.5 * k}" fill="#000" opacity=".35"/>
     <rect x="${-16.4 * k}" y="${-4 * k}" width="${32.8 * k}" height="${4 * k}" rx="${1.5 * k}" fill="${ARMY_COLOR[owner]}" filter="brightness(.6)" opacity=".9"/>
@@ -216,7 +239,7 @@ function piece(type: UnitTypeId, owner: Player, hp: number, L: Lens, [sx, sy]: P
 }
 
 /** Height of a piece's middle above its hex, for badges, numbers and arrows. */
-const lift = (L: Lens, k: number) => (L.tilt ? 16 * k : 3);
+const lift = (L: Lens, k: number) => (L.tilt ? 16 * k : 3 * k);
 
 export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_EFFECTS): string {
   const L = lens(v);
@@ -318,5 +341,5 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
   // Paint from the back of the board to the front so nearer things overlap farther ones.
   standing.sort((a, b) => a.depth - b.depth);
   const body = ground.join('') + standing.map((x) => x.svg).join('') + top.join('');
-  return `<svg class="board ${L.tilt ? 'tilted' : ''}" viewBox="0 0 ${L.width.toFixed(0)} ${L.height.toFixed(0)}" preserveAspectRatio="xMidYMid meet" role="img">${body}</svg>`;
+  return `<svg class="board ${L.tilt ? 'tilted' : ''}" viewBox="0 0 ${L.width.toFixed(0)} ${L.height.toFixed(0)}" role="img">${body}</svg>`;
 }

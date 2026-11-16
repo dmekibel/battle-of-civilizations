@@ -41,7 +41,7 @@ import {
   type Result,
   type Session,
 } from '../engine';
-import { NO_EFFECTS, renderBoard, type Camera, type Effects, type Overlay } from './board';
+import { NO_EFFECTS, hexOnMap, mapSize, renderBoard, screenToGround, type Camera, type Effects, type Overlay } from './board';
 import { errorText, logText, playerName, reasonText, t, unitName, type Lang } from './i18n';
 import { EMBLEM, unitIcon } from './symbols';
 import { isMuted, sound, toggleMute } from './sound';
@@ -139,11 +139,13 @@ const withPanel = () => desktop && panelOpen;
 
 /** Camera: how far the board is turned (yaw, radians) and tilted (pitch 0..1); remembered per device. */
 const CAM_KEY = 'boc-cam';
-const CAM_DEFAULT: Camera = { yaw: 0, pitch: 0.75 };
+const CAM_DEFAULT: Camera = { yaw: 0, pitch: 0.75, zoom: 1, x: null, y: null };
 let cam: Camera = (() => {
   try {
     const c = JSON.parse(localStorage.getItem(CAM_KEY) ?? 'null');
-    return typeof c?.yaw === 'number' && typeof c?.pitch === 'number' ? c : { ...CAM_DEFAULT };
+    return typeof c?.yaw === 'number' && typeof c?.pitch === 'number'
+      ? { ...CAM_DEFAULT, yaw: c.yaw, pitch: c.pitch, zoom: typeof c.zoom === 'number' ? c.zoom : 1 }
+      : { ...CAM_DEFAULT };
   } catch {
     return { ...CAM_DEFAULT };
   }
@@ -174,7 +176,9 @@ let faceTurn = (() => {
   }
 })();
 let facedFor: Player | null = null;
-const view = () => ({ portrait, tilt, cam });
+/** The drawing area's size in pixels: the board picture is drawn to fill it exactly. */
+let stageSize: [number, number] = [window.innerWidth, Math.max(300, window.innerHeight * 0.7)];
+const view = () => ({ portrait, tilt, cam, vw: stageSize[0], vh: stageSize[1] });
 
 /** 2.5D board (tilted, pieces standing) or the flat map; remembered per device. */
 const VIEW_KEY = 'boc-view';
@@ -186,9 +190,7 @@ let tilt = (() => {
   }
 })();
 /** Steps for the + / − buttons; pinching can stop anywhere between the first and last. */
-const ZOOMS = [1, 1.6, 2.4, 3.2];
-const [ZOOM_MIN, ZOOM_MAX] = [ZOOMS[0], ZOOMS[ZOOMS.length - 1]];
-let zoom = 1;
+const [ZOOM_MIN, ZOOM_MAX] = [0.7, 4];
 
 type Buyable = keyof ArmyCounts;
 const BUY_ORDER: Buyable[] = ['lightInfantry', 'heavyInfantry', 'archer', 'lightCavalry', 'heavyCavalry'];
@@ -491,47 +493,54 @@ function bar(s: GameState): string {
 
 /** Re-rendering replaces the board, so keep where the player had scrolled the zoomed map to. */
 function render() {
-  const old = app.querySelector<HTMLElement>('.stage');
-  const scroll = old ? [old.scrollLeft, old.scrollTop] : null;
   const list = app.querySelector<HTMLElement>('.sheet-scroll')?.scrollTop ?? 0;
   draw();
+  // The board is drawn to the stage's exact size; if the layout changed it, draw once more.
   const stage = app.querySelector<HTMLElement>('.stage');
-  // The board sits in a margin it can be dragged into; it starts centred.
-  if (stage && scroll && !recenter) [stage.scrollLeft, stage.scrollTop] = scroll;
-  else if (stage) centre(stage);
+  if (stage && stage.clientWidth > 0 && (stage.clientWidth !== stageSize[0] || stage.clientHeight !== stageSize[1])) {
+    stageSize = [stage.clientWidth, stage.clientHeight];
+    stage.innerHTML = renderBoard(sess.state, overlay(sess.state), view(), NO_EFFECTS);
+  }
   const sheet = app.querySelector<HTMLElement>('.sheet-scroll');
   if (sheet) sheet.scrollTop = list;
 }
 
-/** Put the middle of the board in the middle of the screen. */
-let recenter = false;
-function centre(st: HTMLElement) {
-  recenter = false;
-  st.scrollLeft = (st.scrollWidth - st.clientWidth) / 2;
-  st.scrollTop = (st.scrollHeight - st.clientHeight) / 2;
+/** Zoom by a factor about a screen point (pixels inside the stage), keeping the ground under it still. */
+function zoomAt(factor: number, X: number, Y: number) {
+  const before = screenToGround(view(), X, Y);
+  cam = { ...cam, zoom: Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, cam.zoom * factor)) };
+  const after = screenToGround(view(), X, Y);
+  moveTarget(before[0] - after[0], before[1] - after[1]);
 }
 
-/** Zoom in or out around the middle of what's on screen. */
-function setZoom(next: number) {
-  const st = app.querySelector<HTMLElement>('.stage');
-  const fx = st ? (st.scrollLeft + st.clientWidth / 2) / st.scrollWidth : 0.5;
-  const fy = st ? (st.scrollTop + st.clientHeight / 2) / st.scrollHeight : 0.5;
-  zoom = next;
-  draw();
-  const s2 = app.querySelector<HTMLElement>('.stage');
-  if (!s2) return;
-  // With a piece selected, keep that piece in the middle; otherwise keep the same middle.
+/** Slide what the camera looks at across the map, keeping it over the board. */
+function moveTarget(dx: number, dy: number) {
+  const [fw, fh] = mapSize(portrait);
+  cam = {
+    ...cam,
+    x: Math.min(fw, Math.max(0, (cam.x ?? fw / 2) + dx)),
+    y: Math.min(fh, Math.max(0, (cam.y ?? fh / 2) + dy)),
+  };
+}
+
+/** Moves the picture by a screen distance, the way a finger drags the ground in a maps app. */
+function panBy(dX: number, dY: number) {
+  const [cx, cy] = [stageSize[0] / 2, stageSize[1] / 2];
+  const a = screenToGround(view(), cx, cy);
+  const b = screenToGround(view(), cx - dX, cy - dY);
+  moveTarget(b[0] - a[0], b[1] - a[1]);
+}
+
+/** Zoom buttons: zoom on the selected piece if there is one, else on the middle of the screen. */
+function setZoom(factor: number) {
   const u = selected ? getUnit(sess.state, selected) : undefined;
-  const hex = u && app.querySelector(`.hex[data-col="${u.pos.col}"][data-row="${u.pos.row}"]`);
-  if (hex) {
-    const h = hex.getBoundingClientRect();
-    const box = s2.getBoundingClientRect();
-    s2.scrollLeft += h.left + h.width / 2 - (box.left + box.width / 2);
-    s2.scrollTop += h.top + h.height / 2 - (box.top + box.height / 2);
-  } else {
-    s2.scrollLeft = fx * s2.scrollWidth - s2.clientWidth / 2;
-    s2.scrollTop = fy * s2.scrollHeight - s2.clientHeight / 2;
+  if (u) {
+    const [x, y] = hexOnMap(u.pos, { portrait });
+    cam = { ...cam, x, y };
   }
+  zoomAt(factor, stageSize[0] / 2, stageSize[1] / 2);
+  saveCam();
+  render();
 }
 
 /** Effects and sounds for log entries added since the last render. */
@@ -551,8 +560,14 @@ function effects(s: GameState): Effects {
   return fx;
 }
 
+let drawnPortrait = portrait;
 function draw() {
   const s = sess.state;
+  if (isPortrait() !== drawnPortrait) {
+    // The flat map turns with the screen, so aim back at the middle of the board.
+    drawnPortrait = isPortrait();
+    cam = { ...cam, x: null, y: null };
+  }
   // Two players with "face the player" on: swing the board round when the turn changes hands.
   if (faceTurn && mode === 'pvp' && !setupPhase(s) && facedFor !== s.current) {
     facedFor = s.current;
@@ -603,13 +618,13 @@ function draw() {
         ${withPanel() ? '' : `<button data-act="menu" class="ghost icon" aria-label="${t(lang, 'menu')}">☰</button>`}
       </header>
       <div class="stage-wrap">
-        <div class="stage" style="--z:${zoom}"><div class="pan">${renderBoard(s, overlay(s), view(), fx)}</div></div>
+        <div class="stage">${renderBoard(s, overlay(s), view(), fx)}</div>
         <div class="cam" aria-label="${t(lang, 'camera')}">
           <button data-act="cam-mine" title="${t(lang, 'camMine')}" aria-label="${t(lang, 'camMine')}">⬇</button>
         </div>
         <div class="zoom">
-          <button data-act="zoom-in" aria-label="Zoom in" ${zoom >= ZOOM_MAX - 0.01 ? 'disabled' : ''}>+</button>
-          <button data-act="zoom-out" aria-label="Zoom out" ${zoom <= ZOOM_MIN + 0.01 ? 'disabled' : ''}>−</button>
+          <button data-act="zoom-in" aria-label="Zoom in" ${cam.zoom >= ZOOM_MAX - 0.01 ? 'disabled' : ''}>+</button>
+          <button data-act="zoom-out" aria-label="Zoom out" ${cam.zoom <= ZOOM_MIN + 0.01 ? 'disabled' : ''}>−</button>
         </div>
       </div>
       <p class="info" id="info">${info}</p>
@@ -878,12 +893,10 @@ app.addEventListener('click', (e) => {
     case 'cam-reset':
       cam = { ...CAM_DEFAULT };
       saveCam();
-      recenter = true;
       return render();
     case 'zoom-in':
     case 'zoom-out': {
-      const next = act === 'zoom-in' ? ZOOMS.find((z) => z > zoom + 0.01) : [...ZOOMS].reverse().find((z) => z < zoom - 0.01);
-      return setZoom(next ?? zoom);
+      return setZoom(act === 'zoom-in' ? 1.4 : 1 / 1.4);
     }
     case 'menu':
       menuOpen = !menuOpen;
@@ -956,19 +969,10 @@ app.addEventListener('mouseover', (e) => {
   if (u && p) info.innerHTML = previewText(s, u.id, p);
 });
 
-// ---------- pinch to zoom the map ----------
-// Two fingers on the board zoom the map around the point between them, like the + / −
-// buttons; the page itself never zooms. During the pinch only the map's size changes
-// (no re-render), and the buttons catch up when the fingers lift.
-
-let pinch: { dist: number; zoom: number; angle: number; midY: number; cam: Camera } | null = null;
-
-const spread = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
-const twist = (t: TouchList) => Math.atan2(t[1].clientY - t[0].clientY, t[1].clientX - t[0].clientX);
-
 // ---------- camera moves without a full re-render ----------
-// While the camera is being dragged only the board is redrawn, once per frame, with the
-// highlights frozen as they were when the drag began.
+// While the camera moves only the board is redrawn, once per frame, with the highlights
+// frozen as they were when the move began.
+
 let camOverlay: Overlay | null = null;
 let camQueued = false;
 function camFrame() {
@@ -977,8 +981,8 @@ function camFrame() {
   camQueued = true;
   requestAnimationFrame(() => {
     camQueued = false;
-    const pan = app.querySelector<HTMLElement>('.stage .pan');
-    if (pan && camOverlay) pan.innerHTML = renderBoard(sess.state, camOverlay, view(), NO_EFFECTS);
+    const st = app.querySelector<HTMLElement>('.stage');
+    if (st && camOverlay) st.innerHTML = renderBoard(sess.state, camOverlay, view(), NO_EFFECTS);
   });
 }
 function camDone() {
@@ -986,31 +990,45 @@ function camDone() {
   saveCam();
   render();
 }
-/** Ignores tiny accidental twists and slides while pinching. */
-const beyond = (v: number, dead: number) => (Math.abs(v) < dead ? 0 : v - Math.sign(v) * dead);
 
-function zoomAround(next: number, clientX: number, clientY: number) {
-  const st = app.querySelector<HTMLElement>('.stage');
-  if (!st) return;
-  next = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next));
-  const box = st.getBoundingClientRect();
-  const mx = clientX - box.left;
-  const my = clientY - box.top;
-  const ratio = next / zoom;
-  const [cx, cy] = [st.scrollLeft + mx, st.scrollTop + my];
-  zoom = next;
-  st.style.setProperty('--z', String(zoom));
-  st.scrollLeft = cx * ratio - mx;
-  st.scrollTop = cy * ratio - my;
+/** A pointer position inside the stage, in the same pixels the board is drawn in. */
+function stagePoint(clientX: number, clientY: number): [number, number] {
+  const box = app.querySelector<HTMLElement>('.stage')!.getBoundingClientRect();
+  return [clientX - box.left, clientY - box.top];
 }
+
+/** After a drag, the click that ends it must not move or select a piece. */
+function swallowNextClick() {
+  const stop = (ev: Event) => ev.stopPropagation();
+  window.addEventListener('click', stop, { capture: true, once: true });
+  // If the drag ended off the piece no click comes at all: don't eat the next real one.
+  setTimeout(() => window.removeEventListener('click', stop, { capture: true }), 60);
+}
+
+// ---------- touch: like a maps app ----------
+// One finger drags the ground. Two fingers: pinch zooms about the fingers, twist orbits,
+// sliding both up or down tilts. Each two-finger move only starts once it is clearly meant.
+
+let touch:
+  | { kind: 'one'; x: number; y: number; ground: [number, number]; moved: boolean }
+  | { kind: 'two'; dist: number; angle: number; midY: number; zoom: number; yaw: number; pitch: number; live: Set<string> }
+  | null = null;
+
+const spread = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+const twist = (t: TouchList) => Math.atan2(t[1].clientY - t[0].clientY, t[1].clientX - t[0].clientX);
+const middle = (t: TouchList): [number, number] => [(t[0].clientX + t[1].clientX) / 2, (t[0].clientY + t[1].clientY) / 2];
 
 app.addEventListener(
   'touchstart',
   (e) => {
-    if (e.touches.length === 2 && (e.target as Element).closest('.stage')) {
-      const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-      pinch = { dist: spread(e.touches), zoom, angle: twist(e.touches), midY, cam: { ...cam } };
+    if (!(e.target as Element).closest('.stage')) return;
+    if (e.touches.length === 1) {
+      const [x, y] = stagePoint(e.touches[0].clientX, e.touches[0].clientY);
+      touch = { kind: 'one', x, y, ground: screenToGround(view(), x, y), moved: false };
+    } else if (e.touches.length === 2) {
       e.preventDefault();
+      const [, midY] = middle(e.touches);
+      touch = { kind: 'two', dist: spread(e.touches), angle: twist(e.touches), midY, zoom: cam.zoom, yaw: cam.yaw, pitch: cam.pitch, live: new Set() };
     }
   },
   { passive: false },
@@ -1019,34 +1037,54 @@ app.addEventListener(
 app.addEventListener(
   'touchmove',
   (e) => {
-    if (!pinch || e.touches.length !== 2) return;
-    e.preventDefault();
-    const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-    const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-    zoomAround(pinch.zoom * (spread(e.touches) / pinch.dist), midX, midY);
-    // Twisting two fingers turns the board; sliding them up or down together tilts it.
-    let turn = twist(e.touches) - pinch.angle;
-    if (turn > Math.PI) turn -= 2 * Math.PI;
-    if (turn < -Math.PI) turn += 2 * Math.PI;
-    const yaw = pinch.cam.yaw + beyond(turn, 0.08);
-    const pitch = tilt ? clampPitch(pinch.cam.pitch - beyond(midY - pinch.midY, 14) * 0.004) : cam.pitch;
-    if (yaw !== cam.yaw || pitch !== cam.pitch) {
-      cam = { yaw, pitch };
-      camFrame();
+    if (!touch) return;
+    if (touch.kind === 'one' && e.touches.length === 1) {
+      const [x, y] = stagePoint(e.touches[0].clientX, e.touches[0].clientY);
+      if (!touch.moved && Math.hypot(x - touch.x, y - touch.y) < 8) return;
+      touch.moved = true;
+      e.preventDefault();
+      // Keep the same spot of ground under the finger.
+      const now = screenToGround(view(), x, y);
+      moveTarget(touch.ground[0] - now[0], touch.ground[1] - now[1]);
+      return camFrame();
+    }
+    if (touch.kind === 'two' && e.touches.length === 2) {
+      e.preventDefault();
+      const ratio = spread(e.touches) / touch.dist;
+      let turn = twist(e.touches) - touch.angle;
+      if (turn > Math.PI) turn -= 2 * Math.PI;
+      if (turn < -Math.PI) turn += 2 * Math.PI;
+      const [mx, my] = middle(e.touches);
+      const slide = my - touch.midY;
+      if (Math.abs(ratio - 1) > 0.04) touch.live.add('zoom');
+      if (Math.abs(turn) > 0.08) touch.live.add('turn');
+      if (Math.abs(slide) > 14 && !touch.live.has('zoom')) touch.live.add('tilt');
+      if (touch.live.has('zoom')) {
+        const [px, py] = stagePoint(mx, my);
+        zoomAt((touch.zoom * ratio) / cam.zoom, px, py);
+      }
+      if (touch.live.has('turn')) cam = { ...cam, yaw: touch.yaw + turn };
+      if (touch.live.has('tilt') && tilt) cam = { ...cam, pitch: clampPitch(touch.pitch - slide * 0.004) };
+      return camFrame();
     }
   },
   { passive: false },
 );
 
 app.addEventListener('touchend', (e) => {
-  if (pinch && e.touches.length < 2) {
-    pinch = null;
-    camDone();
+  if (!touch) return;
+  const moved = touch.kind === 'two' || touch.moved;
+  if (e.touches.length === 0) {
+    touch = null;
+    if (moved) {
+      e.preventDefault(); // no click after a drag
+      camDone();
+    }
   }
 });
 
 // Safari's own pinch gestures would zoom the page: stop them everywhere. On a Mac trackpad
-// (no touch screen) Safari's two-finger rotate turns the board, like Apple Maps.
+// (no touch screen) Safari's two-finger rotate orbits the camera.
 const touchScreen = 'ontouchstart' in window;
 let gestureYaw = 0;
 for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
@@ -1066,31 +1104,69 @@ for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
   );
 }
 
-// Trackpad, like a maps app: two-finger swipe moves the map (the browser's own scrolling),
-// pinch (it arrives as ctrl + wheel) zooms, and Option + swipe tilts (up / down) and turns
-// (left / right). Turning with a real two-finger twist is handled above for Safari.
+// ---------- trackpad and mouse wheel ----------
+// Two-finger swipe slides the camera over the board; pinch (ctrl + wheel) zooms about the
+// pointer; Option + swipe tilts (up / down) and orbits (left / right). A mouse wheel's
+// big, whole-line steps zoom instead, as in most 3D programs.
 app.addEventListener(
   'wheel',
   (e) => {
-    if (!(e.target as Element).closest('.stage') || (!e.ctrlKey && !e.altKey)) return;
+    if (!(e.target as Element).closest('.stage')) return;
     e.preventDefault();
-    if (e.ctrlKey) {
-      zoomAround(zoom * Math.exp(-e.deltaY / 100), e.clientX, e.clientY);
-    } else {
-      // Line-based wheels (a mouse) report much smaller numbers than trackpads.
-      const unit = e.deltaMode === 1 ? 16 : 1;
+    const [px, py] = stagePoint(e.clientX, e.clientY);
+    const unit = e.deltaMode === 1 ? 16 : 1;
+    const mouseWheel = e.deltaMode === 1 || (e.deltaX === 0 && Math.abs(e.deltaY) >= 50 && Number.isInteger(e.deltaY));
+    if (e.ctrlKey) zoomAt(Math.exp(-e.deltaY / 100), px, py);
+    else if (e.altKey) {
       cam = {
+        ...cam,
         yaw: cam.yaw + e.deltaX * unit * 0.004,
         pitch: tilt ? clampPitch(cam.pitch + e.deltaY * unit * 0.0025) : cam.pitch,
       };
-      camFrame();
-    }
+    } else if (mouseWheel) zoomAt(Math.exp((-e.deltaY * unit) / 500), px, py);
+    else panBy(-e.deltaX, -e.deltaY);
+    camFrame();
     clearTimeout(wheelEnd);
     wheelEnd = window.setTimeout(camDone, 200);
   },
   { passive: false },
 );
 let wheelEnd = 0;
+
+// ---------- mouse ----------
+// Drag slides the camera over the ground; right-drag (or Shift / Option + drag) orbits and tilts.
+let drag: { x: number; y: number; ground: [number, number]; moved: boolean; orbit: boolean; yaw: number; pitch: number } | null = null;
+app.addEventListener('mousedown', (e) => {
+  if (!(e.target as Element).closest('.stage') || (e.button !== 0 && e.button !== 2)) return;
+  const [x, y] = stagePoint(e.clientX, e.clientY);
+  const orbit = e.button === 2 || e.shiftKey || e.altKey;
+  drag = { x, y, ground: screenToGround(view(), x, y), moved: false, orbit, yaw: cam.yaw, pitch: cam.pitch };
+});
+app.addEventListener('contextmenu', (e) => {
+  if ((e.target as Element).closest('.stage')) e.preventDefault();
+});
+window.addEventListener('mousemove', (e) => {
+  if (!drag || !app.querySelector('.stage')) return;
+  const [x, y] = stagePoint(e.clientX, e.clientY);
+  if (!drag.moved && Math.hypot(x - drag.x, y - drag.y) < 6) return;
+  drag.moved = true;
+  app.querySelector('.stage')?.classList.add('dragging');
+  if (drag.orbit) {
+    cam = { ...cam, yaw: drag.yaw + (x - drag.x) * 0.008, pitch: tilt ? clampPitch(drag.pitch - (y - drag.y) * 0.004) : cam.pitch };
+  } else {
+    const now = screenToGround(view(), x, y);
+    moveTarget(drag.ground[0] - now[0], drag.ground[1] - now[1]);
+  }
+  camFrame();
+});
+window.addEventListener('mouseup', () => {
+  if (drag?.moved) {
+    app.querySelector('.stage')?.classList.remove('dragging');
+    swallowNextClick();
+    camDone();
+  }
+  drag = null;
+});
 
 // ---------- desktop: keyboard and drag-to-pan ----------
 
@@ -1113,7 +1189,7 @@ document.addEventListener('keydown', (e) => {
   if (k === 'p') return click('panel');
   // Camera keys: Q / W turn, Z / X tilt, C reset.
   const nudge = (yaw: number, pitch: number) => {
-    cam = { yaw: cam.yaw + yaw, pitch: tilt ? clampPitch(cam.pitch + pitch) : cam.pitch };
+    cam = { ...cam, yaw: cam.yaw + yaw, pitch: tilt ? clampPitch(cam.pitch + pitch) : cam.pitch };
     saveCam();
     render();
   };
@@ -1124,13 +1200,19 @@ document.addEventListener('keydown', (e) => {
   if (k === 'c') {
     cam = { ...CAM_DEFAULT };
     saveCam();
-    recenter = true;
     return render();
   }
   if (k === 'v') return click('cam-mine');
   if (k === 'f') return click('fullscreen');
   if (k === 't') return click('take');
   if (k === 'a') return click(sess.state.phase === 'deploy' ? 'auto' : '');
+  if (k.startsWith('arrow')) {
+    e.preventDefault();
+    const step = 80;
+    panBy(k === 'arrowleft' ? step : k === 'arrowright' ? -step : 0, k === 'arrowup' ? step : k === 'arrowdown' ? -step : 0);
+    saveCam();
+    return render();
+  }
   if (k === '+' || k === '=') return click('zoom-in');
   if (k === '-' || k === '_') return click('zoom-out');
   if (k === 'escape') {
@@ -1139,44 +1221,6 @@ document.addEventListener('keydown', (e) => {
     message = null;
     return render();
   }
-});
-
-/** Click and drag the map with the mouse to move around when zoomed in. */
-/** Right-drag (or Shift / Alt + drag) turns and tilts the camera instead. */
-let drag: { x: number; y: number; left: number; top: number; moved: boolean; turn: boolean; cam: Camera } | null = null;
-app.addEventListener('mousedown', (e) => {
-  const st = (e.target as Element).closest<HTMLElement>('.stage');
-  if (!st || (e.button !== 0 && e.button !== 2)) return;
-  const turn = e.button === 2 || e.shiftKey || e.altKey;
-  drag = { x: e.clientX, y: e.clientY, left: st.scrollLeft, top: st.scrollTop, moved: false, turn, cam: { ...cam } };
-});
-app.addEventListener('contextmenu', (e) => {
-  if ((e.target as Element).closest('.stage')) e.preventDefault();
-});
-window.addEventListener('mousemove', (e) => {
-  if (!drag) return;
-  const dx = e.clientX - drag.x;
-  const dy = e.clientY - drag.y;
-  if (!drag.moved && Math.hypot(dx, dy) < 6) return;
-  drag.moved = true;
-  if (drag.turn) {
-    cam = { yaw: drag.cam.yaw + dx * 0.008, pitch: tilt ? clampPitch(drag.cam.pitch - dy * 0.004) : cam.pitch };
-    return camFrame();
-  }
-  const st = app.querySelector<HTMLElement>('.stage');
-  if (!st) return;
-  st.scrollLeft = drag.left - dx;
-  st.scrollTop = drag.top - dy;
-  st.classList.add('dragging');
-});
-window.addEventListener('mouseup', () => {
-  if (drag?.moved && drag.turn) camDone();
-  if (drag?.moved) {
-    app.querySelector('.stage')?.classList.remove('dragging');
-    // Swallow the click that ends a drag so it doesn't move or select a piece.
-    window.addEventListener('click', (ev) => ev.stopPropagation(), { capture: true, once: true });
-  }
-  drag = null;
 });
 
 window.addEventListener('resize', () => {
