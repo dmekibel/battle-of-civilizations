@@ -301,6 +301,9 @@ const UNITS: Record<Lang, Record<UnitTypeId, string>> = {
     horseArcher: 'Конные лучники',
     samurai: 'Самураи',
     ashigaru: 'Асигару',
+    gunslinger: 'Стрелки с револьверами',
+    rifleman: 'Стрелки с винтовками',
+    cowboy: 'Ковбои',
   },
   en: {
     king: 'King',
@@ -312,6 +315,9 @@ const UNITS: Record<Lang, Record<UnitTypeId, string>> = {
     horseArcher: 'Horse archers',
     samurai: 'Samurai',
     ashigaru: 'Ashigaru spearmen',
+    gunslinger: 'Gunslingers',
+    rifleman: 'Riflemen',
+    cowboy: 'Cowboys',
   },
 };
 
@@ -374,7 +380,8 @@ const REASONS: Record<Lang, Record<WinReason, string>> = {
 };
 
 export const t = (l: Lang, k: Key) => STR[l][k];
-export const unitName = (l: Lang, u: UnitTypeId) => UNITS[l][u];
+/** A piece's name; pass its side to use the army's own name for it (a Lakota King is a Chief). */
+export const unitName = (l: Lang, u: UnitTypeId, side?: Player) => (side && factionOf(side).names?.[u]?.[l]) || UNITS[l][u];
 export const errorText = (l: Lang, e: ErrorCode) => ERRORS[l][e];
 export const reasonText = (l: Lang, r: WinReason) => REASONS[l][r];
 /** A side is called by the faction it leads. */
@@ -389,13 +396,13 @@ export function logText(l: Lang, e: LogEntry): string {
     case 'roll':
       return ru ? `бросок ${e.dice.join('+')} = ${e.total}` : `rolled ${e.dice.join('+')} = ${e.total}`;
     case 'move':
-      return `${unitName(l, e.unit)} ${hexName(e.from)} → ${hexName(e.to)} (−${e.cost})`;
+      return `${unitName(l, e.unit, e.player)} ${hexName(e.from)} → ${hexName(e.to)} (−${e.cost})`;
     case 'attack':
     case 'shoot': {
       const verb = e.kind === 'attack' ? (ru ? 'бьёт' : 'hits') : ru ? 'стреляет в' : 'shoots';
       const end = e.killed ? (ru ? ', убит' : ', killed') + (e.advanced ? (ru ? ', клетка занята' : ', took the hex') : '') : '';
       const back = e.counter ? (ru ? `; копья: −${e.counter}${e.attackerKilled ? ', атакующий погиб' : ''}` : `; spears hit back −${e.counter}${e.attackerKilled ? ', attacker killed' : ''}`) : '';
-      return `${unitName(l, e.unit)} ${verb} ${unitName(l, e.target).toLowerCase()}: −${e.damage} ${t(l, 'hp')}${end}${back}`;
+      return `${unitName(l, e.unit, e.player)} ${verb} ${unitName(l, e.target, e.player === 'red' ? 'blue' : 'red').toLowerCase()}: −${e.damage} ${t(l, 'hp')}${end}${back}`;
     }
     case 'endTurn':
       return ru ? 'конец хода' : 'ended turn';

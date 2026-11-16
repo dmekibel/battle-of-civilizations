@@ -292,7 +292,7 @@ function statKey(): string {
 function unitInfo(s: GameState, id: string): string {
   const u = getUnit(s, id);
   if (!u) return '';
-  return `<b class="${u.owner}">${unitName(lang, u.type)}</b> ${stats(u.type, u.hp)}`;
+  return `<b class="${u.owner}">${unitName(lang, u.type, u.owner)}</b> ${stats(u.type, u.hp)}`;
 }
 
 function previewText(s: GameState, targetId: string, p: AttackPreview): string {
@@ -300,7 +300,7 @@ function previewText(s: GameState, targetId: string, p: AttackPreview): string {
   const what = p.kind === 'attack' ? t(lang, 'attack') : t(lang, 'shoot');
   const end = p.kills ? `, ${t(lang, 'kills')}` : ` (${t(lang, 'hp')} ${target.hp} → ${p.hpAfter})`;
   const back = p.counter ? ` · ${t(lang, 'spearsBack')} −${p.counter}` : '';
-  return `${what}: ${unitName(lang, target.type).toLowerCase()} −${p.damage} ${t(lang, 'hp')}${end} · ${t(lang, 'cost')} ${p.cost}${back}`;
+  return `${what}: ${unitName(lang, target.type, target.owner).toLowerCase()} −${p.damage} ${t(lang, 'hp')}${end} · ${t(lang, 'cost')} ${p.cost}${back}`;
 }
 
 const setupPhase = (s: GameState) => s.phase === 'draft' || s.phase === 'deploy';
@@ -416,7 +416,7 @@ function shotZone(s: GameState, u: Unit): Hex[] {
 
 function legendList(owner: Player): string {
   return (['king', ...rosterOf(owner)] as UnitTypeId[]).map(
-    (type) => `<li>${unitIcon(type, owner)}<div><b>${unitName(lang, type)}</b>${stats(type)}</div></li>`,
+    (type) => `<li>${unitIcon(type, owner)}<div><b>${unitName(lang, type, owner)}</b>${stats(type)}</div></li>`,
   ).join('');
 }
 
@@ -476,13 +476,13 @@ function draftSheet(s: GameState): string {
     const price = CONFIG.army.cost[type];
     return `<li data-row="${type}">
       ${unitIcon(type, s.current)}
-      <b class="name">${unitName(lang, type)}</b>
+      <b class="name">${unitName(lang, type, s.current)}</b>
       <span class="price" title="${t(lang, 'power')}">${price}<small>${t(lang, 'pts')}</small></span>
       <output class="count">${n}</output>
       ${stats(type)}
       <div class="slide">
         <button data-act="less" data-type="${type}" ${n ? '' : 'disabled'} aria-label="−">−</button>
-        <input type="range" id="sl-${type}" data-type="${type}" min="0" max="${Math.floor(CONFIG.army.budget / price)}" step="1" value="${n}" aria-label="${unitName(lang, type)}" style="${sliderFill(type)}">
+        <input type="range" id="sl-${type}" data-type="${type}" min="0" max="${Math.floor(CONFIG.army.budget / price)}" step="1" value="${n}" aria-label="${unitName(lang, type, s.current)}" style="${sliderFill(type)}">
         <button data-act="more" data-type="${type}" ${price <= left ? '' : 'disabled'} aria-label="+">+</button>
       </div>
     </li>`;
@@ -494,7 +494,7 @@ function draftSheet(s: GameState): string {
         <div class="meter"><i id="meter" style="width:${(spent / CONFIG.army.budget) * 100}%"></i></div></div>
       <div class="sheet-scroll">
       <ul class="buy">
-        <li class="king">${unitIcon('king', s.current)}<b class="name">${unitName(lang, 'king')}<span class="free">${t(lang, 'kingFree')}</span></b><span class="price free-badge">0<small>${t(lang, 'pts')}</small></span><output class="count">1</output>${stats('king')}</li>
+        <li class="king">${unitIcon('king', s.current)}<b class="name">${unitName(lang, 'king', s.current)}<span class="free">${t(lang, 'kingFree')}</span></b><span class="price free-badge">0<small>${t(lang, 'pts')}</small></span><output class="count">1</output>${stats('king')}</li>
         ${rows}
       </ul>
       ${statKey()}

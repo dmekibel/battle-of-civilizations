@@ -11,7 +11,11 @@ export type UnitTypeId =
   // Faction pieces: Mongol horse archers, Japanese samurai and ashigaru spearmen.
   | 'horseArcher'
   | 'samurai'
-  | 'ashigaru';
+  | 'ashigaru'
+  // The Old West: gunslingers, riflemen and mounted cowboys.
+  | 'gunslinger'
+  | 'rifleman'
+  | 'cowboy';
 
 export type TerrainId = 'plain' | 'forest' | 'river' | 'bridge';
 
@@ -166,6 +170,10 @@ export const CONFIG: GameConfig = {
     // Japanese: samurai fight hard and move like light infantry; ashigaru are cheap spearmen.
     samurai: { moveCost: 3, attack: 2, hp: 2, ranged: null, heavy: true },
     ashigaru: { moveCost: 3, attack: 1, hp: 1, ranged: null, heavy: false, antiCavalry: true },
+    // Old West: guns reach about as far as bows; pistols are short-ranged but on the move.
+    gunslinger: { moveCost: 3, attack: 1, hp: 1, ranged: { cost: 2, minRange: 2, maxRange: 3, damage: 1 }, heavy: false },
+    rifleman: { moveCost: 4, attack: 0, hp: 1, ranged: { cost: 2, minRange: 2, maxRange: 6, damage: 1 }, heavy: false },
+    cowboy: { moveCost: 1, attack: 1, hp: 1, ranged: { cost: 2, minRange: 2, maxRange: 3, damage: 1 }, heavy: false, mounted: true },
     // Melee for archers is an open question; 0 = they only shoot.
     archer: {
       moveCost: 4,
@@ -192,7 +200,7 @@ export const CONFIG: GameConfig = {
   },
   army: {
     budget: 50,
-    cost: { lightInfantry: 1, heavyInfantry: 2, archer: 3, lightCavalry: 3, heavyCavalry: 4, horseArcher: 4, samurai: 4, ashigaru: 1 },
+    cost: { lightInfantry: 1, heavyInfantry: 2, archer: 3, lightCavalry: 3, heavyCavalry: 4, horseArcher: 4, samurai: 4, ashigaru: 1, gunslinger: 3, rifleman: 3, cowboy: 4 },
   },
   // 5 columns leave room for the largest possible army (50 light infantry and the King).
   deploy: { depth: 5 },
