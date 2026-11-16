@@ -1378,7 +1378,7 @@ app.addEventListener(
     else if (e.altKey) {
       cam = {
         ...cam,
-        yaw: cam.yaw + e.deltaX * flipSign() * unit * 0.004,
+        yaw: cam.yaw - e.deltaX * flipSign() * unit * 0.004,
         pitch: tilt ? clampPitch(cam.pitch + e.deltaY * flipSign() * unit * 0.0025) : cam.pitch,
       };
     } else if (mouseWheel) zoomAt(Math.exp((-e.deltaY * unit) / 500), px, py);

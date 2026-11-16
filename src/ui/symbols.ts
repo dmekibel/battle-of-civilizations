@@ -18,11 +18,30 @@ const SWORD = (ink: string) =>
 const HORSE = (ink: string, dx = 0) =>
   `<path transform="translate(${dx} 0)" d="M-7 12L-7 3C-7 -5 -2 -10 4 -10L6 -13L7.5 -9C11 -7 13 -3 13 1L13 3L9 4L5 1L3 3L3 12Z" fill="${ink}"/>`;
 
-/** The leader's sign for armies that don't use a crown. */
-function kingMark(mark: 'star' | 'feather', ink: string): string {
-  return mark === 'star'
-    ? `<path d="M0 -11L3 -3.5H11L4.5 1.5L7 9.5L0 4.5L-7 9.5L-4.5 1.5L-11 -3.5H-3Z" fill="${ink}"/>`
-    : `<path d="M-2 11Q-6 -2 4 -12Q8 -2 -2 11Z" fill="${ink}"/><path d="M-2 11L3 -8" stroke="${ink === '#fffdf6' ? '#00000055' : '#ffffff88'}" stroke-width="1"/>`;
+/** Pictures some armies use in place of the standard ones (no spears for the Cowboys). */
+export type ArtId = 'star' | 'feather' | 'shotgun' | 'saber' | 'tomahawk' | 'lancer';
+
+function art(id: ArtId, ink: string): string {
+  switch (id) {
+    case 'star':
+      // The Sheriff's badge.
+      return `<path d="M0 -11L3 -3.5H11L4.5 1.5L7 9.5L0 4.5L-7 9.5L-4.5 1.5L-11 -3.5H-3Z" fill="${ink}"/>`;
+    case 'feather':
+      // A chief's eagle feather.
+      return `<path d="M-2 11Q-6 -2 4 -12Q8 -2 -2 11Z" fill="${ink}"/><path d="M-2 11L3 -8" stroke="${ink === '#fffdf6' ? '#00000055' : '#ffffff88'}" stroke-width="1"/>`;
+    case 'shotgun':
+      // A short double-barrelled shotgun.
+      return `<path d="M-6 -1L14 -7M-6 2.5L14 -3.5" stroke="${ink}" stroke-width="1.8" stroke-linecap="round"/><path d="M-6 -2L-4 3L-13 10L-15 6Z" fill="${ink}"/>`;
+    case 'saber':
+      // A cavalry trooper: horse with a raised, curved saber.
+      return `${HORSE(ink, -5)}<path d="M5 -9Q12 -12 16 -17" fill="none" stroke="${ink}" stroke-width="2" stroke-linecap="round"/><path d="M3 -7L7 -11" stroke="${ink}" stroke-width="2.4" stroke-linecap="round"/>`;
+    case 'lancer':
+      // A rider with a long lance (Comanche mounted warriors).
+      return picture('heavyCavalry', ink);
+    case 'tomahawk':
+      // A war hatchet: a handle with a stone head.
+      return `<path d="M-9 12L6 -9" stroke="${ink}" stroke-width="2.4" stroke-linecap="round"/><path d="M1 -14L10 -11L9 -4L4 -8Z" fill="${ink}"/>`;
+  }
 }
 
 function picture(type: UnitTypeId, ink: string): string {
@@ -73,8 +92,8 @@ export function unitSymbol(type: UnitTypeId, owner: Player, hp: number): string 
   const wounded = hp < CONFIG.units[type].hp;
   const box = `<rect x="${-W / 2}" y="${-H / 2}" width="${W}" height="${H}" rx="3" fill="${heavy ? color : '#fffdf6'}" stroke="${wounded ? '#ff4d3d' : color}" stroke-width="${wounded ? 3.2 : 2.4}"/>`;
   const ink = heavy ? '#fffdf6' : color;
-  const mark = type === 'king' ? factionOf(owner).kingMark : undefined;
-  return `<g>${box}<g>${mark ? kingMark(mark, ink) : picture(type, ink)}</g></g>`;
+  const own = factionOf(owner).art?.[type];
+  return `<g>${box}<g>${own ? art(own, ink) : picture(type, ink)}</g></g>`;
 }
 
 /** A stand-alone icon for lists and the army builder. */

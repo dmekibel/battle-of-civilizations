@@ -4,6 +4,7 @@
 import type { UnitTypeId } from '../config';
 import type { ArmyCounts, Player } from '../engine';
 import type { Lang } from './i18n';
+import type { ArtId } from './symbols';
 
 export type FactionId = 'novgorod' | 'teutonic' | 'mongols' | 'japanese' | 'frontier' | 'comanche';
 
@@ -20,8 +21,8 @@ export interface Faction {
   emblem: string;
   /** Some armies call shared pieces by their own names (a Comanche King is a Chief). */
   names?: Partial<Record<UnitTypeId, Record<Lang, string>>>;
-  /** The King's picture: a crown unless the army has its own leader's sign. */
-  kingMark?: 'star' | 'feather';
+  /** Pieces drawn with the army's own picture (the Sheriff's badge, a tomahawk). */
+  art?: Partial<Record<UnitTypeId, ArtId>>;
 }
 
 const shield = (fill: string, rim: string, inner: string) =>
@@ -34,7 +35,7 @@ export const FACTIONS: Record<FactionId, Faction> = {
     text: '#ec6a5c',
     roster: ['lightInfantry', 'heavyInfantry', 'archer', 'lightCavalry', 'heavyCavalry'],
     blurb: { en: 'Balanced Rus army: spearmen, archers and druzhina riders.', ru: 'Сбалансированное русское войско: копейщики, лучники и дружина.' },
-    emblem: shield('#a8201a', '#d9a521', '<path d="M15 44L15 24L22.5 32L30 18L37.5 32L45 24L45 44Z" fill="#e8b923" stroke="#8a6410" stroke-width="1.5" stroke-linejoin="round"/>'),
+    emblem: shield('#a8201a', '#d9a521', '<path d="M30 8V17M26 11H34" stroke="#e8b923" stroke-width="2.2"/><path d="M30 17Q41 25 38 34H22Q19 25 30 17Z" fill="#e8b923"/><path d="M23 34H37V48H23Z" fill="#e8b923"/><path d="M28 39H32V48H28Z" fill="#a8201a"/><path d="M17 48H43V52H17Z" fill="#e8b923"/>'),
   },
   teutonic: {
     name: { en: 'German Knights', ru: 'Немецкие рыцари' },
@@ -50,7 +51,7 @@ export const FACTIONS: Record<FactionId, Faction> = {
     text: '#86b9f0',
     roster: ['lightInfantry', 'archer', 'lightCavalry', 'heavyCavalry', 'horseArcher'],
     blurb: { en: 'Horse archers: shoot and ride. Few foot soldiers, no heavy infantry.', ru: 'Конные лучники: стреляют на скаку. Мало пехоты, нет тяжёлой пехоты.' },
-    emblem: shield('#1f5fa8', '#e1b12c', '<circle cx="30" cy="27" r="8" fill="#e1b12c"/><path d="M20 44Q30 36 40 44Q30 40 20 44Z" fill="#e1b12c"/><path d="M22 50H38" stroke="#e1b12c" stroke-width="3"/>'),
+    emblem: shield('#1f5fa8', '#e1b12c', '<path d="M22 14Q46 32 22 50" fill="none" stroke="#e1b12c" stroke-width="3.2" stroke-linecap="round"/><path d="M22 14V50" stroke="#e1b12c" stroke-width="1.5"/><path d="M12 32H44" stroke="#e1b12c" stroke-width="2.2"/><path d="M50 32L43 28V36Z" fill="#e1b12c"/>'),
   },
   japanese: {
     name: { en: 'Japan', ru: 'Япония' },
@@ -72,7 +73,7 @@ export const FACTIONS: Record<FactionId, Faction> = {
       lightInfantry: { en: 'Deputies', ru: 'Помощники шерифа' },
       heavyCavalry: { en: 'Cavalry troopers', ru: 'Кавалеристы' },
     },
-    kingMark: 'star',
+    art: { king: 'star', lightInfantry: 'shotgun', heavyCavalry: 'saber' },
   },
   comanche: {
     name: { en: 'Comanche', ru: 'Команчи' },
@@ -80,14 +81,14 @@ export const FACTIONS: Record<FactionId, Faction> = {
     text: '#7fd6d0',
     roster: ['lightInfantry', 'archer', 'lightCavalry', 'horseArcher'],
     blurb: { en: 'Lords of the Southern Plains, the finest riders of the West: fast mounted warriors and archers, no heavy troops.', ru: 'Хозяева южных равнин, лучшие всадники Запада: быстрые конные воины и лучники, без тяжёлых войск.' },
-    emblem: shield('#1f8a8a', '#e9e4d6', '<circle cx="30" cy="30" r="11" fill="none" stroke="#e9e4d6" stroke-width="3"/><path d="M30 41V58M24 46L30 41L36 46" stroke="#e9e4d6" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M41 22Q50 16 52 8Q44 12 41 22Z" fill="#e1b12c"/>'),
+    emblem: shield('#1f8a8a', '#e9e4d6', '<path transform="translate(27 37) scale(1.55)" d="M-7 12L-7 3C-7 -5 -2 -10 4 -10L6 -13L7.5 -9C11 -7 13 -3 13 1L13 3L9 4L5 1L3 3L3 12Z" fill="#e9e4d6"/><path d="M36 20Q34 10 42 4Q44 13 36 20Z" fill="#e1b12c"/>'),
     names: {
       king: { en: 'Chief', ru: 'Вождь' },
       lightInfantry: { en: 'Warriors', ru: 'Воины' },
       lightCavalry: { en: 'Mounted warriors', ru: 'Конные воины' },
       horseArcher: { en: 'Mounted archers', ru: 'Конные лучники' },
     },
-    kingMark: 'feather',
+    art: { king: 'feather', lightInfantry: 'tomahawk', lightCavalry: 'lancer' },
   },
 };
 
