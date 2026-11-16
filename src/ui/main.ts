@@ -29,9 +29,9 @@ const app = document.getElementById('app')!;
 const LANG_KEY = 'boc-lang';
 function loadLang(): Lang {
   try {
-    return localStorage.getItem(LANG_KEY) === 'en' ? 'en' : 'ru';
+    return localStorage.getItem(LANG_KEY) === 'ru' ? 'ru' : 'en';
   } catch {
-    return 'ru';
+    return 'en';
   }
 }
 
