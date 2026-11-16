@@ -1397,7 +1397,7 @@ app.addEventListener(
     else if (e.altKey) {
       cam = {
         ...cam,
-        yaw: cam.yaw - e.deltaX * flipSign() * unit * 0.004,
+        yaw: cam.yaw + e.deltaX * flipSign() * unit * 0.004,
         pitch: tilt ? clampPitch(cam.pitch + e.deltaY * flipSign() * unit * 0.0025) : cam.pitch,
       };
     } else if (mouseWheel) zoomAt(Math.exp((-e.deltaY * unit) / 500), px, py);
@@ -1429,7 +1429,7 @@ window.addEventListener('mousemove', (e) => {
   drag.moved = true;
   app.querySelector('.stage')?.classList.add('dragging');
   if (drag.orbit) {
-    cam = { ...cam, yaw: drag.yaw + (x - drag.x) * 0.008, pitch: tilt ? clampPitch(drag.pitch - (y - drag.y) * 0.004) : cam.pitch };
+    cam = { ...cam, yaw: drag.yaw - (x - drag.x) * 0.008, pitch: tilt ? clampPitch(drag.pitch - (y - drag.y) * 0.004) : cam.pitch };
   } else {
     const now = screenToGround(view(), x, y);
     moveTarget(drag.ground[0] - now[0], drag.ground[1] - now[1]);
