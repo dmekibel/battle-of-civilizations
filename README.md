@@ -49,7 +49,7 @@ Speed ratio heavy infantry : light infantry : heavy cavalry : light cavalry = 1 
 
 **Movement.** Each hex costs the piece's points per hex. You can't enter forest or river (only bridges cross it), can't enter or pass through enemy pieces, and can pass through (but not stop on) your own pieces. A piece may move several times in a turn while points last.
 
-**Attack and defense.** Every piece has attack points and defense points. Pieces are heraldic shields in their army's arms (Teutonic white with the black cross, Novgorod crimson with gold); heavy ones have a metal rim, the King is the biggest, and a crack shows a wounded piece. A piece next to an enemy spends 1 movement point to hit it, taking away as many defense points as its attack. At 0 defense the piece is dead and removed. You can attack as many times as your rolled points allow. No dice in combat.
+**Attack and defense.** Every piece has attack points and defense points. Pieces are heraldic shields in their army's arms (Teutonic white with the black cross, Novgorod crimson with gold); heavy ones have a metal rim, the King is the biggest, and a red rim shows a wounded piece. A piece next to an enemy spends 1 movement point to hit it, taking away as many defense points as its attack. At 0 defense the piece is dead and removed. You can attack as many times as your rolled points allow. No dice in combat.
 
 **Taking the hex.** When a piece kills an enemy in melee, it steps into that enemy's hex for free. A config switch sets this to *must* (now), *may* (the player chooses, with a **Take the hex** button) or *never*. Archers stay where they are after a kill.
 

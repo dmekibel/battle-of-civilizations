@@ -58,22 +58,20 @@ function arms(owner: Player): string {
 
 /** A piece: a heraldic shield in its army's arms with the piece's sign in a round badge.
  *  Heavy pieces have a thick metal rim, light pieces a thin leather edge. A wounded piece
- *  (below full defense) shows a crack across the shield. */
+ *  (below full defense) has its rim and badge ring turned red. */
 export function unitSymbol(type: UnitTypeId, owner: Player, hp: number): string {
   const heavy = CONFIG.units[type].heavy;
   const wounded = hp < CONFIG.units[type].hp;
   const blue = owner === 'blue';
+  const [outer, inner] = wounded ? ['#6d0d08', '#ff4d3d'] : blue ? ['#4b5055', '#a9afb5'] : ['#8a6410', '#e1b12c'];
   const rim = heavy
-    ? `<path d="${SHIELD}" fill="none" stroke="${blue ? '#4b5055' : '#8a6410'}" stroke-width="5"/><path d="${SHIELD}" fill="none" stroke="${blue ? '#a9afb5' : '#e1b12c'}" stroke-width="2.4"/>`
+    ? `<path d="${SHIELD}" fill="none" stroke="${outer}" stroke-width="5"/><path d="${SHIELD}" fill="none" stroke="${inner}" stroke-width="2.4"/>`
     : `<path d="${SHIELD}" fill="none" stroke="#5b3a1e" stroke-width="2"/>`;
+  const ring = wounded ? '#ff4d3d' : blue ? '#f2efe6' : '#8a6410';
   const badge =
-    `<circle cy="2" r="12.5" fill="${blue ? '#151517' : '#f6e7cf'}" stroke="${blue ? '#f2efe6' : '#8a6410'}" stroke-width="1.5"/>` +
+    `<circle cy="2" r="12.5" fill="${blue ? '#151517' : '#f6e7cf'}" stroke="${ring}" stroke-width="${wounded ? 2.6 : 1.5}"/>` +
     `<g transform="translate(0 2) scale(.66)">${picture(type, blue ? '#f2efe6' : '#a8201a')}</g>`;
-  const crack = wounded
-    ? '<path d="M-15 -19L-6 -9L-10 -3L2 6L-2 12L3 22" stroke="#1a0d08" stroke-width="2.8" fill="none" stroke-linejoin="round"/>' +
-      '<path d="M-15 -19L-6 -9L-10 -3L2 6L-2 12L3 22" stroke="#ff8a6a" stroke-width="1.1" fill="none" stroke-linejoin="round"/>'
-    : '';
-  return `<g transform="scale(${RANK[type]})">${arms(owner)}${rim}${badge}${crack}</g>`;
+  return `<g transform="scale(${RANK[type]})">${arms(owner)}${rim}${badge}</g>`;
 }
 
 /** A stand-alone icon for lists and the army builder. */
