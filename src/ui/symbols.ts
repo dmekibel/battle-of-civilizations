@@ -13,52 +13,69 @@ export const EMBLEM: Record<Player, string> = {
   blue: `<svg viewBox="0 0 60 70" width="60" height="70" aria-hidden="true"><path d="M4 4H56V30Q56 56 30 66Q4 56 4 30Z" fill="#f4f1e8" stroke="#1b1b1d" stroke-width="3"/><path d="M24 12H36L33 28H48V40H33L36 58H24L27 40H12V28H27Z" fill="#1b1b1d"/></svg>`,
 };
 
-const W = 40;
-const H = 28;
-
-const SWORD = (ink: string) =>
-  `<path d="M0 -11L0 5M-5 4L5 4M0 5L0 9" stroke="${ink}" stroke-width="2.2" stroke-linecap="round"/>` +
-  `<circle cx="0" cy="10.5" r="1.6" fill="${ink}"/>`;
-
 const HORSE = (ink: string, dx = 0) =>
   `<path transform="translate(${dx} 0)" d="M-7 12L-7 3C-7 -5 -2 -10 4 -10L6 -13L7.5 -9C11 -7 13 -3 13 1L13 3L9 4L5 1L3 3L3 12Z" fill="${ink}"/>`;
 
+/** The sign of each piece type, drawn about 26 units wide around (0,0). */
 function picture(type: UnitTypeId, ink: string): string {
+  const line = `stroke="${ink}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"`;
   switch (type) {
     case 'king':
       return `<path d="M-11 7L-11 -6L-5.5 0L0 -9L5.5 0L11 -6L11 7Z" fill="${ink}" stroke="${ink}" stroke-width="1.2" stroke-linejoin="round"/>`;
     case 'heavyInfantry':
-      // Shield and sword.
-      return `<path d="M-10 -10H10V-1Q10 8 0 12Q-10 8 -10 -1Z" fill="none" stroke="${ink}" stroke-width="2"/>${SWORD(ink)}`;
+      // A sword, point up.
+      return `<path d="M0 -12L0 10M-6 4L6 4" ${line}/><path d="M-2 -12L0 -15L2 -12Z" fill="${ink}"/>`;
     case 'lightInfantry':
-      // Spear.
-      return `<path d="M-13 11L9 -6" stroke="${ink}" stroke-width="2.2" stroke-linecap="round"/><path d="M15 -11L6 -8L10 -3Z" fill="${ink}"/>`;
+      // A spear.
+      return `<path d="M-12 11L8 -7" ${line}/><path d="M14 -12L5 -9L9 -4Z" fill="${ink}"/>`;
     case 'heavyCavalry':
-      // Horse with a couched lance.
-      return `${HORSE(ink, -3)}<path d="M-16 -2L17 -12" stroke="${ink}" stroke-width="2.2" stroke-linecap="round"/>`;
+      // A horse with a couched lance.
+      return `${HORSE(ink, -3)}<path d="M-15 -2L16 -12" ${line}/>`;
     case 'lightCavalry':
       return HORSE(ink, -3);
     case 'archer':
-      // Bow drawn with an arrow on the string.
-      return `<path d="M-4 -12Q10 0 -4 12" fill="none" stroke="${ink}" stroke-width="2.2" stroke-linecap="round"/>` +
-        `<path d="M-4 -12L-4 12M-12 0L11 0" stroke="${ink}" stroke-width="1.6" stroke-linecap="round"/><path d="M14 0L9 -3L9 3Z" fill="${ink}"/>`;
+      // A bow drawn with an arrow on the string.
+      return `<path d="M-4 -12Q10 0 -4 12" ${line}/><path d="M-4 -12L-4 12M-12 0L11 0" stroke="${ink}" stroke-width="1.6" stroke-linecap="round"/><path d="M14 0L9 -3L9 3Z" fill="${ink}"/>`;
   }
 }
 
-export function unitSymbol(type: UnitTypeId, owner: Player, hp: number): string {
-  const color = ARMY_COLOR[owner];
-  const heavy = CONFIG.units[type].heavy;
-  const max = CONFIG.units[type].hp;
-  const box = `<rect x="${-W / 2}" y="${-H / 2}" width="${W}" height="${H}" rx="3" fill="${heavy ? color : '#fffdf6'}" stroke="${color}" stroke-width="2.4"/>`;
-  const ink = heavy ? '#fffdf6' : color;
-  // HP pips under the box: filled = HP left, hollow = HP lost.
-  const pips = Array.from({ length: max }, (_, i) => {
-    const cx = (i - (max - 1) / 2) * 8;
-    return `<circle cx="${cx}" cy="${H / 2 + 6}" r="3" fill="${i < hp ? color : '#fffdf6'}" stroke="${color}" stroke-width="1.3"/>`;
-  }).join('');
-  return `<g>${box}<g>${picture(type, ink)}</g>${pips}</g>`;
+// Heater shield, centred on (0,0): flat top at y -21, point at y 24.
+const SHIELD = 'M-18 -21H18V-3Q18 15 0 24Q-18 15 -18 -3Z';
+
+/** Rank sets the size, as in shogi: the King is biggest, light pieces the smallest. */
+const RANK: Record<UnitTypeId, number> = {
+  king: 1.12, heavyInfantry: 1, heavyCavalry: 1, lightInfantry: 0.88, lightCavalry: 0.88, archer: 0.88,
+};
+
+/** Each army's coat of arms on the shield face. */
+function arms(owner: Player): string {
+  return owner === 'blue'
+    ? // Teutonic Order: white field, black cross.
+      `<path d="${SHIELD}" fill="#f2efe6"/><path d="M-4 -21H4V17H-4ZM-18 -6H18V2H-18Z" fill="#151517"/>`
+    : // Novgorod: crimson field, gold chief.
+      `<path d="${SHIELD}" fill="#a8201a"/><path d="M-18 -21H18V-13H-18Z" fill="#e1b12c"/>`;
 }
 
-/** A stand-alone icon for the legend. */
+/** A piece: a heraldic shield in its army's arms with the piece's sign in a round badge.
+ *  Heavy pieces have a thick metal rim, light pieces a thin leather edge. A wounded piece
+ *  (below full defense) shows a crack across the shield. */
+export function unitSymbol(type: UnitTypeId, owner: Player, hp: number): string {
+  const heavy = CONFIG.units[type].heavy;
+  const wounded = hp < CONFIG.units[type].hp;
+  const blue = owner === 'blue';
+  const rim = heavy
+    ? `<path d="${SHIELD}" fill="none" stroke="${blue ? '#4b5055' : '#8a6410'}" stroke-width="5"/><path d="${SHIELD}" fill="none" stroke="${blue ? '#a9afb5' : '#e1b12c'}" stroke-width="2.4"/>`
+    : `<path d="${SHIELD}" fill="none" stroke="#5b3a1e" stroke-width="2"/>`;
+  const badge =
+    `<circle cy="2" r="12.5" fill="${blue ? '#151517' : '#f6e7cf'}" stroke="${blue ? '#f2efe6' : '#8a6410'}" stroke-width="1.5"/>` +
+    `<g transform="translate(0 2) scale(.66)">${picture(type, blue ? '#f2efe6' : '#a8201a')}</g>`;
+  const crack = wounded
+    ? '<path d="M-15 -19L-6 -9L-10 -3L2 6L-2 12L3 22" stroke="#1a0d08" stroke-width="2.8" fill="none" stroke-linejoin="round"/>' +
+      '<path d="M-15 -19L-6 -9L-10 -3L2 6L-2 12L3 22" stroke="#ff8a6a" stroke-width="1.1" fill="none" stroke-linejoin="round"/>'
+    : '';
+  return `<g transform="scale(${RANK[type]})">${arms(owner)}${rim}${badge}${crack}</g>`;
+}
+
+/** A stand-alone icon for lists and the army builder. */
 export const unitIcon = (type: UnitTypeId, owner: Player) =>
-  `<svg viewBox="-23 -16 46 42" width="46" height="42" aria-hidden="true">${unitSymbol(type, owner, CONFIG.units[type].hp)}</svg>`;
+  `<svg viewBox="-23 -27 46 54" width="38" height="44" aria-hidden="true">${unitSymbol(type, owner, CONFIG.units[type].hp)}</svg>`;
