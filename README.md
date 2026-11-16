@@ -76,7 +76,8 @@ Speed ratio heavy infantry : light infantry : heavy cavalry : light cavalry = 1 
 - On a phone the board fills the screen, in portrait or landscape. **Roll dice**, then tap one of your pieces. Green hexes show where it can reach and what it costs. Red dashed hexes are enemies it can hit; the badge shows the damage (✕ = the hit kills).
 - Tap a green hex to move, tap a red one to attack or shoot.
 - **Undo** steps back within the current turn (never re-rolls the dice).
-- **End turn** passes the screen to the other player.
+- Tapping one of your pieces before rolling rolls the dice for you.
+- **End turn** passes the screen to the other player. With points still usable, the first press warns and the button turns into **End anyway**.
 - **On a computer** (wide screen): the pieces list, log and settings stay open in a side panel. Keys: Space roll, Enter end turn, U or Ctrl+Z undo, + / − zoom, Esc deselect. Drag the map with the mouse; a trackpad pinch zooms it.
 - **2.5D view** (default): the board tilts back like a table and the pieces, trees and bridges stand up. Switch to the flat map in the menu (🗺 View).
 - The log lists every roll, move and hit. **EN / RU** switches the language (in the menu ☰).

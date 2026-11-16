@@ -103,6 +103,8 @@ let message: string | null = null;
 let rolling = false;
 let rollFaces: number[] = [];
 let confirmNew = false;
+/** First press of End turn with points left only warns; the second press ends the turn. */
+let confirmEnd = false;
 let lastPoints = 0;
 let menuOpen = false;
 /** Pass-the-phone screen: shown whenever the other player must look away. */
@@ -438,7 +440,7 @@ function bar(s: GameState): string {
       : '';
     return `${take}<div class="row">
       <button data-act="undo" ${canUndo(sess) ? '' : 'disabled'}>↶ ${t(lang, 'undo')}</button>
-      <button data-act="end" class="${s.advance ? '' : 'primary'}">${t(lang, 'endTurn')} →</button>
+      <button data-act="end" class="${s.advance ? '' : 'primary'} ${confirmEnd ? 'warn' : ''}">${confirmEnd ? t(lang, 'endAnyway') : t(lang, 'endTurn')} →</button>
     </div>`;
   }
   return '';
@@ -615,11 +617,12 @@ function restart(state: GameState) {
   render();
 }
 
-function roll() {
+/** Rolls the dice. `keep` is a piece the player tapped before rolling: it stays selected. */
+function roll(keep: string | null = null) {
   if (rolling || sess.state.phase !== 'roll') return;
   rolling = true;
   sound('dice');
-  selected = null;
+  selected = keep;
   message = null;
   const spin = () => (rollFaces = Array.from({ length: CONFIG.dice.count }, () => 1 + Math.floor(Math.random() * CONFIG.dice.sides)));
   spin();
@@ -654,6 +657,8 @@ function onHex(col: number, row: number) {
   if (s.phase === 'deploy') return onDeployHex(s, hex);
   if (s.phase === 'draft') return;
   const u = unitAt(s, hex);
+  // Tapping one of your pieces before rolling rolls the dice for you and keeps it selected.
+  if (s.phase === 'roll' && u && u.owner === s.current) return roll(u.id);
   const own = selected ? getUnit(s, selected) : undefined;
 
   if (own && own.owner === s.current && s.phase === 'act') {
@@ -680,12 +685,14 @@ function onHex(col: number, row: number) {
 app.addEventListener('click', (e) => {
   const el = e.target as Element;
   const hex = el.closest('[data-col]');
+  if (hex) confirmEnd = false;
   if (hex) return onHex(Number(hex.getAttribute('data-col')), Number(hex.getAttribute('data-row')));
   const btn = el.closest('[data-act]');
   const act = btn?.getAttribute('data-act');
   if (!act) return;
   const type = btn!.getAttribute('data-type') as UnitTypeId | null;
   if (act !== 'new') confirmNew = false;
+  if (act !== 'end') confirmEnd = false;
   switch (act) {
     case 'ack':
       if (sess.state.phase === 'roll') sound('horn');
@@ -747,9 +754,20 @@ app.addEventListener('click', (e) => {
       message = null;
       if (selected && !getUnit(sess.state, selected)) selected = null;
       return render();
-    case 'end':
+    case 'end': {
+      // Ending with points left that could still be used asks once before ending.
+      const s = sess.state;
+      const canStillAct = s.units.some((u) => u.owner === s.current) && spentUnits(s).size < s.units.filter((u) => u.owner === s.current).length;
+      if (!confirmEnd && s.points > 0 && canStillAct) {
+        confirmEnd = true;
+        message = `${t(lang, 'pointsLeftWarn').replace('{n}', String(s.points))}`;
+        sound('tick');
+        return render();
+      }
+      confirmEnd = false;
       selected = null;
-      return void run((s) => endTurn(s), true);
+      return void run((st) => endTurn(st), true);
+    }
     case 'zoom-in':
     case 'zoom-out': {
       const next = act === 'zoom-in' ? ZOOMS.find((z) => z > zoom + 0.01) : [...ZOOMS].reverse().find((z) => z < zoom - 0.01);
