@@ -1,5 +1,5 @@
 import './style.css';
-import { CONFIG } from '../config';
+import { CONFIG, type UnitTypeId } from '../config';
 import {
   apply,
   attack,
@@ -18,10 +18,12 @@ import {
   unitAt,
   type AttackPreview,
   type GameState,
+  type Player,
   type Result,
   type Session,
 } from '../engine';
 import { renderBoard } from './board';
+import { unitIcon } from './symbols';
 import { errorText, logText, playerName, reasonText, t, unitName, type Lang } from './i18n';
 
 const app = document.getElementById('app')!;
@@ -67,6 +69,18 @@ function unitInfo(s: GameState, id: string): string {
     line += ` · ${t(lang, 'shot')} ${r.ranged.minRange}–${r.ranged.maxRange}, −${r.ranged.damage} ${t(lang, 'hp')}, ${r.ranged.cost} ${t(lang, 'points')}`;
   }
   return line;
+}
+
+const LEGEND_ORDER: UnitTypeId[] = ['king', 'heavyInfantry', 'lightInfantry', 'heavyCavalry', 'lightCavalry', 'archer'];
+
+function legend(owner: Player): string {
+  return LEGEND_ORDER.map((type) => {
+    const r = CONFIG.units[type];
+    const fight = r.attack > 0 ? `${t(lang, 'atk')} ${r.attack}` : t(lang, 'noMelee');
+    const shot = r.ranged ? ` · ${t(lang, 'shot')} ${r.ranged.minRange}–${r.ranged.maxRange}` : '';
+    return `<li>${unitIcon(type, owner)}<div><b>${unitName(lang, type)}</b>
+      <span>${r.moveCost} ${t(lang, 'perHex')} · ${fight} · ${t(lang, 'hp')} ${r.hp}${shot}</span></div></li>`;
+  }).join('');
 }
 
 function previewText(s: GameState, targetId: string, p: AttackPreview): string {
@@ -138,6 +152,11 @@ function render() {
                  <button data-act="end" class="primary" ${s.phase === 'act' ? '' : 'disabled'}>${t(lang, 'endTurn')} →</button>`
           }
         </div>
+        <details class="legend" open>
+          <summary>${t(lang, 'pieces')}</summary>
+          <ul>${legend(s.current)}</ul>
+          <p>${t(lang, 'legendNote')}</p>
+        </details>
         <details class="log" open>
           <summary>${t(lang, 'log')}</summary>
           <ol>${log || `<li class="empty">${t(lang, 'emptyLog')}</li>`}</ol>

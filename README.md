@@ -34,14 +34,14 @@ Every push to `main` runs the tests, builds, and deploys to GitHub Pages (`.gith
 
 **Pieces** (default values, all in `src/config.ts`):
 
-| Piece | Points per hex | Attack | HP (defence) | Symbol |
+| Piece | Points per hex | Attack | HP (defence) | Picture |
 |---|---|---|---|---|
-| King | 6 | 1 | 2 | crown, filled |
-| Heavy infantry | 6 | 1 | 2 | X in box, filled |
-| Light infantry | 3 | 1 | 1 | X in box, outline |
-| Heavy cavalry | 2 | 2 | 2 | diagonal, filled |
-| Light cavalry | 1 | 1 | 1 | diagonal, outline |
-| Archers | 4 | no melee | 1 | bow, outline |
+| King | 6 | 1 | 2 | crown, filled box |
+| Heavy infantry | 6 | 1 | 2 | shield and sword, filled box |
+| Light infantry | 3 | 1 | 1 | spear, outlined box |
+| Heavy cavalry | 2 | 2 | 2 | horse with lance, filled box |
+| Light cavalry | 1 | 1 | 1 | horse, outlined box |
+| Archers | 4 | no melee | 1 | bow and arrow, outlined box |
 
 Speed ratio heavy infantry : light infantry : heavy cavalry : light cavalry = 1 : 2 : 3 : 6.
 

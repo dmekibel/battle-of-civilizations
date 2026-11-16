@@ -31,6 +31,9 @@ const STR = {
     wins: 'победили!',
     confirmNew: 'Начать заново? Нажмите ещё раз.',
     help: 'Нажмите на фигуру: зелёные клетки — куда она дойдёт, красные — кого она может ударить.',
+    pieces: 'Фигуры',
+    legendNote: 'Залитые — тяжёлые, контурные — лёгкие. Точки под фигурой — её ОЗ.',
+    noMelee: 'без ближнего боя',
   },
   en: {
     title: 'Battle of Civilizations',
@@ -58,6 +61,9 @@ const STR = {
     wins: 'win!',
     confirmNew: 'Start over? Tap again.',
     help: 'Tap a piece: green hexes show where it can reach, red ones who it can hit.',
+    pieces: 'Pieces',
+    legendNote: 'Filled = heavy, outline = light. Dots under a piece = its HP.',
+    noMelee: 'no melee',
   },
 };
 
