@@ -137,7 +137,7 @@ body {
 .tray { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
 .landscape .tray { flex-wrap: wrap; }
 .chip { display: flex; align-items: center; gap: 2px; padding: 2px 8px 2px 2px; border-radius: 10px; flex: none; }
-.chip svg { width: 30px; height: 35px; }
+.chip svg { width: 38px; height: 28px; }
 .chip.on { background: #5a4818; border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold); }
 
 .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
@@ -215,7 +215,7 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 .army-head b { color: var(--ink); }
 .army-pieces { display: flex; flex-wrap: wrap; gap: 2px 8px; max-height: 92px; overflow-y: auto; margin-top: 4px; }
 .army-pieces .group { display: flex; flex-wrap: wrap; gap: 1px; }
-.army-pieces svg { width: 20px; height: 24px; animation: pop .18s ease-out; }
+.army-pieces svg { width: 26px; height: 19px; animation: pop .18s ease-out; }
 .sheet-foot .row button { font-size: 14px; padding: 10px 8px; }
 
 /* Start screen */
@@ -233,7 +233,7 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 .buy .stats { grid-area: stats; margin: 0; }
 .free-badge { opacity: .5; }
 .buy li:first-child { border-top: 0; }
-.buy svg { width: 36px; height: 42px; flex: none; }
+.buy svg { width: 42px; height: 31px; flex: none; }
 .what { display: flex; flex-direction: column; min-width: 0; flex: 1; font-size: 14px; line-height: 1.25; }
 .stepper { display: flex; align-items: center; gap: 4px; }
 .stepper button { width: 38px; height: 38px; padding: 0; font-size: 20px; }

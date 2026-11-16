@@ -168,19 +168,20 @@ export interface Effects {
 
 export const NO_EFFECTS: Effects = { from: new Map(), hits: [] };
 
-/** A piece: flat it lies on the hex; in 2.5D the shield stands upright on its point,
- *  with a shadow, low enough not to hide the hex behind it. */
+/** A piece: flat it lies on the hex; in 2.5D the counter itself stands upright on the hex,
+ *  with a thin edge underneath and a shadow, low enough not to hide the hex behind it. */
 function piece(type: UnitTypeId, owner: Player, hp: number, L: Lens, [sx, sy]: Pt, k: number, cls = ''): string {
   const counter = unitSymbol(type, owner, hp);
-  if (!L.tilt) return `<g transform="translate(${sx} ${sy}) scale(.95)"><g class="${cls}">${counter}</g></g>`;
+  if (!L.tilt) return `<g transform="translate(${sx} ${sy})"><g class="${cls}">${counter}</g></g>`;
   return `<g transform="translate(${sx} ${sy})"><g class="${cls}">
-    <ellipse cx="${5 * k}" cy="${1 * k}" rx="${17 * k}" ry="${5 * k}" fill="#000" opacity=".35"/>
-    <g transform="translate(0 ${-19 * k}) scale(${0.82 * k})">${counter}</g>
+    <ellipse cx="${5 * k}" cy="${1 * k}" rx="${19 * k}" ry="${5.5 * k}" fill="#000" opacity=".35"/>
+    <rect x="${-16.4 * k}" y="${-4 * k}" width="${32.8 * k}" height="${4 * k}" rx="${1.5 * k}" fill="${ARMY_COLOR[owner]}" filter="brightness(.6)" opacity=".9"/>
+    <g transform="translate(0 ${-15.5 * k}) scale(${0.82 * k})">${counter}</g>
   </g></g>`;
 }
 
 /** Height of a piece's middle above its hex, for badges, numbers and arrows. */
-const lift = (L: Lens, k: number) => (L.tilt ? 20 * k : 3);
+const lift = (L: Lens, k: number) => (L.tilt ? 16 * k : 3);
 
 export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_EFFECTS): string {
   const L = lens(v);
