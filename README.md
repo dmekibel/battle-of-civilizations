@@ -53,7 +53,7 @@ Speed ratio heavy infantry : light infantry : heavy cavalry : light cavalry = 1 
 
 **Taking the hex.** When a piece kills an enemy in melee, it steps into that enemy's hex for free. A config switch sets this to *must* (now), *may* (the player chooses, with a **Take the hex** button) or *never*. Archers stay where they are after a kill.
 
-**Archers.** Spend 2 points to shoot an enemy 2 to 3 hexes away for 1 damage. Forest between the archer and the target blocks the shot; the river does not.
+**Archers.** Spend 2 points to shoot an enemy 2 to 6 hexes away for 1 damage. Forest between the archer and the target blocks the shot; the river does not.
 
 **Winning.**
 - Reduce the enemy King to 0 HP, or
@@ -84,7 +84,7 @@ Speed ratio heavy infantry : light infantry : heavy cavalry : light cavalry = 1 
 ## Open design questions (for Dad)
 
 1. **Castle.** What does it do? Defence bonus, slower to enter, holds several pieces, can archers shoot from it, can it be captured?
-2. **Archers.** Can archers fight hand to hand? (Now: no.) Range 2-3 and 1 damage for 2 points: right? Do other pieces, or only forest, block shots? Can they shoot over the river?
+2. **Archers.** Can archers fight hand to hand? (Now: no.) Range 2-6 (David's call) and 1 damage for 2 points: right? Do other pieces, or only forest, block shots? Can they shoot over the river?
 3. **Combat.** Is combat really without dice, or is there a roll? Does attacking cost points, and how many? Can one piece attack several times a turn? Does the defender hit back?
 4. **Army building.** Is 50 points right? Does the King cost anything? Is there a limit per piece type (for example at most 6 cavalry)? How deep is each side’s setup zone (now 5 columns)?
 5. **Cavalry vs infantry speed.** "Cavalry about 3x infantry" vs the default 1 : 2 : 3 : 6. What are the exact numbers?

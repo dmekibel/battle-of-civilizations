@@ -33,6 +33,9 @@ import {
   type AttackPreview,
   type GameState,
   type Hex,
+  type Unit,
+  distance,
+  hasLineOfSight,
   type LogEntry,
   type Player,
   type Result,
@@ -121,6 +124,16 @@ let portrait = isPortrait();
 /** Wide landscape screens get a permanent side panel instead of the ☰ drawer. */
 const isDesktop = () => window.innerWidth >= 1000 && window.innerHeight >= 560 && !isPortrait();
 let desktop = isDesktop();
+/** Desktop side panel shown or tucked away (board full width); remembered per device. */
+const PANEL_KEY = 'boc-panel';
+let panelOpen = (() => {
+  try {
+    return localStorage.getItem(PANEL_KEY) !== 'hidden';
+  } catch {
+    return true;
+  }
+})();
+const withPanel = () => desktop && panelOpen;
 
 /** 2.5D board (tilted, pieces standing) or the flat map; remembered per device. */
 const VIEW_KEY = 'boc-view';
@@ -195,6 +208,7 @@ function overlay(s: GameState): Overlay {
   const mine = own && own.owner === s.current && s.phase === 'act';
   const targets = new Map<string, AttackPreview>();
   if (mine) for (const x of strikeTargets(s, own.id)) if (!targets.has(x.targetId)) targets.set(x.targetId, x.preview);
+  const battle = s.phase === 'act' || s.phase === 'roll';
   return {
     selected,
     reach: mine ? reachable(s, own.id) : new Map(),
@@ -202,7 +216,48 @@ function overlay(s: GameState): Overlay {
     zone: s.phase === 'deploy' ? { owner: s.current, hexes: zoneHexes(s, s.current) } : null,
     // During setup the other side's army stays secret.
     hide: setupPhase(s) ? other(s.current) : null,
+    spent: s.phase === 'act' ? spentUnits(s) : new Set(),
+    trail: battle ? lastEnemyTurn(s) : { moves: [], kills: [] },
+    rings: own && CONFIG.units[own.type].ranged && !setupPhase(s) ? shotZone(s, own) : [],
   };
+}
+
+/** The side to move's pieces with no move and no hit left for the points remaining. */
+function spentUnits(s: GameState): Set<string> {
+  const out = new Set<string>();
+  for (const u of s.units) {
+    if (u.owner !== s.current) continue;
+    if (reachable(s, u.id).size === 0 && strikeTargets(s, u.id).length === 0) out.add(u.id);
+  }
+  return out;
+}
+
+/** Moves and kills from the other side's most recent turn, read from the log. */
+function lastEnemyTurn(s: GameState) {
+  const them = other(s.current);
+  const moves: { from: Hex; to: Hex }[] = [];
+  const kills: Hex[] = [];
+  let i = s.log.length - 1;
+  while (i >= 0 && s.log[i].player === s.current) i--; // skip what this side has done so far
+  for (; i >= 0 && s.log[i].player === them; i--) {
+    const e = s.log[i];
+    if (e.kind === 'move') moves.push({ from: e.from, to: e.to });
+    if ((e.kind === 'attack' || e.kind === 'shoot') && e.killed) kills.push(e.at);
+  }
+  return { moves, kills };
+}
+
+/** Every hex an archer could shoot at from where it stands: in range and not behind forest. */
+function shotZone(s: GameState, u: Unit): Hex[] {
+  const r = CONFIG.units[u.type].ranged!;
+  const out: Hex[] = [];
+  for (let row = 0; row < s.board.length; row++)
+    for (let col = 0; col < s.board[0].length; col++) {
+      const h = { col, row };
+      const d = distance(u.pos, h);
+      if (d >= r.minRange && d <= r.maxRange && hasLineOfSight(s, u.pos, h)) out.push(h);
+    }
+  return out;
 }
 
 function legendList(owner: Player): string {
@@ -479,12 +534,14 @@ function draw() {
       : '';
 
   app.innerHTML = `
-    <div class="screen ${portrait ? 'portrait' : 'landscape'} ${desktop ? 'desktop' : ''} ${s.current}">
+    <div class="screen ${portrait ? 'portrait' : 'landscape'} ${withPanel() ? 'desktop' : desktop ? 'full' : ''} ${s.current}">
       <header class="hud">
         <div class="who"><span class="dot ${s.current}"></span><span>${playerName(lang, s.current)}<small>${battle ? `${t(lang, 'turn')} ${s.turn}` : t(lang, 'setup')}</small></span></div>
         <div class="dice">${battle ? [0, 1, 2].slice(0, CONFIG.dice.count).map((i) => die(faces?.[i] ?? null, rolling)).join('') : ''}</div>
         ${right}
-        ${desktop ? '' : `<button data-act="menu" class="ghost icon" aria-label="${t(lang, 'menu')}">☰</button>`}
+        ${desktop ? `<button data-act="fullscreen" class="ghost icon" title="${t(lang, 'fullscreen')}" aria-label="${t(lang, 'fullscreen')}">⛶</button>
+          <button data-act="panel" class="ghost icon" title="${panelOpen ? t(lang, 'hidePanel') : t(lang, 'showPanel')}" aria-label="${panelOpen ? t(lang, 'hidePanel') : t(lang, 'showPanel')}">${panelOpen ? '⇥' : '⇤'}</button>` : ''}
+        ${withPanel() ? '' : `<button data-act="menu" class="ghost icon" aria-label="${t(lang, 'menu')}">☰</button>`}
       </header>
       <div class="stage-wrap">
         <div class="stage" style="--z:${zoom}">${renderBoard(s, overlay(s), { portrait, tilt }, fx)}</div>
@@ -495,13 +552,13 @@ function draw() {
       </div>
       <p class="info" id="info">${info}</p>
       <footer class="bar">${bar(s)}</footer>
-      ${desktop ? `<aside class="side">${menuBody(s)}</aside>` : ''}
+      ${withPanel() ? `<aside class="side">${menuBody(s)}</aside>` : ''}
     </div>
     ${s.phase === 'draft' && !cover && !choosing ? draftSheet(s) : ''}
     ${cover && s.phase !== 'over' && !choosing ? passScreen(s) : ''}
     ${choosing ? startScreen() : ''}
     ${over}
-    ${menuOpen && !desktop ? menu(s) : ''}`;
+    ${menuOpen && !withPanel() ? menu(s) : ''}`;
   document.documentElement.lang = lang;
   document.title = t(lang, 'title');
   saveGame();
@@ -711,6 +768,19 @@ app.addEventListener('click', (e) => {
       }
       message = null;
       return render();
+    case 'panel':
+      panelOpen = !panelOpen;
+      try {
+        localStorage.setItem(PANEL_KEY, panelOpen ? 'open' : 'hidden');
+      } catch {
+        /* keep the choice for this visit only */
+      }
+      return render();
+    case 'fullscreen':
+      // Real full screen where the browser allows it (not on iPhone Safari).
+      if (document.fullscreenElement) void document.exitFullscreen?.();
+      else void document.documentElement.requestFullscreen?.().catch(() => undefined);
+      return;
     case 'view':
       tilt = !tilt;
       try {
@@ -847,6 +917,8 @@ document.addEventListener('keydown', (e) => {
   }
   if (k === 'enter' || k === 'e') return click(app.querySelector('.cover [data-act="ack"]') ? 'ack' : sess.state.phase === 'deploy' ? 'done' : 'end');
   if (k === 'u') return click('undo');
+  if (k === 'p') return click('panel');
+  if (k === 'f') return click('fullscreen');
   if (k === 't') return click('take');
   if (k === 'a') return click(sess.state.phase === 'deploy' ? 'auto' : '');
   if (k === '+' || k === '=') return click('zoom-in');

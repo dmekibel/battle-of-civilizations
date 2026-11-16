@@ -151,6 +151,12 @@ export interface Overlay {
   zone: { owner: Player; hexes: Hex[] } | null;
   /** Units of this side are hidden (the other player is setting up in secret). */
   hide: Player | null;
+  /** The side to move's pieces that can't do anything more this turn: drawn dimmed. */
+  spent: Set<string>;
+  /** What the other side did on its last turn: moves as arrows, kills as crosses. */
+  trail: { moves: { from: Hex; to: Hex }[]; kills: Hex[] };
+  /** Hexes the selected archer can shoot at (in range and in sight). */
+  rings: Hex[];
 }
 
 /** One-off effects for what just happened: they play once, on the render right after. */
@@ -207,6 +213,26 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
     }
   }
 
+  for (const hex of o.rings) {
+    ground.push(`<polygon points="${corners(hex, v, L, S - 4)}" fill="#a066ff" fill-opacity=".32" stroke="#d4b0ff" stroke-opacity=".8" stroke-width="1.5"/>`);
+  }
+
+  // Last turn's enemy moves: a faint dashed arrow per move, a cross where a piece fell.
+  for (const m of o.trail.moves) {
+    const [ax, ay] = L.pt(...flat(m.from, v));
+    const [bx, by] = L.pt(...flat(m.to, v));
+    const ang = Math.atan2(by - ay, bx - ax);
+    const head = (d: number) => `${(bx - 9 * Math.cos(ang + d)).toFixed(1)},${(by - 9 * Math.sin(ang + d)).toFixed(1)}`;
+    ground.push(
+      `<line x1="${ax.toFixed(1)}" y1="${ay.toFixed(1)}" x2="${bx.toFixed(1)}" y2="${by.toFixed(1)}" class="trail"/>`,
+      `<polygon points="${bx.toFixed(1)},${by.toFixed(1)} ${head(0.45)} ${head(-0.45)}" class="trail-head"/>`,
+    );
+  }
+  for (const h of o.trail.kills) {
+    const [kx, ky] = L.pt(...flat(h, v));
+    ground.push(`<text x="${kx.toFixed(1)}" y="${(ky + 7).toFixed(1)}" class="trail-kill">✕</text>`);
+  }
+
   for (const { hex, cost } of o.reach.values()) {
     const [x, y] = flat(hex, v);
     const [cx, cy] = L.pt(x, y);
@@ -225,7 +251,7 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
     const p = o.targets.get(u.id);
     if (p) ground.push(`<polygon points="${corners(u.pos, v, L, S - 3)}" fill="#e53935" fill-opacity=".2" stroke="#d32f2f" stroke-width="3" stroke-dasharray="6 4"/>`);
     const hit = fx.hits.some((h) => !h.killed && h.at.col === u.pos.col && h.at.row === u.pos.row);
-    let svg = piece(u.type, u.owner, u.hp, L, at, k, hit ? 'hit' : '');
+    let svg = piece(u.type, u.owner, u.hp, L, at, k, [hit ? 'hit' : '', o.spent.has(u.id) ? 'spent' : ''].join(' '));
     const was = fx.from.get(u.id);
     if (was && (was.col !== u.pos.col || was.row !== u.pos.row)) {
       const [px, py] = L.pt(...flat(was, v));

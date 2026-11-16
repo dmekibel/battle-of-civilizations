@@ -241,8 +241,8 @@ describe('melee', () => {
 });
 
 describe('archers', () => {
-  it('shoot at range 2-3 for 1 damage and 2 points', () => {
-    for (const row of [5, 6]) {
+  it('shoot at range 2-6 for 1 damage and 2 points', () => {
+    for (const row of [5, 6, 9]) {
       const s = scenario([['red', 'archer', 3, 3], ['blue', 'heavyInfantry', 3, row]]);
       const a = ok(shoot(s, s.units[0].id, s.units[1].id, OPEN));
       expect(a.points).toBe(16);
@@ -250,8 +250,8 @@ describe('archers', () => {
     }
   });
 
-  it('cannot shoot adjacent or beyond 3 hexes', () => {
-    for (const row of [4, 7]) {
+  it('cannot shoot adjacent or beyond 6 hexes', () => {
+    for (const row of [4, 10]) {
       const s = scenario([['red', 'archer', 3, 3], ['blue', 'heavyInfantry', 3, row]]);
       expect(shoot(s, s.units[0].id, s.units[1].id, OPEN)).toEqual({ ok: false, error: 'outOfRange' });
     }

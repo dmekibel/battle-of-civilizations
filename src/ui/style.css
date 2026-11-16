@@ -65,6 +65,19 @@ body {
   padding: 14px;
 }
 .desktop .hud { padding: 10px 12px 10px 16px; }
+.desktop .hud, .full .hud { flex-wrap: nowrap; }
+.desktop .hud .icon, .full .hud .icon { padding: 6px 8px; }
+/* Desktop with the panel tucked away: the board takes the whole width. */
+.screen.full {
+  grid-template-areas: 'hud hud' 'stage stage' 'info bar';
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 10px 14px;
+}
+.full .info { align-self: stretch; display: flex; align-items: center; }
+.full .bar { flex-direction: row; align-items: stretch; min-width: 320px; }
+.full .bar .row { flex: 1; }
 .desktop .info { min-height: 3.2em; font-size: 14px; }
 .side { grid-area: side; min-height: 0; overflow-y: auto; background: var(--paper); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 14px; overscroll-behavior: contain; }
 .side h3 { margin: 0 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
@@ -97,6 +110,10 @@ body {
 .board .hex { cursor: pointer; }
 .board *:not(.hex) { pointer-events: none; }
 .board .tap, .board .tap * { pointer-events: auto; cursor: pointer; }
+.board .spent { opacity: .45; filter: saturate(.3); }
+.board .trail { stroke: #fff6c8; stroke-width: 3; stroke-dasharray: 7 6; stroke-linecap: round; opacity: .7; }
+.board .trail-head { fill: #fff6c8; opacity: .8; }
+.board .trail-kill { font: 700 20px 'PT Sans', sans-serif; fill: #ff6b5b; stroke: #3a0d08; stroke-width: 3px; paint-order: stroke; text-anchor: middle; opacity: .85; }
 .board .coord { font: 7px 'PT Sans', sans-serif; fill: #2b4220; opacity: .4; text-anchor: middle; }
 .board .cost { font: 700 12px 'PT Sans', sans-serif; fill: #fffbe0; stroke: #2b4220; stroke-width: 2.5px; paint-order: stroke; text-anchor: middle; }
 .board .slide { animation: slide .38s cubic-bezier(.3, .7, .4, 1); }
