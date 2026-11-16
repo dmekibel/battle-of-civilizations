@@ -1438,11 +1438,13 @@ document.addEventListener('keydown', (e) => {
     return click('undo');
   }
   if (e.metaKey || e.ctrlKey || e.altKey) return;
-  if (k === ' ' || k === 'r') {
+  // Space rolls when the dice are waiting, otherwise it ends the turn like Enter.
+  if (k === 'r' || (k === ' ' && sess.state.phase === 'roll' && !app.querySelector('.cover [data-act="ack"]'))) {
     e.preventDefault();
-    return click(app.querySelector('.cover [data-act="ack"]') ? 'ack' : 'roll');
+    return click('roll');
   }
-  if (k === 'enter' || k === 'e') return click(app.querySelector('.cover [data-act="ack"]') ? 'ack' : sess.state.phase === 'deploy' ? 'done' : 'end');
+  if (k === ' ') e.preventDefault();
+  if (k === 'enter' || k === 'e' || k === ' ') return click(app.querySelector('.cover [data-act="ack"]') ? 'ack' : sess.state.phase === 'deploy' ? 'done' : 'end');
   if (k === 'u') return click('undo');
   if (k === 'n' || k === 'tab') {
     e.preventDefault();
