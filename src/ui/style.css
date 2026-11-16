@@ -100,7 +100,11 @@ body {
 .points span { font-size: 10px; color: var(--muted); white-space: nowrap; }
 .points.bump b { animation: bump .35s ease; }
 @keyframes bump { 40% { transform: scale(1.25); color: var(--gold); } }
-.icon { font-size: 20px; padding: 6px 10px; }
+.icon { font-size: 20px; padding: 6px 10px; display: grid; place-items: center; }
+.ic { display: block; flex: none; }
+.withicon { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.who .crest svg { display: block; width: 26px; height: 30px; filter: drop-shadow(0 1px 2px rgba(0,0,0,.5)); }
+.cam button, .zoom button { display: grid; place-items: center; }
 
 .stage-wrap { grid-area: stage; position: relative; min-height: 0; min-width: 0; }
 /* The camera does all moving and zooming, so the stage itself never scrolls. */

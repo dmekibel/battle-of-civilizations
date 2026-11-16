@@ -746,6 +746,19 @@ function menu(s: GameState): string {
   </aside>`;
 }
 
+/** One icon family for the game's buttons: 24-point grid, 2.2 stroke, round ends. */
+const ICON = {
+  undo: '<path d="M9 7L4 12l5 5"/><path d="M4 12h10a5 5 0 0 1 0 10h-3"/>',
+  menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  flip: '<path d="M7 4v16M7 4L3.5 7.5M7 4l3.5 3.5M17 20V4M17 20l-3.5-3.5M17 20l3.5-3.5"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  minus: '<path d="M5 12h14"/>',
+  expand: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+  panel: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M14.5 4.5v15"/>',
+};
+const icon = (name: keyof typeof ICON) =>
+  `<svg class="ic" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[name]}</svg>`;
+
 function bar(s: GameState): string {
   if (aiTurn(s)) return `<div class="row"><p class="thinking">${playerName(lang, s.current)} ${t(lang, 'thinking')}</p></div>`;
   if (s.phase === 'deploy') {
@@ -766,8 +779,8 @@ function bar(s: GameState): string {
       ? `<div class="row"><button data-act="take" class="primary">${t(lang, 'takeHex')}</button></div>`
       : '';
     return `${take}<div class="row">
-      <button data-act="undo" ${canUndo(sess) ? '' : 'disabled'}>↶ ${t(lang, 'undo')}</button>
-      <button data-act="end" class="${s.advance ? '' : 'primary'} ${confirmEnd ? 'warn' : ''}">${confirmEnd ? t(lang, 'endAnyway') : t(lang, 'endTurn')} →</button>
+      <button data-act="undo" class="withicon" ${canUndo(sess) ? '' : 'disabled'}>${icon('undo')}<span>${t(lang, 'undo')}</span></button>
+      <button data-act="end" class="${s.advance ? '' : 'primary'} ${confirmEnd ? 'warn' : ''}">${confirmEnd ? t(lang, 'endAnyway') : t(lang, 'endTurn')}</button>
     </div>`;
   }
   return '';
@@ -900,22 +913,22 @@ function draw() {
   app.innerHTML = `
     <div class="screen ${portrait ? 'portrait' : 'landscape'} ${withPanel() ? 'desktop' : desktop ? 'full' : ''} ${s.current} ${upsideDown() ? 'flipped' : ''}">
       <header class="hud">
-        <div class="who"><span class="dot ${s.current}"></span><span>${playerName(lang, s.current)}<small>${battle ? `${t(lang, 'turn')} ${s.turn}` : t(lang, 'setup')}</small></span></div>
+        <div class="who"><span class="crest">${factionOf(s.current).emblem}</span><span>${playerName(lang, s.current)}<small>${battle ? `${t(lang, 'turn')} ${s.turn}` : t(lang, 'setup')}</small></span></div>
         <div class="dice">${battle ? [0, 1, 2].slice(0, CONFIG.dice.count).map((i) => die(faces?.[i] ?? null, rolling)).join('') : ''}</div>
         ${right}
-        ${desktop ? `<button data-act="fullscreen" class="ghost icon" title="${t(lang, 'fullscreen')}" aria-label="${t(lang, 'fullscreen')}">⛶</button>
-          <button data-act="panel" class="ghost icon" title="${panelOpen ? t(lang, 'hidePanel') : t(lang, 'showPanel')}" aria-label="${panelOpen ? t(lang, 'hidePanel') : t(lang, 'showPanel')}">${panelOpen ? '⇥' : '⇤'}</button>` : ''}
-        ${withPanel() ? '' : `<button data-act="menu" class="ghost icon" aria-label="${t(lang, 'menu')}">☰</button>`}
+        ${desktop ? `<button data-act="fullscreen" class="ghost icon" title="${t(lang, 'fullscreen')}" aria-label="${t(lang, 'fullscreen')}">${icon('expand')}</button>
+          <button data-act="panel" class="ghost icon" title="${panelOpen ? t(lang, 'hidePanel') : t(lang, 'showPanel')}" aria-label="${panelOpen ? t(lang, 'hidePanel') : t(lang, 'showPanel')}">${icon('panel')}</button>` : ''}
+        ${withPanel() ? '' : `<button data-act="menu" class="ghost icon" aria-label="${t(lang, 'menu')}">${icon('menu')}</button>`}
       </header>
       <div class="stage-wrap">
         <div class="stage">${renderBoard(s, overlay(s), view(), fx)}</div>
         <div class="viewcube" title="${t(lang, 'cubeHelp')}" aria-label="${t(lang, 'cubeHelp')}">${viewCube(view())}</div>
         <div class="cam" aria-label="${t(lang, 'camera')}">
-          <button data-act="cam-flip" title="${t(lang, 'camFlip')}" aria-label="${t(lang, 'camFlip')}">⇅</button>
+          <button data-act="cam-flip" title="${t(lang, 'camFlip')}" aria-label="${t(lang, 'camFlip')}">${icon('flip')}</button>
         </div>
         <div class="zoom">
-          <button data-act="zoom-in" aria-label="Zoom in" ${cam.zoom >= ZOOM_MAX - 0.01 ? 'disabled' : ''}>+</button>
-          <button data-act="zoom-out" aria-label="Zoom out" ${cam.zoom <= ZOOM_MIN + 0.01 ? 'disabled' : ''}>−</button>
+          <button data-act="zoom-in" aria-label="Zoom in" ${cam.zoom >= ZOOM_MAX - 0.01 ? 'disabled' : ''}>${icon('plus')}</button>
+          <button data-act="zoom-out" aria-label="Zoom out" ${cam.zoom <= ZOOM_MIN + 0.01 ? 'disabled' : ''}>${icon('minus')}</button>
         </div>
       </div>
       <p class="info" id="info">${info}</p>
