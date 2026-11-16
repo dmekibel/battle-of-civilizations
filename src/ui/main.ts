@@ -289,7 +289,10 @@ function draftSheet(s: GameState): string {
 }
 
 function startScreen(): string {
+  const pick = (l: Lang, label: string) =>
+    `<button data-act="set-lang" data-lang="${l}" class="${lang === l ? 'on' : ''}" aria-pressed="${lang === l}">${label}</button>`;
   return `<div class="cover"><div class="card start">
+    <div class="langs">${pick('en', 'English')}${pick('ru', 'Русский')}</div>
     <div class="emblem">${EMBLEM.red}${EMBLEM.blue}</div>
     <h2>${t(lang, 'title')}</h2>
     <p>${t(lang, 'chooseMode')}</p>
@@ -665,8 +668,9 @@ app.addEventListener('click', (e) => {
     case 'menu':
       menuOpen = !menuOpen;
       return render();
+    case 'set-lang':
     case 'lang':
-      lang = lang === 'ru' ? 'en' : 'ru';
+      lang = act === 'set-lang' ? (btn!.getAttribute('data-lang') === 'ru' ? 'ru' : 'en') : lang === 'ru' ? 'en' : 'ru';
       try {
         localStorage.setItem(LANG_KEY, lang);
       } catch {
