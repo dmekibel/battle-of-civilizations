@@ -78,6 +78,7 @@ Speed ratio heavy infantry : light infantry : heavy cavalry : light cavalry = 1 
 - **Undo** steps back within the current turn (never re-rolls the dice).
 - **End turn** passes the screen to the other player.
 - **On a computer** (wide screen): the pieces list, log and settings stay open in a side panel. Keys: Space roll, Enter end turn, U or Ctrl+Z undo, + / − zoom, Esc deselect. Drag the map with the mouse; a trackpad pinch zooms it.
+- **2.5D view** (default): the board tilts back like a table and the pieces, trees and bridges stand up. Switch to the flat map in the menu (🗺 View).
 - The log lists every roll, move and hit. **EN / RU** switches the language (in the menu ☰).
 
 ## Open design questions (for Dad)

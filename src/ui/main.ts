@@ -121,6 +121,16 @@ let portrait = isPortrait();
 /** Wide landscape screens get a permanent side panel instead of the ☰ drawer. */
 const isDesktop = () => window.innerWidth >= 1000 && window.innerHeight >= 560 && !isPortrait();
 let desktop = isDesktop();
+
+/** 2.5D board (tilted, pieces standing) or the flat map; remembered per device. */
+const VIEW_KEY = 'boc-view';
+let tilt = (() => {
+  try {
+    return localStorage.getItem(VIEW_KEY) !== 'flat';
+  } catch {
+    return true;
+  }
+})();
 /** Steps for the + / − buttons; pinching can stop anywhere between the first and last. */
 const ZOOMS = [1, 1.6, 2.4, 3.2];
 const [ZOOM_MIN, ZOOM_MAX] = [ZOOMS[0], ZOOMS[ZOOMS.length - 1]];
@@ -334,6 +344,7 @@ function menuBody(s: GameState): string {
     .join('');
   return `<div class="drawer-buttons">
       <button data-act="lang">${t(lang, 'language')}</button>
+      <button data-act="view">${tilt ? t(lang, 'viewTilt') : t(lang, 'viewFlat')}</button>
       <button data-act="mute">${isMuted() ? t(lang, 'soundOff') : t(lang, 'soundOn')}</button>
       <button data-act="quick">${t(lang, 'quick')}</button>
       <button data-act="new">${confirmNew ? t(lang, 'confirmNew') : t(lang, 'newGame')}</button>
@@ -476,7 +487,7 @@ function draw() {
         ${desktop ? '' : `<button data-act="menu" class="ghost icon" aria-label="${t(lang, 'menu')}">☰</button>`}
       </header>
       <div class="stage-wrap">
-        <div class="stage" style="--z:${zoom}">${renderBoard(s, overlay(s), { portrait }, fx)}</div>
+        <div class="stage" style="--z:${zoom}">${renderBoard(s, overlay(s), { portrait, tilt }, fx)}</div>
         <div class="zoom">
           <button data-act="zoom-in" aria-label="Zoom in" ${zoom >= ZOOM_MAX - 0.01 ? 'disabled' : ''}>+</button>
           <button data-act="zoom-out" aria-label="Zoom out" ${zoom <= ZOOM_MIN + 0.01 ? 'disabled' : ''}>−</button>
@@ -699,6 +710,14 @@ app.addEventListener('click', (e) => {
         /* storage unavailable: keep the choice for this visit only */
       }
       message = null;
+      return render();
+    case 'view':
+      tilt = !tilt;
+      try {
+        localStorage.setItem(VIEW_KEY, tilt ? 'tilt' : 'flat');
+      } catch {
+        /* keep the choice for this visit only */
+      }
       return render();
     case 'mute':
       toggleMute();
