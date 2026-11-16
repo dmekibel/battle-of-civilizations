@@ -33,8 +33,8 @@ function art(id: ArtId, ink: string): string {
       // A short double-barrelled shotgun.
       return `<path d="M-6 -1L14 -7M-6 2.5L14 -3.5" stroke="${ink}" stroke-width="1.8" stroke-linecap="round"/><path d="M-6 -2L-4 3L-13 10L-15 6Z" fill="${ink}"/>`;
     case 'saber':
-      // A cavalry trooper: horse with a raised, curved saber.
-      return `${HORSE(ink, -5)}<path d="M5 -9Q12 -12 16 -17" fill="none" stroke="${ink}" stroke-width="2" stroke-linecap="round"/><path d="M3 -7L7 -11" stroke="${ink}" stroke-width="2.4" stroke-linecap="round"/>`;
+      // A cavalry trooper: horse with an upright, curved saber beside it.
+      return `${HORSE(ink, -7)}<path d="M13 8Q17 -3 12 -13" fill="none" stroke="${ink}" stroke-width="2.2" stroke-linecap="round"/><path d="M10 6.5L17 8.5M13.5 8L12.5 12" stroke="${ink}" stroke-width="2" stroke-linecap="round"/>`;
     case 'lancer':
       // A rider with a long lance (Comanche mounted warriors).
       return picture('heavyCavalry', ink);
@@ -69,8 +69,8 @@ function picture(type: UnitTypeId, ink: string): string {
       // A long rifle with its stock.
       return `<path d="M-14 6L12 -6" stroke="${ink}" stroke-width="2.6" stroke-linecap="round"/><path d="M-15 2L-8 2L-6 8L-14 11Z" fill="${ink}"/><path d="M12 -6L15 -7" stroke="${ink}" stroke-width="1.6"/>`;
     case 'cowboy':
-      // A horse with a wide-brimmed hat above it.
-      return `${HORSE(ink, -4)}<path d="M2 -12Q8 -12 14 -14M5 -13Q6 -19 10 -18Q11 -15 11 -13" fill="none" stroke="${ink}" stroke-width="1.8" stroke-linecap="round"/>`;
+      // A horse with a lasso loop beside it.
+      return `${HORSE(ink, -7)}<ellipse cx="13" cy="-5" rx="4.6" ry="6.5" fill="none" stroke="${ink}" stroke-width="2"/><path d="M12 1.5Q11 8 15 12" fill="none" stroke="${ink}" stroke-width="1.8" stroke-linecap="round"/>`;
     case 'samurai':
       // A katana: a long, slightly curved blade with a round guard.
       return `<path d="M-11 10Q1 4 12 -11" fill="none" stroke="${ink}" stroke-width="2.4" stroke-linecap="round"/><circle cx="-5" cy="6.3" r="2.6" fill="none" stroke="${ink}" stroke-width="1.8"/>`;

@@ -59,7 +59,7 @@ export const FACTIONS: Record<FactionId, Faction> = {
     text: '#c7a6ef',
     roster: ['ashigaru', 'samurai', 'archer', 'lightCavalry', 'heavyCavalry'],
     blurb: { en: 'Samurai who hit hard, and cheap ashigaru spearmen that stop cavalry.', ru: 'Самураи бьют сильно, дешёвые асигару с копьями останавливают конницу.' },
-    emblem: shield('#f4f1e8', '#5b2a86', '<circle cx="30" cy="31" r="15" fill="none" stroke="#5b2a86" stroke-width="3"/><circle cx="30" cy="23" r="4" fill="#5b2a86"/><circle cx="23" cy="35" r="4" fill="#5b2a86"/><circle cx="37" cy="35" r="4" fill="#5b2a86"/>'),
+    emblem: shield('#f4f1e8', '#5b2a86', '<path d="M30 30L16 9H21L30 23L39 9H44Z" fill="#e1b12c" stroke="#8a6410" stroke-width="1" stroke-linejoin="round"/><path d="M19 38Q19 25 30 25Q41 25 41 38Z" fill="#5b2a86"/><path d="M13 38H47L42 52H18Z" fill="#5b2a86"/><path d="M15.5 43H44.5M17 47.5H43" stroke="#f4f1e8" stroke-width="1.4"/><circle cx="30" cy="31" r="2.6" fill="#e1b12c"/>'),
   },
   frontier: {
     name: { en: 'Cowboys', ru: 'Ковбои' },
@@ -81,7 +81,7 @@ export const FACTIONS: Record<FactionId, Faction> = {
     text: '#7fd6d0',
     roster: ['lightInfantry', 'archer', 'lightCavalry', 'horseArcher'],
     blurb: { en: 'Lords of the Southern Plains, the finest riders of the West: fast mounted warriors and archers, no heavy troops.', ru: 'Хозяева южных равнин, лучшие всадники Запада: быстрые конные воины и лучники, без тяжёлых войск.' },
-    emblem: shield('#1f8a8a', '#e9e4d6', '<path transform="translate(27 37) scale(1.55)" d="M-7 12L-7 3C-7 -5 -2 -10 4 -10L6 -13L7.5 -9C11 -7 13 -3 13 1L13 3L9 4L5 1L3 3L3 12Z" fill="#e9e4d6"/><path d="M36 20Q34 10 42 4Q44 13 36 20Z" fill="#e1b12c"/>'),
+    emblem: shield('#1f8a8a', '#e9e4d6', '<g transform="rotate(-48 30 48)"><path d="M30 48Q24.5 31 30 12Q35.5 31 30 48Z" fill="#f4f1e8"/><path d="M30 12Q27.8 16.5 30 21Q32.2 16.5 30 12Z" fill="#1b1b1d"/></g><g transform="rotate(-24 30 48)"><path d="M30 48Q24.5 31 30 12Q35.5 31 30 48Z" fill="#f4f1e8"/><path d="M30 12Q27.8 16.5 30 21Q32.2 16.5 30 12Z" fill="#1b1b1d"/></g><g transform="rotate(0 30 48)"><path d="M30 48Q24.5 31 30 12Q35.5 31 30 48Z" fill="#f4f1e8"/><path d="M30 12Q27.8 16.5 30 21Q32.2 16.5 30 12Z" fill="#1b1b1d"/></g><g transform="rotate(24 30 48)"><path d="M30 48Q24.5 31 30 12Q35.5 31 30 48Z" fill="#f4f1e8"/><path d="M30 12Q27.8 16.5 30 21Q32.2 16.5 30 12Z" fill="#1b1b1d"/></g><g transform="rotate(48 30 48)"><path d="M30 48Q24.5 31 30 12Q35.5 31 30 48Z" fill="#f4f1e8"/><path d="M30 12Q27.8 16.5 30 21Q32.2 16.5 30 12Z" fill="#1b1b1d"/></g><path d="M17 44H43V50H17Z" fill="#e1b12c"/><path d="M21 47H23M27 47H29M31 47H33M37 47H39" stroke="#a8201a" stroke-width="2"/>'),
     names: {
       king: { en: 'Chief', ru: 'Вождь' },
       lightInfantry: { en: 'Warriors', ru: 'Воины' },
