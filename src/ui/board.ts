@@ -33,6 +33,8 @@ export interface View {
   /** Size of the drawing area in screen pixels; the picture fills it exactly. */
   vw: number;
   vh: number;
+  /** Pieces drawn turned round, for a player sitting across the table. */
+  upsideDown?: boolean;
 }
 
 type Pt = [number, number];
@@ -50,10 +52,14 @@ interface Lens {
   width: number;
   height: number;
   tilt: boolean;
+  flip: boolean;
 }
 
 /** Flat map size for this orientation (portrait turns the map 90°). */
 export const mapSize = (portrait: boolean): Pt => (portrait ? [H, W] : [W, H]);
+
+/** Camera tilt: 0° looks straight down, up to 76° looks almost across the table. */
+const tiltAngle = (v: View) => (v.tilt ? (76 * v.cam.pitch * Math.PI) / 180 : 0);
 
 function lens(v: View): Lens {
   const [fw, fh] = mapSize(v.portrait);
@@ -61,10 +67,7 @@ function lens(v: View): Lens {
   const tx = v.cam.x ?? fw / 2;
   const ty = v.cam.y ?? fh / 2;
   const [cos, sin] = [Math.cos(v.cam.yaw), Math.sin(v.cam.yaw)];
-  // A tall phone screen gets a gentler tilt so the board still fills it.
-  const pitch = v.portrait ? v.cam.pitch * 0.5 : v.cam.pitch;
-  // Tilt from 22° (almost top-down) to 64° (looking across the table); flat view looks straight down.
-  const angle = v.tilt ? ((22 + 42 * pitch) * Math.PI) / 180 : 0;
+  const angle = tiltAngle(v);
   const [cosA, sinA] = [Math.cos(angle), Math.sin(angle)];
   const dist = radius * 2.4; // camera distance: closer = stronger perspective
   // At zoom 1 the whole board fits the screen; the fit doesn't change as the camera turns or tilts.
@@ -97,6 +100,7 @@ function lens(v: View): Lens {
     width: v.vw,
     height: v.vh,
     tilt: v.tilt,
+    flip: !!v.upsideDown,
   };
 }
 
@@ -230,7 +234,7 @@ export const NO_EFFECTS: Effects = { from: new Map(), hits: [] };
  *  with a thin edge underneath and a shadow, low enough not to hide the hex behind it. */
 function piece(type: UnitTypeId, owner: Player, hp: number, L: Lens, [sx, sy]: Pt, k: number, cls = ''): string {
   const counter = unitSymbol(type, owner, hp);
-  if (!L.tilt) return `<g transform="translate(${sx} ${sy}) scale(${k.toFixed(3)})"><g class="${cls}">${counter}</g></g>`;
+  if (!L.tilt) return `<g transform="translate(${sx} ${sy}) scale(${k.toFixed(3)})${L.flip ? ' rotate(180)' : ''}"><g class="${cls}">${counter}</g></g>`;
   return `<g transform="translate(${sx} ${sy})"><g class="${cls}">
     <ellipse cx="${5 * k}" cy="${1 * k}" rx="${19 * k}" ry="${5.5 * k}" fill="#000" opacity=".35"/>
     <rect x="${-16.4 * k}" y="${-4 * k}" width="${32.8 * k}" height="${4 * k}" rx="${1.5 * k}" fill="${ARMY_COLOR[owner]}" filter="brightness(.6)" opacity=".9"/>
@@ -342,4 +346,43 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
   standing.sort((a, b) => a.depth - b.depth);
   const body = ground.join('') + standing.map((x) => x.svg).join('') + top.join('');
   return `<svg class="board ${L.tilt ? 'tilted' : ''}" viewBox="0 0 ${L.width.toFixed(0)} ${L.height.toFixed(0)}" role="img">${body}</svg>`;
+}
+
+/** A small orientation cube, like a 3D program's view cube: it turns and tilts with the camera.
+ *  The top is grass; the side towards Novgorod is crimson, towards the Teutonic Order black. */
+export function viewCube(v: View, size = 64): string {
+  const angle = tiltAngle(v);
+  const [cosA, sinA] = [Math.cos(angle), Math.sin(angle)];
+  const [cos, sin] = [Math.cos(v.cam.yaw), Math.sin(v.cam.yaw)];
+  // Directions on the flat map towards each army (portrait turns the map).
+  const toRed: Pt = v.portrait ? [0, 1] : [-1, 0];
+  const turn = ([x, y]: Pt): Pt => [x * cos - y * sin, x * sin + y * cos];
+  const proj = (x: number, y: number, z: number): Pt => {
+    const [rx, ry] = turn([x, y]);
+    return [size / 2 + rx * size * 0.26, size / 2 + (ry * cosA - z * sinA) * size * 0.26];
+  };
+  const h = 1;
+  const faces: { n: [number, number, number]; pts: [number, number, number][]; fill: string }[] = [
+    { n: [0, 0, 1], pts: [[-h, -h, h], [h, -h, h], [h, h, h], [-h, h, h]], fill: '#7fa35a' },
+  ];
+  // Four sides: one per map direction.
+  const sides: [Pt, string][] = [[toRed, '#a8201a'], [[-toRed[0], -toRed[1]], '#1b1b1d'], [[toRed[1], -toRed[0]], '#5d5446'], [[-toRed[1], toRed[0]], '#5d5446']];
+  for (const [[nx, ny], fill] of sides) {
+    const [px, py] = [-ny, nx]; // along the face
+    faces.push({
+      n: [nx, ny, 0],
+      fill,
+      pts: [[nx - px, ny - py, h], [nx + px, ny + py, h], [nx + px, ny + py, -h], [nx - px, ny - py, -h]].map(([x, y, z]) => [x, y, z]) as [number, number, number][],
+    });
+  }
+  // Show faces that look towards the camera, farthest first.
+  const toCamera = (n: [number, number, number]) => {
+    const [, ry] = turn([n[0], n[1]]);
+    return ry * sinA + n[2] * cosA;
+  };
+  const shown = faces.filter((f) => toCamera(f.n) > 0.01).sort((a, b) => toCamera(a.n) - toCamera(b.n));
+  const polys = shown
+    .map((f) => `<polygon points="${f.pts.map(([x, y, z]) => fmt(proj(x, y, z))).join(' ')}" fill="${f.fill}" stroke="#f1e8d2" stroke-opacity=".55" stroke-width="1.2" stroke-linejoin="round"/>`)
+    .join('');
+  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" aria-hidden="true">${polys}</svg>`;
 }

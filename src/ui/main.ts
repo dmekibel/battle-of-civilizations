@@ -41,7 +41,7 @@ import {
   type Result,
   type Session,
 } from '../engine';
-import { NO_EFFECTS, hexOnMap, mapSize, renderBoard, screenToGround, type Camera, type Effects, type Overlay } from './board';
+import { NO_EFFECTS, hexOnMap, mapSize, renderBoard, screenToGround, viewCube, type Camera, type Effects, type Overlay } from './board';
 import { errorText, logText, playerName, reasonText, t, unitName, type Lang } from './i18n';
 import { EMBLEM, unitIcon } from './symbols';
 import { isMuted, sound, toggleMute } from './sound';
@@ -139,7 +139,7 @@ const withPanel = () => desktop && panelOpen;
 
 /** Camera: how far the board is turned (yaw, radians) and tilted (pitch 0..1); remembered per device. */
 const CAM_KEY = 'boc-cam';
-const CAM_DEFAULT: Camera = { yaw: 0, pitch: 0.75, zoom: 1, x: null, y: null };
+const CAM_DEFAULT: Camera = { yaw: 0, pitch: 0.6, zoom: 1, x: null, y: null };
 let cam: Camera = (() => {
   try {
     const c = JSON.parse(localStorage.getItem(CAM_KEY) ?? 'null');
@@ -166,19 +166,29 @@ function yawFor(p: Player): number {
   return p === 'red' ? novgorodBottom : novgorodBottom + Math.PI;
 }
 
-/** Optional: in a two-player game, turn the board to face whoever's turn it is. */
-const FACE_KEY = 'boc-face';
-let faceTurn = (() => {
+/** Two players on one device:
+ *  'pass'   = they hand it over; the board turns to face whoever's turn it is.
+ *  'across' = it lies flat between them; the board stays put, seen from straight above, and on
+ *             the far player's turn the pieces and buttons turn upside down to face them. */
+type Table = 'pass' | 'across';
+const TABLE_KEY = 'boc-table';
+let table: Table = (() => {
   try {
-    return localStorage.getItem(FACE_KEY) === '1';
+    return localStorage.getItem(TABLE_KEY) === 'across' ? 'across' : 'pass';
   } catch {
-    return false;
+    return 'pass';
   }
 })();
 let facedFor: Player | null = null;
+const acrossTable = () => mode === 'pvp' && table === 'across';
+/** Across the table, the far player (Teutonic Order, sitting opposite) reads everything turned round. */
+const upsideDown = () => acrossTable() && sess.state.current === 'blue';
 /** The drawing area's size in pixels: the board picture is drawn to fill it exactly. */
 let stageSize: [number, number] = [window.innerWidth, Math.max(300, window.innerHeight * 0.7)];
-const view = () => ({ portrait, tilt, cam, vw: stageSize[0], vh: stageSize[1] });
+const view = () =>
+  acrossTable()
+    ? { portrait, tilt: false, cam: { ...cam, yaw: yawFor('red') }, vw: stageSize[0], vh: stageSize[1], upsideDown: upsideDown() }
+    : { portrait, tilt, cam, vw: stageSize[0], vh: stageSize[1] };
 
 /** 2.5D board (tilted, pieces standing) or the flat map; remembered per device. */
 const VIEW_KEY = 'boc-view';
@@ -444,7 +454,7 @@ function menuBody(s: GameState): string {
       <button data-act="lang">${t(lang, 'language')}</button>
       <button data-act="view">${tilt ? t(lang, 'viewTilt') : t(lang, 'viewFlat')}</button>
       <button data-act="cam-reset">${t(lang, 'camResetMenu')}</button>
-      ${mode === 'pvp' ? `<button data-act="face">${faceTurn ? t(lang, 'faceOn') : t(lang, 'faceOff')}</button>` : ''}
+      ${mode === 'pvp' ? `<button data-act="table">${table === 'pass' ? t(lang, 'tablePass') : t(lang, 'tableAcross')}</button>` : ''}
       <button data-act="mute">${isMuted() ? t(lang, 'soundOff') : t(lang, 'soundOn')}</button>
       <button data-act="quick">${t(lang, 'quick')}</button>
       <button data-act="new">${confirmNew ? t(lang, 'confirmNew') : t(lang, 'newGame')}</button>
@@ -568,8 +578,8 @@ function draw() {
     drawnPortrait = isPortrait();
     cam = { ...cam, x: null, y: null };
   }
-  // Two players with "face the player" on: swing the board round when the turn changes hands.
-  if (faceTurn && mode === 'pvp' && !setupPhase(s) && facedFor !== s.current) {
+  // Two players passing the phone: swing the board round when the turn changes hands.
+  if (mode === 'pvp' && table === 'pass' && !setupPhase(s) && facedFor !== s.current) {
     facedFor = s.current;
     cam = { ...cam, yaw: yawFor(s.current) };
     saveCam();
@@ -608,7 +618,7 @@ function draw() {
       : '';
 
   app.innerHTML = `
-    <div class="screen ${portrait ? 'portrait' : 'landscape'} ${withPanel() ? 'desktop' : desktop ? 'full' : ''} ${s.current}">
+    <div class="screen ${portrait ? 'portrait' : 'landscape'} ${withPanel() ? 'desktop' : desktop ? 'full' : ''} ${s.current} ${upsideDown() ? 'flipped' : ''}">
       <header class="hud">
         <div class="who"><span class="dot ${s.current}"></span><span>${playerName(lang, s.current)}<small>${battle ? `${t(lang, 'turn')} ${s.turn}` : t(lang, 'setup')}</small></span></div>
         <div class="dice">${battle ? [0, 1, 2].slice(0, CONFIG.dice.count).map((i) => die(faces?.[i] ?? null, rolling)).join('') : ''}</div>
@@ -619,8 +629,9 @@ function draw() {
       </header>
       <div class="stage-wrap">
         <div class="stage">${renderBoard(s, overlay(s), view(), fx)}</div>
+        <div class="viewcube" title="${t(lang, 'cubeHelp')}" aria-label="${t(lang, 'cubeHelp')}">${viewCube(view())}</div>
         <div class="cam" aria-label="${t(lang, 'camera')}">
-          <button data-act="cam-mine" title="${t(lang, 'camMine')}" aria-label="${t(lang, 'camMine')}">⬇</button>
+          <button data-act="cam-flip" title="${t(lang, 'camFlip')}" aria-label="${t(lang, 'camFlip')}">⇅</button>
         </div>
         <div class="zoom">
           <button data-act="zoom-in" aria-label="Zoom in" ${cam.zoom >= ZOOM_MAX - 0.01 ? 'disabled' : ''}>+</button>
@@ -636,6 +647,7 @@ function draw() {
     ${choosing ? startScreen() : ''}
     ${over}
     ${menuOpen && !withPanel() ? menu(s) : ''}`;
+  app.classList.toggle('upside', upsideDown());
   document.documentElement.lang = lang;
   document.title = t(lang, 'title');
   saveGame();
@@ -874,17 +886,15 @@ app.addEventListener('click', (e) => {
       selected = null;
       return void run((st) => endTurn(st), true);
     }
-    case 'cam-mine': {
-      // Your army at the bottom; against the computer "you" are always Novgorod.
-      const me = mode === 'ai' ? 'red' : sess.state.current;
-      cam = { ...cam, yaw: yawFor(me) };
+    case 'cam-flip':
+      // Turn the board half way round; press again to turn it back.
+      cam = { ...cam, yaw: cam.yaw + Math.PI };
       saveCam();
       return render();
-    }
-    case 'face':
-      faceTurn = !faceTurn;
+    case 'table':
+      table = table === 'pass' ? 'across' : 'pass';
       try {
-        localStorage.setItem(FACE_KEY, faceTurn ? '1' : '0');
+        localStorage.setItem(TABLE_KEY, table);
       } catch {
         /* keep the choice for this visit only */
       }
@@ -998,6 +1008,8 @@ function camFrame() {
     const old = st.querySelector('svg.board.live');
     if (old) old.replaceWith(live);
     else st.append(live);
+    const cube = app.querySelector('.viewcube');
+    if (cube) cube.innerHTML = viewCube(view());
   });
 }
 function camDone() {
@@ -1071,15 +1083,24 @@ app.addEventListener(
       if (turn < -Math.PI) turn += 2 * Math.PI;
       const [mx, my] = middle(e.touches);
       const slide = my - touch.midY;
-      if (Math.abs(ratio - 1) > 0.04) touch.live.add('zoom');
-      if (Math.abs(turn) > 0.08) touch.live.add('turn');
-      if (Math.abs(slide) > 14 && !touch.live.has('zoom')) touch.live.add('tilt');
+      // Decide once what the two fingers are doing: sliding together up or down tilts;
+      // spreading zooms; twisting turns (zoom and turn can mix, tilt stays on its own).
+      if (!touch.live.size) {
+        if (Math.abs(slide) > 12 && Math.abs(ratio - 1) < 0.1 && Math.abs(turn) < 0.12) touch.live.add('tilt');
+        else {
+          if (Math.abs(ratio - 1) > 0.05) touch.live.add('zoom');
+          if (Math.abs(turn) > 0.1) touch.live.add('turn');
+        }
+      } else if (!touch.live.has('tilt')) {
+        if (Math.abs(ratio - 1) > 0.05) touch.live.add('zoom');
+        if (Math.abs(turn) > 0.1) touch.live.add('turn');
+      }
       if (touch.live.has('zoom')) {
         const [px, py] = stagePoint(mx, my);
         zoomAt((touch.zoom * ratio) / cam.zoom, px, py);
       }
       if (touch.live.has('turn')) cam = { ...cam, yaw: touch.yaw + turn };
-      if (touch.live.has('tilt') && tilt) cam = { ...cam, pitch: clampPitch(touch.pitch - slide * 0.004) };
+      if (touch.live.has('tilt') && tilt) cam = { ...cam, pitch: clampPitch(touch.pitch - slide * 0.005) };
       return camFrame();
     }
   },
@@ -1217,7 +1238,7 @@ document.addEventListener('keydown', (e) => {
     saveCam();
     return render();
   }
-  if (k === 'v') return click('cam-mine');
+  if (k === 'v') return click('cam-flip');
   if (k === 'f') return click('fullscreen');
   if (k === 't') return click('take');
   if (k === 'a') return click(sess.state.phase === 'deploy' ? 'auto' : '');
@@ -1237,6 +1258,37 @@ document.addEventListener('keydown', (e) => {
     return render();
   }
 });
+
+// ---------- view cube ----------
+// Dragging the little cube in the corner orbits and tilts the camera, like Option + drag.
+let cubeDrag: { x: number; y: number; yaw: number; pitch: number; id: number } | null = null;
+app.addEventListener('pointerdown', (e) => {
+  const cube = (e.target as Element).closest<HTMLElement>('.viewcube');
+  if (!cube) return;
+  e.preventDefault();
+  try {
+    cube.setPointerCapture(e.pointerId);
+  } catch {
+    /* keep going without capture */
+  }
+  cubeDrag = { x: e.clientX, y: e.clientY, yaw: cam.yaw, pitch: cam.pitch, id: e.pointerId };
+});
+app.addEventListener('pointermove', (e) => {
+  if (!cubeDrag || e.pointerId !== cubeDrag.id) return;
+  cam = {
+    ...cam,
+    yaw: cubeDrag.yaw + (e.clientX - cubeDrag.x) * 0.012,
+    pitch: tilt ? clampPitch(cubeDrag.pitch + (e.clientY - cubeDrag.y) * 0.006) : cam.pitch,
+  };
+  camFrame();
+});
+const endCube = (e: PointerEvent) => {
+  if (!cubeDrag || e.pointerId !== cubeDrag.id) return;
+  cubeDrag = null;
+  camDone();
+};
+app.addEventListener('pointerup', endCube);
+app.addEventListener('pointercancel', endCube);
 
 window.addEventListener('resize', () => {
   if (isDesktop() !== desktop && !rolling) return render();

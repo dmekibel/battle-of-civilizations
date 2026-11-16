@@ -78,7 +78,8 @@ Speed ratio heavy infantry : light infantry : heavy cavalry : light cavalry = 1 
 - **Undo** steps back within the current turn (never re-rolls the dice).
 - The dice roll by themselves at the start of each turn.
 - When you have no points left (or none your pieces can use), the turn ends by itself after a moment; Undo in that moment cancels it.
-- **⬇** puts your army at the bottom of the screen. In a two-player game, **🔄 Face the player** (menu) turns the board to whoever's turn it is.
+- **⇅** flips the board half way round (press again to flip back). The **view cube** in the top-left corner orbits and tilts the camera when dragged.
+- **Two players on one phone** (menu): *pass the phone* turns the board to whoever's turn it is; *across the table* keeps the board still and seen from above, and turns the pieces and buttons round on the far player's turn.
 - **End turn** passes the screen to the other player. With points still usable, the first press warns and the button turns into **End anyway**.
 - **On a computer** (wide screen): the pieces list, log and settings stay open in a side panel. Keys: Space roll, Enter end turn, U or Ctrl+Z undo, + / − zoom, Esc deselect. Drag the map with the mouse; a trackpad pinch zooms it.
 - **Camera** (a real 3D perspective camera, like a 3D program or a maps app): it looks at a point on the board and orbits around it. Phone: one finger drags the ground, pinch zooms, twist two fingers to orbit, slide two fingers up or down to tilt. Trackpad: two-finger swipe moves, pinch zooms, Option + swipe tilts and orbits, Safari's two-finger twist orbits. Mouse: drag moves, right-drag (or Shift + drag) orbits and tilts, the wheel zooms. Keys: arrows move, + / − zoom, Q / W orbit, Z / X tilt, V puts your army at the bottom, C resets. The ⬇ button puts your army at the bottom. Pieces always face you.

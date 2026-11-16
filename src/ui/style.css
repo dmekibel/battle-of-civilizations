@@ -109,6 +109,9 @@ body {
 /* During a camera move: the board the finger first touched stays (invisible) under the live one. */
 .board.anchor { position: absolute; inset: 0; opacity: 0; }
 .board.live { position: absolute; inset: 0; pointer-events: none; }
+.viewcube { position: absolute; top: 6px; left: 6px; width: 64px; height: 64px; border-radius: 12px; background: rgba(31, 27, 21, .55); cursor: grab; touch-action: none; z-index: 2; }
+.viewcube:active { cursor: grabbing; }
+.viewcube svg { display: block; pointer-events: none; }
 .cam { position: absolute; left: 6px; bottom: 6px; display: flex; gap: 6px; flex-wrap: wrap; max-width: calc(100% - 70px); }
 .cam button { width: 40px; height: 40px; padding: 0; font-size: 19px; line-height: 1; border-radius: 50%; background: rgba(43, 38, 30, .92); color: var(--ink); border-color: var(--line); box-shadow: 0 2px 6px rgba(0, 0, 0, .4); }
 .zoom { position: absolute; right: 6px; bottom: 6px; display: flex; flex-direction: column; gap: 6px; }
@@ -289,3 +292,9 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) {
   .die.spin, .points.bump b, .board .slide, .board .hit, .army-pieces svg, .thinking { animation: none; }
 }
+
+/* Across the table: on the far player's turn the whole screen turns round for them,
+   except the board itself, which stays where it lies (its pieces turn instead). */
+.screen.flipped { transform: rotate(180deg); }
+.screen.flipped .stage { transform: rotate(180deg); }
+#app.upside .cover, #app.upside .sheet, #app.upside .drawer, #app.upside .drawer-bg { transform: rotate(180deg); }
