@@ -31,6 +31,8 @@ export type LogEntry =
       target: UnitTypeId;
       damage: number;
       killed: boolean;
+      /** The attacker stepped into the dead piece's hex. */
+      advanced?: boolean;
       cost: number;
     }
   | { kind: 'endTurn'; turn: number; player: Player }
@@ -51,6 +53,8 @@ export interface GameState {
   points: number;
   winner: Player | null;
   winReason: WinReason | null;
+  /** Set right after a melee kill when advancing is optional: who may step where. */
+  advance: { unitId: string; to: Hex } | null;
   log: LogEntry[];
 }
 
@@ -75,6 +79,7 @@ export type ErrorCode =
   | 'outsideZone'
   | 'blocked'
   | 'occupied'
-  | 'reserveNotEmpty';
+  | 'reserveNotEmpty'
+  | 'nothingToTake';
 
 export type Result = { ok: true; state: GameState } | { ok: false; error: ErrorCode };

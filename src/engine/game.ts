@@ -42,6 +42,7 @@ export function newGame(cfg: GameConfig = CONFIG): GameState {
     points: 0,
     winner: null,
     winReason: null,
+    advance: null,
     log: [],
   };
 }
@@ -221,7 +222,7 @@ export function moveUnit(s: GameState, unitId: string, to: Hex, cfg: GameConfig 
   const r = reachable(s, unitId, cfg).get(key(to));
   if (!r) return fail('unreachable');
   const units = s.units.map((x) => (x.id === unitId ? { ...x, pos: to, moved: true } : x));
-  const next: GameState = { ...s, units, points: s.points - r.cost };
+  const next: GameState = { ...s, units, points: s.points - r.cost, advance: null };
   return {
     ok: true,
     state: withLog(next, { kind: 'move', turn: s.turn, player: s.current, unit: u.type, from: u.pos, to, cost: r.cost }),
@@ -233,15 +234,34 @@ function strike(s: GameState, attackerId: string, targetId: string, kind: 'attac
   if (typeof c === 'string') return fail(c);
   const hp = c.t.hp - c.damage;
   const killed = hp <= 0;
+  const mode = kind === 'attack' && killed ? cfg.combat.advanceAfterKill : 'never';
   const units = s.units
     .filter((x) => !(killed && x.id === c.t.id))
-    .map((x) => (x.id === c.t.id ? { ...x, hp } : x.id === c.a.id ? { ...x, attacked: true } : x));
+    .map((x) =>
+      x.id === c.t.id ? { ...x, hp } : x.id === c.a.id ? { ...x, attacked: true, pos: mode === 'must' ? c.t.pos : x.pos } : x,
+    );
   let next = withLog(
-    { ...s, units, points: s.points - c.cost },
-    { kind, turn: s.turn, player: s.current, unit: c.a.type, target: c.t.type, damage: c.damage, killed, cost: c.cost },
+    { ...s, units, points: s.points - c.cost, advance: mode === 'may' ? { unitId: c.a.id, to: c.t.pos } : null },
+    {
+      kind, turn: s.turn, player: s.current, unit: c.a.type, target: c.t.type, damage: c.damage, killed, cost: c.cost,
+      advanced: mode === 'must',
+    },
   );
   if (killed && c.t.type === 'king' && cfg.win.killKing) next = declareWin(next, s.current, 'kingKilled');
   return { ok: true, state: next };
+}
+
+/** Steps into the hex of the piece just killed, when advancing is optional. Free. */
+export function takeHex(s: GameState): Result {
+  if (s.phase !== 'act') return fail('wrongPhase');
+  const a = s.advance;
+  const u = a && getUnit(s, a.unitId);
+  if (!a || !u || unitAt(s, a.to)) return fail('nothingToTake');
+  const units = s.units.map((x) => (x.id === u.id ? { ...x, pos: a.to } : x));
+  return {
+    ok: true,
+    state: withLog({ ...s, units, advance: null }, { kind: 'move', turn: s.turn, player: s.current, unit: u.type, from: u.pos, to: a.to, cost: 0 }),
+  };
 }
 
 export const attack = (s: GameState, attackerId: string, targetId: string, cfg: GameConfig = CONFIG) =>
@@ -276,6 +296,7 @@ export function endTurn(s: GameState, cfg: GameConfig = CONFIG): Result {
     phase: 'roll',
     dice: null,
     points: 0,
+    advance: null,
   };
   return { ok: true, state: next };
 }

@@ -64,6 +64,9 @@ export interface GameConfig {
     multipleAttacksPerUnit: boolean;
     /** A unit may move after it has attacked this turn. */
     moveAfterAttack: boolean;
+    /** After a melee kill the attacker steps into the dead piece's hex for free:
+     *  'must' = always, 'may' = the player chooses, 'never' = stays put. Shooting never advances. */
+    advanceAfterKill: 'must' | 'may' | 'never';
   };
   movement: {
     /** Units may move through hexes holding their own side's units (never stop there). */
@@ -135,7 +138,7 @@ export const CONFIG: GameConfig = {
       heavy: false,
     },
   },
-  combat: { attackCost: 1, multipleAttacksPerUnit: true, moveAfterAttack: true },
+  combat: { attackCost: 1, multipleAttacksPerUnit: true, moveAfterAttack: true, advanceAfterKill: 'must' },
   movement: { passThroughFriendly: true, multipleMovesPerUnit: true },
   win: { killKing: true, captureKing: true },
   army: {

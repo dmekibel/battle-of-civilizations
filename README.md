@@ -34,7 +34,7 @@ Every push to `main` runs the tests, builds, and deploys to GitHub Pages (`.gith
 
 **Pieces** (default values, all in `src/config.ts`):
 
-| Piece | Points per hex | Attack | HP (defence) | Picture |
+| Piece | Points per hex | Attack | Defense | Picture |
 |---|---|---|---|---|
 | King | 6 | 1 | 2 | crown, filled box |
 | Heavy infantry | 6 | 1 | 2 | shield and sword, filled box |
@@ -47,7 +47,9 @@ Speed ratio heavy infantry : light infantry : heavy cavalry : light cavalry = 1 
 
 **Movement.** Each hex costs the piece's points per hex. You can't enter forest or river (only bridges cross it), can't enter or pass through enemy pieces, and can pass through (but not stop on) your own pieces. A piece may move several times in a turn while points last.
 
-**Melee.** A piece next to an enemy spends 1 point to hit it for its attack value. A piece at 0 HP is removed. No dice in combat.
+**Attack and defense.** Every piece has attack points and defense points (the dots under it). A piece next to an enemy spends 1 movement point to hit it, taking away as many defense points as its attack. At 0 defense the piece is dead and removed. You can attack as many times as your rolled points allow. No dice in combat.
+
+**Taking the hex.** When a piece kills an enemy in melee, it steps into that enemy's hex for free. A config switch sets this to *must* (now), *may* (the player chooses, with a **Take the hex** button) or *never*. Archers stay where they are after a kill.
 
 **Archers.** Spend 2 points to shoot an enemy 2 to 3 hexes away for 1 damage. Forest between the archer and the target blocks the shot; the river does not.
 
@@ -82,4 +84,5 @@ Speed ratio heavy infantry : light infantry : heavy cavalry : light cavalry = 1 
 5. **Cavalry vs infantry speed.** "Cavalry about 3x infantry" vs the default 1 : 2 : 3 : 6. What are the exact numbers?
 6. **King capture.** Is "end the turn next to the King with no defenders beside him" the right capture rule?
 7. **Board.** How many hexes was the original folding board (about 1.5 x 1 m)? Where are the river, bridges and forests?
-8. **Power.** Is "power" only the price of a piece, or does it also matter in combat?
+8. **Taking the hex.** After killing a piece, must the attacker step into its hex, or may it choose? (Now: must.)
+9. **Power.** Is "power" only the price of a piece, or does it also matter in combat?

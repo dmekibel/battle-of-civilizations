@@ -19,6 +19,7 @@ import {
   rollDice,
   shoot,
   startSession,
+  takeHex,
   strikeTargets,
   undo,
   type GameState,
@@ -335,5 +336,47 @@ describe('turns and undo', () => {
     const { sess: after, result } = apply(sess, (s) => endTurn(s));
     expect(result.ok).toBe(false);
     expect(after).toBe(sess);
+  });
+});
+
+describe('stepping into the hex after a kill', () => {
+  const withMode = (mode: GameConfig['combat']['advanceAfterKill']): GameConfig => ({ ...OPEN, combat: { ...OPEN.combat, advanceAfterKill: mode } });
+
+  it('by default the killer must move into the dead piece’s hex, for free', () => {
+    const s = scenario([['red', 'heavyCavalry', 3, 3], ['blue', 'lightInfantry', 3, 4]], 5);
+    const a = ok(attack(s, s.units[0].id, s.units[1].id, OPEN));
+    expect(getUnit(a, s.units[0].id)!.pos).toEqual({ col: 3, row: 4 });
+    expect(a.points).toBe(4); // only the attack cost
+  });
+
+  it('a hit that does not kill leaves both pieces where they are', () => {
+    const s = scenario([['red', 'lightInfantry', 3, 3], ['blue', 'heavyInfantry', 3, 4]]);
+    const a = ok(attack(s, s.units[0].id, s.units[1].id, OPEN));
+    expect(getUnit(a, s.units[0].id)!.pos).toEqual({ col: 3, row: 3 });
+  });
+
+  it('archers never move after a kill', () => {
+    const s = scenario([['red', 'archer', 3, 3], ['blue', 'lightInfantry', 3, 5]]);
+    const a = ok(shoot(s, s.units[0].id, s.units[1].id, OPEN));
+    expect(getUnit(a, s.units[0].id)!.pos).toEqual({ col: 3, row: 3 });
+  });
+
+  it("'never' keeps the killer in place", () => {
+    const cfg = withMode('never');
+    const s = scenario([['red', 'heavyCavalry', 3, 3], ['blue', 'lightInfantry', 3, 4]], 18, cfg);
+    expect(getUnit(ok(attack(s, s.units[0].id, s.units[1].id, cfg)), s.units[0].id)!.pos).toEqual({ col: 3, row: 3 });
+  });
+
+  it("'may' offers the hex until the player does something else", () => {
+    const cfg = withMode('may');
+    const s = scenario([['red', 'heavyCavalry', 3, 3], ['blue', 'lightInfantry', 3, 4], ['red', 'lightCavalry', 6, 6]], 18, cfg);
+    const a = ok(attack(s, s.units[0].id, s.units[1].id, cfg));
+    expect(a.advance).toEqual({ unitId: s.units[0].id, to: { col: 3, row: 4 } });
+    const taken = ok(takeHex(a));
+    expect(getUnit(taken, s.units[0].id)!.pos).toEqual({ col: 3, row: 4 });
+    expect(taken.points).toBe(a.points);
+    const skipped = ok(moveUnit(a, s.units[2].id, { col: 6, row: 7 }, cfg));
+    expect(skipped.advance).toBeNull();
+    expect(takeHex(skipped)).toEqual({ ok: false, error: 'nothingToTake' });
   });
 });

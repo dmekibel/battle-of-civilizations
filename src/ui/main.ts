@@ -21,6 +21,7 @@ import {
   rollDice,
   shoot,
   startSession,
+  takeHex,
   strikeTargets,
   undo,
   unitAt,
@@ -210,9 +211,12 @@ function bar(s: GameState): string {
   }
   if (s.phase === 'roll') return `<div class="row"><button data-act="roll" class="primary" ${rolling ? 'disabled' : ''}>🎲 ${t(lang, 'roll')}</button></div>`;
   if (s.phase === 'act') {
-    return `<div class="row">
+    const take = s.advance
+      ? `<div class="row"><button data-act="take" class="primary">⚔ ${t(lang, 'takeHex')}</button></div>`
+      : '';
+    return `${take}<div class="row">
       <button data-act="undo" ${canUndo(sess) ? '' : 'disabled'}>↶ ${t(lang, 'undo')}</button>
-      <button data-act="end" class="primary">${t(lang, 'endTurn')} →</button>
+      <button data-act="end" class="${s.advance ? '' : 'primary'}">${t(lang, 'endTurn')} →</button>
     </div>`;
   }
   return '';
@@ -254,6 +258,7 @@ function draw() {
   let info = message ?? '';
   if (!info) {
     if (s.phase === 'deploy') info = t(lang, 'deployHint');
+    else if (s.advance) info = `${t(lang, 'takeHex')}, ${t(lang, 'orKeep')}`;
     else if (s.phase === 'roll') info = `${playerName(lang, s.current)}: ${t(lang, 'rollFirst')}`;
     else if (selected) info = unitInfo(s, selected);
     else if (s.phase === 'act') info = `${t(lang, 'pickUnit')}. ${t(lang, 'help')}`;
@@ -421,6 +426,8 @@ app.addEventListener('click', (e) => {
         render();
       }
       return;
+    case 'take':
+      return void run((s) => takeHex(s));
     case 'roll':
       return roll();
     case 'undo':

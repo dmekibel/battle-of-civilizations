@@ -19,7 +19,7 @@ const STR = {
     emptyLog: 'Пока ничего не произошло.',
     rollFirst: 'бросьте кубики',
     pickUnit: 'Выберите свою фигуру',
-    hp: 'ОЗ',
+    hp: 'защита',
     atk: 'атака',
     perHex: 'очк. за клетку',
     shot: 'выстрел',
@@ -32,7 +32,7 @@ const STR = {
     confirmNew: 'Начать заново? Нажмите ещё раз.',
     help: 'Нажмите на фигуру: зелёные клетки — куда она дойдёт, красные — кого она может ударить.',
     pieces: 'Фигуры',
-    legendNote: 'Залитые — тяжёлые, контурные — лёгкие. Точки под фигурой — её ОЗ.',
+    legendNote: 'Залитые — тяжёлые, контурные — лёгкие. Точки под фигурой — сколько защиты осталось.',
     noMelee: 'без ближнего боя',
     build: 'соберите армию',
     pointsLeft: 'очков осталось',
@@ -55,6 +55,8 @@ const STR = {
     language: 'English',
     setup: 'расстановка',
     left: 'осталось',
+    takeHex: 'Занять клетку',
+    orKeep: 'или сделайте другой ход, чтобы остаться.',
   },
   en: {
     title: 'Battle of Civilizations',
@@ -70,7 +72,7 @@ const STR = {
     emptyLog: 'Nothing has happened yet.',
     rollFirst: 'roll the dice',
     pickUnit: 'Pick one of your pieces',
-    hp: 'HP',
+    hp: 'defense',
     atk: 'attack',
     perHex: 'pts per hex',
     shot: 'shot',
@@ -83,7 +85,7 @@ const STR = {
     confirmNew: 'Start over? Tap again.',
     help: 'Tap a piece: green hexes show where it can reach, red ones who it can hit.',
     pieces: 'Pieces',
-    legendNote: 'Filled = heavy, outline = light. Dots under a piece = its HP.',
+    legendNote: 'Filled = heavy, outline = light. Dots under a piece = defense left.',
     noMelee: 'no melee',
     build: 'build your army',
     pointsLeft: 'points left',
@@ -106,6 +108,8 @@ const STR = {
     language: 'Русский',
     setup: 'setup',
     left: 'left',
+    takeHex: 'Take the hex',
+    orKeep: 'or make any other move to stay put.',
   },
 };
 
@@ -153,6 +157,7 @@ const ERRORS: Record<Lang, Record<ErrorCode, string>> = {
     blocked: 'Сюда нельзя поставить фигуру.',
     occupied: 'Клетка занята.',
     reserveNotEmpty: 'Сначала расставьте все фигуры.',
+    nothingToTake: 'Занять нечего.',
   },
   en: {
     wrongPhase: 'You can’t do that right now.',
@@ -176,6 +181,7 @@ const ERRORS: Record<Lang, Record<ErrorCode, string>> = {
     blocked: 'A piece can’t stand there.',
     occupied: 'That hex is taken.',
     reserveNotEmpty: 'Place all your pieces first.',
+    nothingToTake: 'There’s no hex to take.',
   },
 };
 
@@ -203,7 +209,7 @@ export function logText(l: Lang, e: LogEntry): string {
     case 'attack':
     case 'shoot': {
       const verb = e.kind === 'attack' ? (ru ? 'бьёт' : 'hits') : ru ? 'стреляет в' : 'shoots';
-      const end = e.killed ? (ru ? ', убит' : ', killed') : '';
+      const end = e.killed ? (ru ? ', убит' : ', killed') + (e.advanced ? (ru ? ', клетка занята' : ', took the hex') : '') : '';
       return `${unitName(l, e.unit)} ${verb} ${unitName(l, e.target).toLowerCase()}: −${e.damage} ${t(l, 'hp')}${end}`;
     }
     case 'endTurn':
