@@ -61,23 +61,24 @@ function lens(v: View): Lens {
     const k = 1 + persp * (ry / radius);
     return [rx * k, ry * squash * k, k, ry] as const;
   };
-  // Fit the view box around the turned board, with room above for standing pieces.
-  const edges = [raw(0, 0), raw(fw, 0), raw(fw, fh), raw(0, fh)];
-  const minX = Math.min(...edges.map((e) => e[0]));
-  const maxX = Math.max(...edges.map((e) => e[0]));
-  const minY = Math.min(...edges.map((e) => e[1]));
-  const maxY = Math.max(...edges.map((e) => e[1]));
+  // The view box is the board's size seen unturned, and stays the same while the camera turns:
+  // the board spins about its middle like in a 3D program, corners swinging past the edges
+  // (the page lets the map be dragged to them). Only the tilt changes how tall it is.
   const side = 24;
   const top = v.tilt ? 64 : 24;
+  const width = fw + side * 2;
+  const height = fh * squash + top + 24;
+  const ox = width / 2;
+  const oy = top + (fh * squash) / 2;
   return {
     pt: (x, y) => {
       const [X, Y] = raw(x, y);
-      return [X - minX + side, Y - minY + top];
+      return [ox + X, oy + Y];
     },
     size: (x, y) => raw(x, y)[2],
     depth: (x, y) => raw(x, y)[3],
-    width: maxX - minX + side * 2,
-    height: maxY - minY + top + 24,
+    width,
+    height,
     tilt: v.tilt,
   };
 }

@@ -492,13 +492,23 @@ function bar(s: GameState): string {
 /** Re-rendering replaces the board, so keep where the player had scrolled the zoomed map to. */
 function render() {
   const old = app.querySelector<HTMLElement>('.stage');
-  const scroll = old ? [old.scrollLeft, old.scrollTop] : [0, 0];
+  const scroll = old ? [old.scrollLeft, old.scrollTop] : null;
   const list = app.querySelector<HTMLElement>('.sheet-scroll')?.scrollTop ?? 0;
   draw();
   const stage = app.querySelector<HTMLElement>('.stage');
-  if (stage) [stage.scrollLeft, stage.scrollTop] = scroll;
+  // The board sits in a margin it can be dragged into; it starts centred.
+  if (stage && scroll && !recenter) [stage.scrollLeft, stage.scrollTop] = scroll;
+  else if (stage) centre(stage);
   const sheet = app.querySelector<HTMLElement>('.sheet-scroll');
   if (sheet) sheet.scrollTop = list;
+}
+
+/** Put the middle of the board in the middle of the screen. */
+let recenter = false;
+function centre(st: HTMLElement) {
+  recenter = false;
+  st.scrollLeft = (st.scrollWidth - st.clientWidth) / 2;
+  st.scrollTop = (st.scrollHeight - st.clientHeight) / 2;
 }
 
 /** Zoom in or out around the middle of what's on screen. */
@@ -593,7 +603,7 @@ function draw() {
         ${withPanel() ? '' : `<button data-act="menu" class="ghost icon" aria-label="${t(lang, 'menu')}">☰</button>`}
       </header>
       <div class="stage-wrap">
-        <div class="stage" style="--z:${zoom}">${renderBoard(s, overlay(s), view(), fx)}</div>
+        <div class="stage" style="--z:${zoom}"><div class="pan">${renderBoard(s, overlay(s), view(), fx)}</div></div>
         <div class="cam" aria-label="${t(lang, 'camera')}">
           <button data-act="cam-mine" title="${t(lang, 'camMine')}" aria-label="${t(lang, 'camMine')}">⬇</button>
         </div>
@@ -868,6 +878,7 @@ app.addEventListener('click', (e) => {
     case 'cam-reset':
       cam = { ...CAM_DEFAULT };
       saveCam();
+      recenter = true;
       return render();
     case 'zoom-in':
     case 'zoom-out': {
@@ -966,8 +977,8 @@ function camFrame() {
   camQueued = true;
   requestAnimationFrame(() => {
     camQueued = false;
-    const st = app.querySelector<HTMLElement>('.stage');
-    if (st && camOverlay) st.innerHTML = renderBoard(sess.state, camOverlay, view(), NO_EFFECTS);
+    const pan = app.querySelector<HTMLElement>('.stage .pan');
+    if (pan && camOverlay) pan.innerHTML = renderBoard(sess.state, camOverlay, view(), NO_EFFECTS);
   });
 }
 function camDone() {
@@ -1055,12 +1066,13 @@ for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
   );
 }
 
-// Trackpad, Apple Maps style: pinch (it arrives as ctrl + wheel) zooms, two-finger scroll up
-// and down tilts, left and right turns the board. Shift + scroll moves the map instead.
+// Trackpad, like a maps app: two-finger swipe moves the map (the browser's own scrolling),
+// pinch (it arrives as ctrl + wheel) zooms, and Option + swipe tilts (up / down) and turns
+// (left / right). Turning with a real two-finger twist is handled above for Safari.
 app.addEventListener(
   'wheel',
   (e) => {
-    if (!(e.target as Element).closest('.stage') || e.shiftKey) return;
+    if (!(e.target as Element).closest('.stage') || (!e.ctrlKey && !e.altKey)) return;
     e.preventDefault();
     if (e.ctrlKey) {
       zoomAround(zoom * Math.exp(-e.deltaY / 100), e.clientX, e.clientY);
@@ -1112,6 +1124,7 @@ document.addEventListener('keydown', (e) => {
   if (k === 'c') {
     cam = { ...CAM_DEFAULT };
     saveCam();
+    recenter = true;
     return render();
   }
   if (k === 'v') return click('cam-mine');
