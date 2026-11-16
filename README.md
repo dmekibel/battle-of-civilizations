@@ -61,7 +61,9 @@ Speed ratio heavy infantry : light infantry : heavy cavalry : light cavalry = 1 
 
 **Building an army.** Each player has 50 points to buy pieces, using a slider (or − / +) per piece type; the chosen pieces appear right under each slider. Price = the piece's power: light infantry 1, heavy infantry 2, archers 3, light cavalry 3, heavy cavalry 4. Every army gets one King for free. Unspent points are lost.
 
-**Secret setup.** Red builds an army and places it while Blue looks away, then hands the phone over and Blue does the same. Each side places pieces only in its own zone: the 5 columns nearest its edge. Neither player sees the other army until the battle starts. **Auto** places the remaining pieces for you (King at the back).
+**Secret setup.** Red builds an army and places it while Blue looks away, then hands the phone over and Blue does the same. Each side places pieces only in its own zone: the 5 columns nearest its edge. Neither player sees the other army until the battle starts. **Auto** places the remaining pieces in a battle formation: heavy infantry holds the front centre, light infantry extends the line, archers stand one rank behind, heavy cavalry on the wings, light cavalry on the outer wings, and the King at the back. **🎲 Auto army** picks a balanced army for the budget, and **⚡ Auto everything** builds, places and hands over in one tap.
+
+**Against the computer.** Pick it on the start screen: you lead Novgorod, the computer leads the Teutonic Order. It builds and places its own army, then plays greedily one step at a time: it takes the best kill or hit it can see, otherwise marches its army together towards the enemy King (crossing at the bridges), keeps archers at shooting range and its King out of reach. It doesn't plan ahead, so it can be beaten. Code: `src/engine/ai.ts`.
 
 **Quick battle** (in the menu) skips setup with a fixed army: 1 King, 4 heavy infantry, 4 light infantry, 2 heavy cavalry, 2 light cavalry, 2 archers.
 

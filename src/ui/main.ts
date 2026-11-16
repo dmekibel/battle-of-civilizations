@@ -27,6 +27,9 @@ import {
   unitAt,
   zoneHexes,
   type ArmyCounts,
+  aiNextAction,
+  applyAi,
+  suggestArmy,
   type AttackPreview,
   type GameState,
   type Hex,
@@ -56,10 +59,15 @@ function loadLang(): Lang {
 
 const SAVE_KEY = 'boc-save-v1';
 
+type Mode = 'pvp' | 'ai';
+/** In a game against the computer, it plays the Teutonic Order. */
+const AI_SIDE: Player = 'blue';
+
 interface Saved {
   board: [number, number];
   state: GameState;
   cover: boolean;
+  mode: Mode;
 }
 
 function loadGame(): Saved | null {
@@ -77,7 +85,7 @@ function loadGame(): Saved | null {
 
 function saveGame() {
   try {
-    const data: Saved = { board: [CONFIG.board.cols, CONFIG.board.rows], state: sess.state, cover };
+    const data: Saved = { board: [CONFIG.board.cols, CONFIG.board.rows], state: sess.state, cover, mode };
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
   } catch {
     /* storage full or blocked: play on without saving */
@@ -96,7 +104,12 @@ let lastPoints = 0;
 let menuOpen = false;
 /** Pass-the-phone screen: shown whenever the other player must look away. */
 // A game reopened during secret setup always starts behind the cover, so nothing leaks.
-let cover = saved ? saved.cover || saved.state.phase === 'draft' || saved.state.phase === 'deploy' : true;
+let mode: Mode = saved?.mode === 'ai' ? 'ai' : 'pvp';
+let cover = saved ? saved.cover || (mode === 'pvp' && (saved.state.phase === 'draft' || saved.state.phase === 'deploy')) : false;
+/** The "how do you want to play" screen: first launch and every new game. */
+let choosing = !saved;
+let aiTimer: number | null = null;
+const aiTurn = (s: GameState) => mode === 'ai' && s.current === AI_SIDE && s.phase !== 'over' && setupPhase(s) === false;
 let draft: ArmyCounts = {};
 let tray: UnitTypeId | null = null;
 /** What the last render showed, so the next one can animate what changed. */
@@ -185,9 +198,16 @@ function legendList(owner: Player): string {
 
 // ---------- screens ----------
 
-/** A row of small pieces showing how many of this type are in the army. */
-function strip(type: Buyable, n: number, owner: Player): string {
-  return Array.from({ length: n }, () => unitIcon(type, owner)).join('');
+/** The whole army as small pieces, grouped by type: shown at the bottom of the builder. */
+function armyPreview(owner: Player): string {
+  const total = 1 + BUY_ORDER.reduce((a, t2) => a + (draft[t2] ?? 0), 0);
+  const groups = (['king', ...BUY_ORDER] as UnitTypeId[])
+    .map((type) => {
+      const n = type === 'king' ? 1 : draft[type as Buyable] ?? 0;
+      return n ? `<span class="group">${Array.from({ length: n }, () => unitIcon(type, owner)).join('')}</span>` : '';
+    })
+    .join('');
+  return `<div class="army-head"><b>${t(lang, 'yourArmy')}</b><span>${total} ${t(lang, 'piecesN')}</span></div><div class="army-pieces">${groups}</div>`;
 }
 
 /** Slider track: gold up to the value, pale up to what the budget still allows. */
@@ -211,7 +231,7 @@ function onSlide(input: HTMLInputElement) {
   const owner = sess.state.current;
   const row = app.querySelector(`[data-row="${type}"]`)!;
   row.querySelector('.count')!.textContent = String(n);
-  row.querySelector('.strip')!.innerHTML = strip(type, n, owner);
+  app.querySelector('#army')!.innerHTML = armyPreview(owner);
   const left = CONFIG.army.budget - armyCost(draft);
   app.querySelector('#left')!.textContent = String(left);
   (app.querySelector('#meter') as HTMLElement).style.width = `${((CONFIG.army.budget - left) / CONFIG.army.budget) * 100}%`;
@@ -241,7 +261,6 @@ function draftSheet(s: GameState): string {
         <input type="range" id="sl-${type}" data-type="${type}" min="0" max="${Math.floor(CONFIG.army.budget / price)}" step="1" value="${n}" aria-label="${unitName(lang, type)}" style="${sliderFill(type)}">
         <button data-act="more" data-type="${type}" ${price <= left ? '' : 'disabled'} aria-label="+">+</button>
       </div>
-      <div class="strip">${strip(type, n, s.current)}</div>
     </li>`;
   }).join('');
   return `<div class="sheet ${s.current}">
@@ -249,15 +268,34 @@ function draftSheet(s: GameState): string {
       <h2><span class="dot ${s.current}"></span>${playerName(lang, s.current)}: ${t(lang, 'build')}</h2>
       <div class="budget"><b id="left">${left}</b> / ${CONFIG.army.budget} ${t(lang, 'pointsLeft')}
         <div class="meter"><i id="meter" style="width:${(spent / CONFIG.army.budget) * 100}%"></i></div></div>
+      <div class="sheet-scroll">
       <ul class="buy">
         <li class="king">${unitIcon('king', s.current)}<b class="name">${unitName(lang, 'king')}<span class="free">${t(lang, 'kingFree')}</span></b><span class="price free-badge">0<small>${t(lang, 'pts')}</small></span><output class="count">1</output>${stats('king')}</li>
         ${rows}
       </ul>
       ${statKey()}
-      ${message ? `<p class="error">${message}</p>` : ''}
-      <button data-act="draft" class="primary wide">${t(lang, 'toDeploy')} →</button>
+      </div>
+      <div class="sheet-foot">
+        <div class="army" id="army">${armyPreview(s.current)}</div>
+        ${message ? `<p class="error">${message}</p>` : ''}
+        <div class="row">
+          <button data-act="auto-army">${t(lang, 'autoArmy')}</button>
+          <button data-act="auto-all">${t(lang, 'autoAll')}</button>
+        </div>
+        <button data-act="draft" class="primary wide">${t(lang, 'toDeploy')} →</button>
+      </div>
     </div>
   </div>`;
+}
+
+function startScreen(): string {
+  return `<div class="cover"><div class="card start">
+    <div class="emblem">${EMBLEM.red}${EMBLEM.blue}</div>
+    <h2>${t(lang, 'title')}</h2>
+    <p>${t(lang, 'chooseMode')}</p>
+    <button data-act="mode" data-mode="pvp" class="choice"><b>${t(lang, 'twoPlayers')}</b><span>${t(lang, 'twoPlayersSub')}</span></button>
+    <button data-act="mode" data-mode="ai" class="choice"><b>${t(lang, 'vsComputer')}</b><span>${t(lang, 'vsComputerSub')}</span></button>
+  </div></div>`;
 }
 
 function passScreen(s: GameState): string {
@@ -300,6 +338,7 @@ function menu(s: GameState): string {
 }
 
 function bar(s: GameState): string {
+  if (aiTurn(s)) return `<div class="row"><p class="thinking">${playerName(lang, s.current)} ${t(lang, 'thinking')}</p></div>`;
   if (s.phase === 'deploy') {
     const left = s.reserve[s.current];
     if (!tray || !left.includes(tray)) tray = TRAY_ORDER.find((x) => left.includes(x)) ?? null;
@@ -331,9 +370,12 @@ function bar(s: GameState): string {
 function render() {
   const old = app.querySelector<HTMLElement>('.stage');
   const scroll = old ? [old.scrollLeft, old.scrollTop] : [0, 0];
+  const list = app.querySelector<HTMLElement>('.sheet-scroll')?.scrollTop ?? 0;
   draw();
   const stage = app.querySelector<HTMLElement>('.stage');
   if (stage) [stage.scrollLeft, stage.scrollTop] = scroll;
+  const sheet = app.querySelector<HTMLElement>('.sheet-scroll');
+  if (sheet) sheet.scrollTop = list;
 }
 
 /** Zoom in or out around the middle of what's on screen. */
@@ -419,13 +461,42 @@ function draw() {
       <p class="info" id="info">${info}</p>
       <footer class="bar">${bar(s)}</footer>
     </div>
-    ${s.phase === 'draft' && !cover ? draftSheet(s) : ''}
-    ${cover && s.phase !== 'over' ? passScreen(s) : ''}
+    ${s.phase === 'draft' && !cover && !choosing ? draftSheet(s) : ''}
+    ${cover && s.phase !== 'over' && !choosing ? passScreen(s) : ''}
+    ${choosing ? startScreen() : ''}
     ${over}
     ${menuOpen ? menu(s) : ''}`;
   document.documentElement.lang = lang;
   document.title = t(lang, 'title');
   saveGame();
+  scheduleAi();
+}
+
+// ---------- computer opponent ----------
+
+/** The computer builds and places its army at once (the player never sees it happen). */
+function aiSetup() {
+  const steps: ((s: GameState) => Result)[] = [(s) => draftArmy(s, suggestArmy()), (s) => autoDeploy(s), (s) => finishDeploy(s)];
+  for (const step of steps) {
+    const { sess: next, result } = apply(sess, step, true);
+    if (!result.ok) return;
+    sess = next;
+  }
+}
+
+/** On the computer's turn, take one step every so often so the player can follow it. */
+function scheduleAi() {
+  const s = sess.state;
+  if (aiTimer !== null || rolling || cover || choosing || !aiTurn(s)) return;
+  aiTimer = window.setTimeout(() => {
+    aiTimer = null;
+    const st = sess.state;
+    if (rolling || cover || choosing || !aiTurn(st)) return;
+    if (st.phase === 'roll') return roll();
+    const a = aiNextAction(st);
+    if (a) run((x) => applyAi(x, a));
+    else run((x) => endTurn(x), true);
+  }, sess.state.phase === 'roll' ? 700 : 650);
 }
 
 // ---------- actions ----------
@@ -446,7 +517,8 @@ function restart(state: GameState) {
   tray = null;
   confirmNew = false;
   menuOpen = false;
-  cover = state.phase === 'draft';
+  choosing = false;
+  cover = mode === 'pvp' && state.phase === 'draft';
   render();
 }
 
@@ -484,7 +556,7 @@ function onDeployHex(s: GameState, hex: { col: number; row: number }) {
 
 function onHex(col: number, row: number) {
   const s = sess.state;
-  if (rolling || s.phase === 'over' || cover) return;
+  if (rolling || s.phase === 'over' || cover || choosing || aiTurn(s)) return;
   const hex = { col, row };
   if (s.phase === 'deploy') return onDeployHex(s, hex);
   if (s.phase === 'draft') return;
@@ -546,15 +618,37 @@ app.addEventListener('click', (e) => {
       return void run((s) => autoDeploy(s));
     case 'done':
       if (run((s) => finishDeploy(s), true)) {
+        if (mode === 'ai' && sess.state.current === AI_SIDE) aiSetup();
         cover = true;
         tray = null;
         render();
       }
       return;
+    case 'auto-army':
+      draft = suggestArmy();
+      message = null;
+      return render();
+    case 'auto-all': {
+      // Build a balanced army, place it in formation and hand over, all in one tap.
+      draft = suggestArmy();
+      if (!run((s) => draftArmy(s, draft))) return;
+      draft = {};
+      run((s) => autoDeploy(s));
+      if (run((s) => finishDeploy(s), true)) {
+        if (mode === 'ai' && sess.state.current === AI_SIDE) aiSetup();
+        cover = true;
+        tray = null;
+        render();
+      }
+      return;
+    }
+    case 'mode':
+      mode = btn!.getAttribute('data-mode') === 'ai' ? 'ai' : 'pvp';
+      return restart(newGame());
     case 'take':
       return void run((s) => takeHex(s));
     case 'roll':
-      return roll();
+      return aiTurn(sess.state) ? undefined : roll();
     case 'undo':
       sess = undo(sess);
       message = null;
@@ -591,9 +685,13 @@ app.addEventListener('click', (e) => {
         confirmNew = true;
         return render();
       }
-      return restart(newGame());
+      confirmNew = false;
+      menuOpen = false;
+      choosing = true;
+      return render();
     case 'restart':
-      return restart(newGame());
+      choosing = true;
+      return render();
   }
 });
 

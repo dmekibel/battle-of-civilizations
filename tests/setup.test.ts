@@ -10,6 +10,7 @@ import {
   newGame,
   placeUnit,
   rollDice,
+  suggestArmy,
   type GameState,
   type Result,
 } from '../src/engine';
@@ -75,7 +76,7 @@ describe('deployment', () => {
   });
 
   it('auto-deploy puts the King at the back and everything inside the zone', () => {
-    const a = ok(autoDeploy(drafted, () => 0.5));
+    const a = ok(autoDeploy(drafted));
     expect(a.units.length).toBe(4);
     expect(a.units.every((u) => inZone('red', u.pos))).toBe(true);
     expect(a.units.find((u) => u.type === 'king')!.pos.col).toBe(0);
@@ -97,5 +98,40 @@ describe('deployment', () => {
     expect(inZone('red', { col: CONFIG.deploy.depth, row: 0 })).toBe(false);
     expect(inZone('blue', { col: CONFIG.board.cols - 1, row: 0 })).toBe(true);
     expect(inZone('blue', { col: CONFIG.board.cols - 1 - CONFIG.deploy.depth, row: 0 })).toBe(false);
+  });
+});
+
+describe('auto army and battle formation', () => {
+  it('suggests a varied army that spends (almost) the whole budget', () => {
+    for (let i = 0; i < 20; i++) {
+      const army = suggestArmy();
+      const cost = armyCost(army);
+      expect(cost).toBeLessThanOrEqual(CONFIG.army.budget);
+      expect(cost).toBeGreaterThan(CONFIG.army.budget - 1);
+      expect(Object.values(army).filter((n) => n! > 0).length).toBeGreaterThanOrEqual(4);
+    }
+  });
+
+  it('lines up like an army: King at the back, infantry in front, archers behind it, cavalry on the wings', () => {
+    let s = ok(draftArmy(newGame(), { heavyInfantry: 4, lightInfantry: 4, archer: 2, heavyCavalry: 2, lightCavalry: 2 }));
+    s = ok(autoDeploy(s));
+    const of = (t: string) => s.units.filter((u) => u.type === t);
+    const mid = (CONFIG.board.rows - 1) / 2;
+    const front = CONFIG.deploy.depth - 1;
+    const lateral = (t: string) => Math.max(...of(t).map((u) => Math.abs(u.pos.row - mid)));
+    expect(of('king')[0].pos.col).toBe(0);
+    expect(of('heavyInfantry').every((u) => u.pos.col === front)).toBe(true);
+    expect(of('archer').every((u) => u.pos.col === front - 1)).toBe(true);
+    expect(lateral('lightCavalry')).toBeGreaterThan(lateral('heavyInfantry'));
+    // Cavalry is split across both wings.
+    expect(of('lightCavalry').some((u) => u.pos.row < mid) && of('lightCavalry').some((u) => u.pos.row > mid)).toBe(true);
+  });
+
+  it('mirrors the formation for the Teutonic side', () => {
+    let s = ok(finishDeploy(ok(autoDeploy(ok(draftArmy(newGame(), { heavyInfantry: 2 }))))));
+    s = ok(autoDeploy(ok(draftArmy(s, { heavyInfantry: 2 }))));
+    const blue = s.units.filter((u) => u.owner === 'blue');
+    expect(blue.find((u) => u.type === 'king')!.pos.col).toBe(CONFIG.board.cols - 1);
+    expect(blue.filter((u) => u.type === 'heavyInfantry').every((u) => u.pos.col === CONFIG.board.cols - CONFIG.deploy.depth)).toBe(true);
   });
 });
