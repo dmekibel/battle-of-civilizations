@@ -3,7 +3,7 @@
 
 import { CONFIG, type UnitTypeId } from '../config';
 import type { Player } from '../engine';
-import { factionOf } from './factions';
+import { factionOf, kabuto } from './factions';
 
 /** A side's army colour comes from the faction it leads. */
 export const armyColor = (p: Player) => factionOf(p).color;
@@ -19,16 +19,28 @@ const HORSE = (ink: string, dx = 0) =>
   `<path transform="translate(${dx} 0)" d="M-7 12L-7 3C-7 -5 -2 -10 4 -10L6 -13L7.5 -9C11 -7 13 -3 13 1L13 3L9 4L5 1L3 3L3 12Z" fill="${ink}"/>`;
 
 /** Pictures some armies use in place of the standard ones (no spears for the Cowboys). */
-export type ArtId = 'star' | 'feather' | 'shotgun' | 'saber' | 'tomahawk' | 'lancer';
+export type ArtId = 'star' | 'tsar' | 'cross' | 'khan' | 'shogun' | 'bonnet' | 'shotgun' | 'saber' | 'tomahawk' | 'lancer';
 
-function art(id: ArtId, ink: string): string {
+function art(id: ArtId, ink: string, bg: string): string {
   switch (id) {
     case 'star':
       // The Sheriff's badge.
       return `<path d="M0 -11L3 -3.5H11L4.5 1.5L7 9.5L0 4.5L-7 9.5L-4.5 1.5L-11 -3.5H-3Z" fill="${ink}"/>`;
-    case 'feather':
-      // A chief's eagle feather.
-      return `<path d="M-2 11Q-6 -2 4 -12Q8 -2 -2 11Z" fill="${ink}"/><path d="M-2 11L3 -8" stroke="${ink === '#fffdf6' ? '#00000055' : '#ffffff88'}" stroke-width="1"/>`;
+    case 'tsar':
+      // The Tsar's fur-trimmed cap with a cross.
+      return `<path d="M0 -13V-7M-2.6 -10.5H2.6" stroke="${ink}" stroke-width="1.8" stroke-linecap="round"/><path d="M-8 3Q-8 -7.5 0 -7.5Q8 -7.5 8 3Z" fill="${ink}"/><rect x="-10.5" y="3" width="21" height="6.5" rx="3" fill="${ink}"/><path d="M-6 5.5V7M-2 5.5V7M2 5.5V7M6 5.5V7" stroke="${bg}" stroke-width="1.2"/>`;
+    case 'cross':
+      // The Grand Master's black cross (cross pattée).
+      return `<path d="M-4 -12H4L2 -3.5L10.5 -5.5V2.5L2 0.5L4 12H-4L-2 0.5L-10.5 2.5V-5.5L-2 -3.5Z" fill="${ink}"/>`;
+    case 'khan':
+      // The Khan's pointed hat with a fur brim.
+      return `<path d="M-8 4Q-7 -4 0 -13Q7 -4 8 4Z" fill="${ink}"/><rect x="-11" y="3.5" width="22" height="6.5" rx="3" fill="${ink}"/><path d="M0 -13L4 -9" stroke="${ink}" stroke-width="1.6" stroke-linecap="round"/><path d="M-11 6.7H11" stroke="${bg}" stroke-width="1"/>`;
+    case 'shogun':
+      // A shogun's horned helmet (kabuto).
+      return kabuto(ink, bg, 'scale(0.088) translate(-300 -272)');
+    case 'bonnet':
+      // A chief's feathered war bonnet.
+      return `<g transform="rotate(-60 0 8)"><path d="M0 8Q-3.2 -2 0 -12Q3.2 -2 0 8Z" fill="${ink}"/><path d="M0 -12Q-1.4 -9.5 0 -7Q1.4 -9.5 0 -12Z" fill="${bg}"/></g><g transform="rotate(-30 0 8)"><path d="M0 8Q-3.2 -2 0 -12Q3.2 -2 0 8Z" fill="${ink}"/><path d="M0 -12Q-1.4 -9.5 0 -7Q1.4 -9.5 0 -12Z" fill="${bg}"/></g><g transform="rotate(0 0 8)"><path d="M0 8Q-3.2 -2 0 -12Q3.2 -2 0 8Z" fill="${ink}"/><path d="M0 -12Q-1.4 -9.5 0 -7Q1.4 -9.5 0 -12Z" fill="${bg}"/></g><g transform="rotate(30 0 8)"><path d="M0 8Q-3.2 -2 0 -12Q3.2 -2 0 8Z" fill="${ink}"/><path d="M0 -12Q-1.4 -9.5 0 -7Q1.4 -9.5 0 -12Z" fill="${bg}"/></g><g transform="rotate(60 0 8)"><path d="M0 8Q-3.2 -2 0 -12Q3.2 -2 0 8Z" fill="${ink}"/><path d="M0 -12Q-1.4 -9.5 0 -7Q1.4 -9.5 0 -12Z" fill="${bg}"/></g><rect x="-9" y="6" width="18" height="4.5" rx="1.5" fill="${ink}"/>`;
     case 'shotgun':
       // A short double-barrelled shotgun.
       return `<path d="M-6 -1L14 -7M-6 2.5L14 -3.5" stroke="${ink}" stroke-width="1.8" stroke-linecap="round"/><path d="M-6 -2L-4 3L-13 10L-15 6Z" fill="${ink}"/>`;
@@ -93,7 +105,7 @@ export function unitSymbol(type: UnitTypeId, owner: Player, hp: number): string 
   const box = `<rect x="${-W / 2}" y="${-H / 2}" width="${W}" height="${H}" rx="3" fill="${heavy ? color : '#fffdf6'}" stroke="${wounded ? '#ff4d3d' : color}" stroke-width="${wounded ? 3.2 : 2.4}"/>`;
   const ink = heavy ? '#fffdf6' : color;
   const own = factionOf(owner).art?.[type];
-  return `<g>${box}<g>${own ? art(own, ink) : picture(type, ink)}</g></g>`;
+  return `<g>${box}<g>${own ? art(own, ink, heavy ? color : '#fffdf6') : picture(type, ink)}</g></g>`;
 }
 
 /** A stand-alone icon for lists and the army builder. */
