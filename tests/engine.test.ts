@@ -13,6 +13,7 @@ import {
   moveUnit,
   neighbors,
   newGame,
+  quickStart,
   previewStrike,
   reachable,
   rollDice,
@@ -75,7 +76,7 @@ describe('hex geometry', () => {
 });
 
 describe('setup', () => {
-  const s = newGame();
+  const s = quickStart();
 
   it('builds a 17x11 board with a river and two bridges', () => {
     expect(s.board.length).toBe(11);
@@ -108,21 +109,21 @@ describe('setup', () => {
 
 describe('dice', () => {
   it('sums 3 dice into movement points', () => {
-    const r = rollDice(newGame(), dice(6, 6, 6));
+    const r = rollDice(quickStart(), dice(6, 6, 6));
     expect(r.ok && r.state.points).toBe(18);
-    const low = rollDice(newGame(), dice(1, 1, 1));
+    const low = rollDice(quickStart(), dice(1, 1, 1));
     expect(low.ok && low.state.points).toBe(3);
     expect(low.ok && low.state.phase).toBe('act');
   });
 
   it('cannot roll twice in one turn', () => {
-    const s = ok(rollDice(newGame(), dice(2, 3, 4)));
+    const s = ok(rollDice(quickStart(), dice(2, 3, 4)));
     expect(rollDice(s).ok).toBe(false);
   });
 
   it('always lands between 3 and 18', () => {
     for (let i = 0; i < 200; i++) {
-      const r = rollDice(newGame());
+      const r = rollDice(quickStart());
       if (!r.ok) throw new Error();
       expect(r.state.points).toBeGreaterThanOrEqual(3);
       expect(r.state.points).toBeLessThanOrEqual(18);
@@ -300,7 +301,7 @@ describe('winning', () => {
 
 describe('turns and undo', () => {
   it('end turn hands over to the other player with fresh points', () => {
-    const s = ok(rollDice(newGame(), dice(4, 4, 4)));
+    const s = ok(rollDice(quickStart(), dice(4, 4, 4)));
     const a = ok(endTurn(s));
     expect(a.current).toBe('blue');
     expect(a.phase).toBe('roll');
@@ -312,7 +313,7 @@ describe('turns and undo', () => {
   });
 
   it('undo reverts moves within the turn but never the dice roll', () => {
-    let sess = startSession(newGame());
+    let sess = startSession(quickStart());
     sess = apply(sess, (s) => rollDice(s, dice(6, 6, 6)), true).sess;
     expect(canUndo(sess)).toBe(false);
     const cav = sess.state.units.find((u) => u.owner === 'red' && u.type === 'lightCavalry')!;
@@ -326,7 +327,7 @@ describe('turns and undo', () => {
   });
 
   it('a failed action leaves the session untouched', () => {
-    const sess = startSession(newGame());
+    const sess = startSession(quickStart());
     const { sess: after, result } = apply(sess, (s) => endTurn(s));
     expect(result.ok).toBe(false);
     expect(after).toBe(sess);

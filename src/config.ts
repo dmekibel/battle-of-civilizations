@@ -77,7 +77,17 @@ export interface GameConfig {
     /** Ending your turn next to the enemy King with no enemy defenders beside it wins. */
     captureKing: boolean;
   };
-  /** Red's starting army. Blue gets the mirror image (col -> cols - 1 - col). */
+  army: {
+    /** Points each player spends on their army before the battle. */
+    budget: number;
+    /** Price of each piece ("power"). The King is not bought: every army gets exactly one. */
+    cost: Record<Exclude<UnitTypeId, 'king'>, number>;
+  };
+  deploy: {
+    /** How many columns from your own edge you may set up in. */
+    depth: number;
+  };
+  /** Quick-battle army for Red (and tests). Blue gets the mirror image (col -> cols - 1 - col). */
   setup: Placement[];
 }
 
@@ -122,6 +132,12 @@ export const CONFIG: GameConfig = {
   combat: { attackCost: 1, multipleAttacksPerUnit: true, moveAfterAttack: true },
   movement: { passThroughFriendly: true, multipleMovesPerUnit: true },
   win: { killKing: true, captureKing: true },
+  army: {
+    budget: 50,
+    cost: { lightInfantry: 1, heavyInfantry: 2, archer: 3, lightCavalry: 3, heavyCavalry: 4 },
+  },
+  // 5 columns leave room for the largest possible army (50 light infantry and the King).
+  deploy: { depth: 5 },
   setup: [
     ['king', 0, 5],
     ['archer', 1, 4],

@@ -15,7 +15,8 @@ export interface Unit {
   attacked: boolean;
 }
 
-export type Phase = 'roll' | 'act' | 'over';
+/** draft = buying an army, deploy = placing it in secret, then the battle: roll / act. */
+export type Phase = 'draft' | 'deploy' | 'roll' | 'act' | 'over';
 
 export type WinReason = 'kingKilled' | 'kingCaptured';
 
@@ -39,6 +40,10 @@ export interface GameState {
   /** Terrain per hex, indexed [row][col]. */
   board: TerrainId[][];
   units: Unit[];
+  /** Bought pieces not yet placed on the board, per side. */
+  reserve: Record<Player, UnitTypeId[]>;
+  /** Counter for unique unit ids. */
+  seq: number;
   turn: number;
   current: Player;
   phase: Phase;
@@ -62,6 +67,14 @@ export type ErrorCode =
   | 'outOfRange'
   | 'noLineOfSight'
   | 'alreadyAttacked'
-  | 'alreadyMoved';
+  | 'alreadyMoved'
+  | 'overBudget'
+  | 'badArmy'
+  | 'tooManyPieces'
+  | 'notInReserve'
+  | 'outsideZone'
+  | 'blocked'
+  | 'occupied'
+  | 'reserveNotEmpty';
 
 export type Result = { ok: true; state: GameState } | { ok: false; error: ErrorCode };

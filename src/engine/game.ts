@@ -28,35 +28,41 @@ function onBoardSize(cfg: GameConfig, h: Hex) {
   return h.col >= 0 && h.row >= 0 && h.col < cfg.board.cols && h.row < cfg.board.rows;
 }
 
+/** A fresh game: Red builds an army first, then deploys; then Blue does the same. */
 export function newGame(cfg: GameConfig = CONFIG): GameState {
-  const units: Unit[] = [];
-  const count: Record<string, number> = {};
-  for (const owner of ['red', 'blue'] as Player[]) {
-    for (const [type, col, row] of cfg.setup) {
-      const n = (count[owner + type] = (count[owner + type] ?? 0) + 1);
-      units.push({
-        id: `${owner}-${type}-${n}`,
-        type,
-        owner,
-        pos: owner === 'red' ? { col, row } : { col: cfg.board.cols - 1 - col, row },
-        hp: cfg.units[type].hp,
-        moved: false,
-        attacked: false,
-      });
-    }
-  }
   return {
     board: buildBoard(cfg),
-    units,
+    units: [],
+    reserve: { red: [], blue: [] },
+    seq: 0,
     turn: 1,
     current: 'red',
-    phase: 'roll',
+    phase: 'draft',
     dice: null,
     points: 0,
     winner: null,
     winReason: null,
     log: [],
   };
+}
+
+export function makeUnit(s: GameState, type: Unit['type'], owner: Player, pos: Hex, cfg: GameConfig = CONFIG): [Unit, GameState] {
+  const seq = s.seq + 1;
+  const unit: Unit = { id: `${owner}-${type}-${seq}`, type, owner, pos, hp: cfg.units[type].hp, moved: false, attacked: false };
+  return [unit, { ...s, seq }];
+}
+
+/** Skips army building: both sides get the fixed `cfg.setup` army, ready for Red to roll. */
+export function quickStart(cfg: GameConfig = CONFIG): GameState {
+  let s: GameState = { ...newGame(cfg), phase: 'roll' };
+  for (const owner of ['red', 'blue'] as Player[]) {
+    for (const [type, col, row] of cfg.setup) {
+      const pos = owner === 'red' ? { col, row } : { col: cfg.board.cols - 1 - col, row };
+      const [u, next] = makeUnit(s, type, owner, pos, cfg);
+      s = { ...next, units: [...next.units, u] };
+    }
+  }
+  return s;
 }
 
 // ---------- queries ----------
