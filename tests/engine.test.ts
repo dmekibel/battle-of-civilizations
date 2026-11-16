@@ -134,28 +134,38 @@ describe('dice', () => {
   });
 });
 
+const SPEEDS: GameConfig = { ...OPEN, options: { ...OPEN.options, unitSpeeds: true } };
+
 describe('movement', () => {
-  it('speed ratio 1:2:3:6 shows in reach for the same points', () => {
+  it('every step costs 1 point for every piece (default)', () => {
     const furthest = (t: UnitTypeId) => {
-      const s = scenario([['red', t, 8, 5]], 6);
+      const s = scenario([['red', t, 8, 5]], 4);
       return Math.max(0, ...[...reachable(s, s.units[0].id, OPEN).values()].map((r) => distance(r.hex, { col: 8, row: 5 })));
+    };
+    expect([furthest('heavyInfantry'), furthest('lightCavalry'), furthest('king')]).toEqual([4, 4, 4]);
+  });
+
+  it('different speeds: ratio 1:2:3:6 shows in reach for the same points', () => {
+    const furthest = (t: UnitTypeId) => {
+      const s = scenario([['red', t, 8, 5]], 6, SPEEDS);
+      return Math.max(0, ...[...reachable(s, s.units[0].id, SPEEDS).values()].map((r) => distance(r.hex, { col: 8, row: 5 })));
     };
     expect([furthest('heavyInfantry'), furthest('lightInfantry'), furthest('heavyCavalry'), furthest('lightCavalry')]).toEqual([1, 2, 3, 6]);
     expect(furthest('king')).toBe(1);
   });
 
   it('spends points and blocks moves the points cannot pay for', () => {
-    const s = scenario([['red', 'lightInfantry', 2, 2]], 7);
+    const s = scenario([['red', 'lightInfantry', 2, 2]], 3);
     const id = s.units[0].id;
     const a = ok(moveUnit(s, id, { col: 2, row: 4 }, OPEN));
     expect(a.points).toBe(1);
-    expect(moveUnit(a, id, { col: 2, row: 5 }, OPEN).ok).toBe(false);
+    expect(moveUnit(a, id, { col: 2, row: 6 }, OPEN).ok).toBe(false);
   });
 
   it('lets points be split across several units', () => {
-    const s = scenario([['red', 'lightCavalry', 1, 1], ['red', 'heavyInfantry', 5, 5]], 8);
-    const a = ok(moveUnit(s, s.units[0].id, { col: 1, row: 3 }, OPEN));
-    const b = ok(moveUnit(a, s.units[1].id, { col: 5, row: 6 }, OPEN));
+    const s = scenario([['red', 'lightCavalry', 1, 1], ['red', 'heavyInfantry', 5, 5]], 8, SPEEDS);
+    const a = ok(moveUnit(s, s.units[0].id, { col: 1, row: 3 }, SPEEDS));
+    const b = ok(moveUnit(a, s.units[1].id, { col: 5, row: 6 }, SPEEDS));
     expect(b.points).toBe(0);
   });
 

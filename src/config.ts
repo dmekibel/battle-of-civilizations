@@ -127,6 +127,9 @@ export interface GameConfig {
     zoneOfControl: boolean;
     /** Tougher pieces: each piece takes its defense times this many hits (1 = Dad's rules). */
     toughness: number;
+    /** Different speeds: each piece pays its own cost per hex (infantry 3, cavalry 1...).
+     *  Off = every step costs 1 point for every piece (David, 2026-11-17). */
+    unitSpeeds: boolean;
   };
   /** Quick-battle army for Red (and tests). Blue gets the mirror image (col -> cols - 1 - col). */
   setup: Placement[];
@@ -200,6 +203,7 @@ export const CONFIG: GameConfig = {
     kingAura: false,
     zoneOfControl: false,
     toughness: 1,
+    unitSpeeds: false,
   },
   army: {
     budget: 50,

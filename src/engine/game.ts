@@ -47,6 +47,9 @@ export function newGame(cfg: GameConfig = CONFIG): GameState {
   };
 }
 
+/** Points one step costs: 1 for everyone, or the piece's own cost when "different speeds" is on. */
+export const stepCost = (type: Unit['type'], cfg: GameConfig = CONFIG) => (cfg.options.unitSpeeds ? cfg.units[type].moveCost : 1);
+
 /** How many hits a fresh piece can take: its defense, times toughness when that rule is on. */
 export const maxHp = (type: Unit['type'], cfg: GameConfig = CONFIG) => cfg.units[type].hp * (cfg.options.toughness || 1);
 
@@ -110,7 +113,7 @@ function search(s: GameState, unitId: string, cfg: GameConfig): { out: Map<strin
   if (u.moved && !cfg.movement.multipleMovesPerUnit) return { out, prev };
   if (u.attacked && !cfg.combat.moveAfterAttack) return { out, prev };
 
-  const base = cfg.units[u.type].moveCost;
+  const base = stepCost(u.type, cfg);
   const best = new Map<string, number>([[key(u.pos), 0]]);
   // Small boards: a simple priority list is plenty.
   const open: Reach[] = [{ hex: u.pos, cost: 0 }];
@@ -280,7 +283,7 @@ export function moveUnit(s: GameState, unitId: string, to: Hex, cfg: GameConfig 
   if (u.moved && !cfg.movement.multipleMovesPerUnit) return fail('alreadyMoved');
   const r = reachable(s, unitId, cfg).get(key(to));
   if (!r) return fail('unreachable');
-  const hexes = Math.round(r.cost / cfg.units[u.type].moveCost);
+  const hexes = Math.round(r.cost / stepCost(u.type, cfg));
   const units = s.units.map((x) => (x.id === unitId ? { ...x, pos: to, moved: true, ran: (x.ran ?? 0) + hexes } : x));
   const next: GameState = { ...s, units, points: s.points - r.cost, advance: null };
   return {

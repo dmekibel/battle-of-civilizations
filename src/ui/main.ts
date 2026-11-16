@@ -13,6 +13,7 @@ import {
   key,
   liftUnit,
   maxHp,
+  stepCost,
   moveUnit,
   newGame,
   other,
@@ -276,7 +277,7 @@ function stats(type: UnitTypeId, defenseLeft?: number): string {
   return `<span class="stats">
     <span class="st atk" title="${t(lang, 'keyAtk')}"><i>${t(lang, 'tagAtk')}</i>${r.attack > 0 ? r.attack : '–'}</span>
     <span class="st def" title="${t(lang, 'keyDef')}"><i>${t(lang, 'tagDef')}</i>${def}</span>
-    <span class="st mov" title="${t(lang, 'keyMove')}"><i>${t(lang, 'tagMove')}</i>${r.moveCost}</span>
+    <span class="st mov" title="${t(lang, 'keyMove')}"><i>${t(lang, 'tagMove')}</i>${stepCost(type)}</span>
     ${r.ranged ? `<span class="st rng" title="${t(lang, 'keyRange')}"><i>${t(lang, 'tagRange')}</i>${r.ranged.minRange}–${r.ranged.maxRange}</span>` : ''}
   </span>`;
 }
@@ -519,6 +520,7 @@ function draftSheet(s: GameState): string {
 /** The optional rules as shown on the New battle screen, with the value each switches to. */
 const RULES: { key: keyof Settings['options']; on: Settings['options'][keyof Settings['options']] }[] = [
   { key: 'toughness', on: 2 },
+  { key: 'unitSpeeds', on: true },
   { key: 'routAt', on: 0.5 },
   { key: 'shieldWall', on: true },
   { key: 'spears', on: true },
@@ -542,6 +544,7 @@ const RULE_ICON: Record<keyof Settings['options'], string> = {
   spears: '<path d="M5 19L17 7M17 7l3-3-1 5zM8 19l-3 0 0-3" fill="none"/>',
   charge: '<path d="M13 3L5 13h6l-1 8 8-10h-6z"/>',
   kingAura: '<path d="M5 15V8l3.5 3L12 6l3.5 5L19 8v7z"/><path d="M3 19h18" fill="none"/>',
+  unitSpeeds: '<path d="M4 17h4l3-8 3 8h6" fill="none"/><circle cx="6" cy="8" r="2.2"/>',
   zoneOfControl: '<path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z" fill="none"/><path d="M8 12h8" fill="none"/>',
   longShotFrom: '<circle cx="12" cy="12" r="8" fill="none"/><circle cx="12" cy="12" r="3"/>',
   volleys: '<path d="M6 21L18 3M9 21L21 3M3 21L15 3" fill="none"/>',
@@ -553,7 +556,7 @@ const RULE_ICON: Record<keyof Settings['options'], string> = {
 const RULE_GROUPS: { title: Key; color: string; keys: (keyof Settings['options'])[] }[] = [
   { title: 'groupCombat', color: '#c2453a', keys: ['toughness', 'shieldWall', 'spears', 'charge', 'kingAura'] },
   { title: 'groupRanged', color: '#3f8f5a', keys: ['longShotFrom', 'volleys'] },
-  { title: 'groupMove', color: '#3a6fb0', keys: ['zoneOfControl'] },
+  { title: 'groupMove', color: '#3a6fb0', keys: ['unitSpeeds', 'zoneOfControl'] },
   { title: 'groupTurn', color: '#a8811a', keys: ['routAt', 'carryMax', 'firstTurnBonus'] },
 ];
 

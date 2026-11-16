@@ -27,7 +27,7 @@ const sixes = () => 5.5 / 6;
 
 describe('optional rules', () => {
   it('all are off by default', () => {
-    expect(CONFIG.options).toEqual({ firstTurnBonus: 0, carryMax: 0, routAt: null, shieldWall: false, spears: false, longShotFrom: null, volleys: null, charge: false, kingAura: false, zoneOfControl: false, toughness: 1 });
+    expect(CONFIG.options).toEqual({ firstTurnBonus: 0, carryMax: 0, routAt: null, shieldWall: false, spears: false, longShotFrom: null, volleys: null, charge: false, kingAura: false, zoneOfControl: false, toughness: 1, unitSpeeds: false });
   });
 
   it('first-turn bonus: the second player gets extra points on turn 1 only', () => {
