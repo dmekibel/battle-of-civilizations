@@ -4,7 +4,7 @@
 
 import { CONFIG, type GameConfig } from '../config';
 import type { Player } from '../engine';
-import { setSides, sides, type FactionId } from './factions';
+import { known, setSides, sides, type FactionId } from './factions';
 
 export type MapId = 'river' | 'open' | 'forest' | 'random';
 export type DiceId = '3d6' | '2d6' | 'fixed';
@@ -41,7 +41,7 @@ const KEY = 'boc-settings';
 export function loadSettings(): Settings {
   try {
     const s = JSON.parse(localStorage.getItem(KEY) ?? 'null');
-    if (s && typeof s.budget === 'number') return { ...DEFAULT_SETTINGS, ...s, options: { ...DADS_RULES, ...s.options }, sides: { ...DEFAULT_SETTINGS.sides, ...s.sides } };
+    if (s && typeof s.budget === 'number') return { ...DEFAULT_SETTINGS, ...s, options: { ...DADS_RULES, ...s.options }, sides: { red: known(s.sides?.red, 'novgorod'), blue: known(s.sides?.blue, 'teutonic') } };
   } catch {
     /* fall through to the defaults */
   }

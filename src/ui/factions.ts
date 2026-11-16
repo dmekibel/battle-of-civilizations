@@ -114,9 +114,9 @@ export const FACTION_ORDER: FactionId[] = ['novgorod', 'teutonic', 'mongols', 'j
 export let sides: Record<Player, FactionId> = { red: 'novgorod', blue: 'teutonic' };
 
 /** Older saves may name an army that was renamed or removed. */
-function known(id: string, fallback: FactionId): FactionId {
+export function known(id: string | undefined, fallback: FactionId): FactionId {
   const f = id === 'lakota' ? 'comanche' : id;
-  return f in FACTIONS ? (f as FactionId) : fallback;
+  return f && f in FACTIONS ? (f as FactionId) : fallback;
 }
 
 /** Sets both sides' factions and repaints the colours the page uses for them. */
