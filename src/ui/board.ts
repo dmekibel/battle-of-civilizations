@@ -215,6 +215,8 @@ export interface Overlay {
   trail: { moves: { from: Hex; to: Hex }[]; kills: Hex[] };
   /** Hexes the selected archer can shoot at (in range and in sight). */
   rings: Hex[];
+  /** Threat view: hexes the enemy could hit on its next turn. */
+  danger: Hex[];
 }
 
 /** One-off effects for what just happened: they play once, on the render right after. */
@@ -268,6 +270,10 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
     for (const hex of o.zone.hexes) {
       ground.push(`<polygon points="${corners(hex, v, L, S - 2)}" fill="${c}" fill-opacity=".14" stroke="${c}" stroke-opacity=".55" stroke-width="1.5"/>`);
     }
+  }
+
+  for (const hex of o.danger) {
+    ground.push(`<polygon points="${corners(hex, v, L, S - 3)}" fill="#e0302a" fill-opacity=".22" stroke="#ff6a5a" stroke-opacity=".5" stroke-width="1"/>`);
   }
 
   for (const hex of o.rings) {

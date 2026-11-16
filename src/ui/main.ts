@@ -36,6 +36,7 @@ import {
   type Unit,
   distance,
   hasLineOfSight,
+  neighbors,
   type LogEntry,
   type Player,
   type Result,
@@ -310,7 +311,55 @@ function overlay(s: GameState): Overlay {
     spent: s.phase === 'act' ? spentUnits(s) : new Set(),
     trail: battle ? lastEnemyTurn(s) : { moves: [], kills: [] },
     rings: own && CONFIG.units[own.type].ranged && !setupPhase(s) ? shotZone(s, own) : [],
+    danger: dangerOn && battle ? threatZone(s) : [],
   };
+}
+
+/** Threat view: every hex the other side could attack or shoot next turn with an average
+ *  roll (10 points), so you can see where it's safe to stand. */
+let dangerOn = false;
+const AVERAGE_ROLL = 10;
+function threatZone(s: GameState): Hex[] {
+  const them = other(s.current);
+  const theirTurn: GameState = { ...s, current: them, phase: 'act', points: AVERAGE_ROLL, advance: null };
+  const hit = new Map<string, Hex>();
+  const add = (h: Hex) => {
+    if (h.row >= 0 && h.col >= 0 && h.row < s.board.length && h.col < s.board[0].length) hit.set(key(h), h);
+  };
+  for (const u of s.units.filter((x) => x.owner === them)) {
+    const r = CONFIG.units[u.type];
+    const stands = [{ hex: u.pos, cost: 0 }, ...reachable(theirTurn, u.id).values()];
+    for (const { hex, cost } of stands) {
+      const left = AVERAGE_ROLL - cost;
+      if (r.attack > 0 && left >= CONFIG.combat.attackCost) for (const n of neighbors(hex)) add(n);
+      if (r.ranged && left >= r.ranged.cost) {
+        for (let row = hex.row - r.ranged.maxRange; row <= hex.row + r.ranged.maxRange; row++)
+          for (let col = hex.col - r.ranged.maxRange; col <= hex.col + r.ranged.maxRange; col++) {
+            const h = { col, row };
+            const d = distance(hex, h);
+            if (d >= r.ranged.minRange && d <= r.ranged.maxRange && row >= 0 && col >= 0 && row < s.board.length && col < s.board[0].length && hasLineOfSight(s, hex, h)) add(h);
+          }
+      }
+    }
+  }
+  return [...hit.values()];
+}
+
+/** Next piece: select your next piece that can still do something, and point the camera at it. */
+function nextPiece() {
+  const s = sess.state;
+  if (s.phase !== 'act') return;
+  const spent = spentUnits(s);
+  const ready = s.units.filter((u) => u.owner === s.current && !spent.has(u.id)).sort((a, b) => a.pos.col - b.pos.col || a.pos.row - b.pos.row);
+  if (!ready.length) return;
+  const i = ready.findIndex((u) => u.id === selected);
+  const u = ready[(i + 1) % ready.length];
+  selected = u.id;
+  const [x, y] = hexOnMap(u.pos, { portrait });
+  cam = { ...cam, x, y };
+  saveCam();
+  message = null;
+  render();
 }
 
 /** The side to move's pieces with no move and no hit left for the points remaining. */
@@ -531,6 +580,7 @@ function bar(s: GameState): string {
       : '';
     return `${take}<div class="row">
       <button data-act="undo" ${canUndo(sess) ? '' : 'disabled'}>↶ ${t(lang, 'undo')}</button>
+      <button data-act="next" class="narrow" title="${t(lang, 'nextPiece')}" aria-label="${t(lang, 'nextPiece')}">⏭</button>
       <button data-act="end" class="${s.advance ? '' : 'primary'} ${confirmEnd ? 'warn' : ''}">${confirmEnd ? t(lang, 'endAnyway') : t(lang, 'endTurn')} →</button>
     </div>`;
   }
@@ -675,6 +725,7 @@ function draw() {
         <div class="stage">${renderBoard(s, overlay(s), view(), fx)}</div>
         <div class="viewcube" title="${t(lang, 'cubeHelp')}" aria-label="${t(lang, 'cubeHelp')}">${viewCube(view())}</div>
         <div class="cam" aria-label="${t(lang, 'camera')}">
+          <button data-act="danger" class="${dangerOn ? 'on' : ''}" title="${t(lang, 'threatView')}" aria-label="${t(lang, 'threatView')}" aria-pressed="${dangerOn}">⚠</button>
           <button data-act="cam-flip" title="${t(lang, 'camFlip')}" aria-label="${t(lang, 'camFlip')}">⇅</button>
         </div>
         <div class="zoom">
@@ -930,6 +981,12 @@ app.addEventListener('click', (e) => {
       selected = null;
       return void run((st) => endTurn(st), true);
     }
+    case 'next':
+      return nextPiece();
+    case 'danger':
+      dangerOn = !dangerOn;
+      message = dangerOn ? t(lang, 'threatHelp') : null;
+      return render();
     case 'cam-flip':
       // Turn the board half way round; press again to turn it back.
       cam = { ...cam, yaw: cam.yaw + Math.PI };
@@ -1269,6 +1326,11 @@ document.addEventListener('keydown', (e) => {
   }
   if (k === 'enter' || k === 'e') return click(app.querySelector('.cover [data-act="ack"]') ? 'ack' : sess.state.phase === 'deploy' ? 'done' : 'end');
   if (k === 'u') return click('undo');
+  if (k === 'n' || k === 'tab') {
+    e.preventDefault();
+    return nextPiece();
+  }
+  if (k === 'h') return click('danger');
   if (k === 'p') return click('panel');
   // Camera keys: Q / W turn, Z / X tilt, C reset.
   const nudge = (yaw: number, pitch: number) => {
@@ -1341,5 +1403,10 @@ window.addEventListener('resize', () => {
   if (isDesktop() !== desktop && !rolling) return render();
   if (isPortrait() !== portrait && !rolling) render();
 });
+
+// Offline play and "Add to Home Screen" as an app (only for the published game).
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => undefined);
+}
 
 render();

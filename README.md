@@ -77,6 +77,8 @@ Speed ratio heavy infantry : light infantry : heavy cavalry : light cavalry = 1 
 - Tap a green hex to move, tap a red one to attack or shoot.
 - **Undo** steps back within the current turn (never re-rolls the dice).
 - The dice roll by themselves at the start of each turn.
+- **⏭ Next piece** (or N / Tab) jumps to your next piece that can still act. **⚠ Threat view** (or H) shades red every hex the enemy could hit on its next turn with an average roll.
+- **Install as an app:** on iPhone, Share → Add to Home Screen; on Android or desktop Chrome, Install. It then opens full screen and works offline.
 - When you have no points left (or none your pieces can use), the turn ends by itself after a moment; Undo in that moment cancels it.
 - **⇅** flips the board half way round (press again to flip back). The **view cube** in the top-left corner orbits and tilts the camera when dragged.
 - **Two players on one phone** (menu): *pass the phone* turns the board to whoever's turn it is; *across the table* keeps the board where it lies on the phone; at each new turn the camera tips down flat and back up on the other player's side (the board never spins), and the buttons and text turn to face whoever's turn it is, so both players keep the 3D view from their own seat.
