@@ -86,13 +86,20 @@ function run(name: string, cfg: GameConfig, n: number) {
 it('simulate', () => {
   const N = Number(process.env.GAMES ?? 80);
   const base = CONFIG;
-  const variants: [string, GameConfig][] = [
+  // The "Recommended" optional rules from the New battle screen.
+  const recommended: GameConfig = { ...base, options: { ...base.options, firstTurnBonus: 2, carryMax: 3, routAt: 0.5, shieldWall: true, spears: true, longShotFrom: 3, charge: true } };
+  const only = process.env.VARIANT;
+  const all: [string, GameConfig][] = [
     ['baseline (as the game is now)', base],
     ['archers range 2-3 (old)', { ...base, units: { ...base.units, archer: { ...base.units.archer, ranged: { ...base.units.archer.ranged!, maxRange: 3 } } } }],
     ['budget 30', { ...base, army: { ...base.army, budget: 30 } }],
     ['no capture win (only killing the King)', { ...base, win: { ...base.win, captureKing: false } }],
     ['dice 2d6 (2-12) instead of 3d6', { ...base, dice: { count: 2, sides: 6 } }],
+    ['recommended rules', recommended],
+    ['recommended rules, no dice (always 10)', { ...recommended, dice: { count: 0, sides: 6, fixed: 10 } }],
   ];
+  // VARIANT=recommended npm run sim runs only the setups whose name contains that word.
+  const variants = only ? all.filter(([n]) => n.includes(only)) : all;
   const out = variants.map(([n, c]) => run(n, c, N));
   writeFileSync(new URL('./results.json', import.meta.url), JSON.stringify(out, null, 2));
 }, 3600000);

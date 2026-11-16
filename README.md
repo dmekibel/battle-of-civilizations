@@ -78,7 +78,7 @@ Speed ratio heavy infantry : light infantry : heavy cavalry : light cavalry = 1 
 ## Controls
 
 - On a phone the board fills the screen, in portrait or landscape. **Roll dice**, then tap one of your pieces. Green hexes show where it can reach and what it costs. Red dashed hexes are enemies it can hit; the badge shows the damage (✕ = the hit kills).
-- Tap a green hex to move, tap a red one to attack or shoot.
+- Tap a green hex to move, tap a red one to attack or shoot. On a touch screen the first tap on a green hex shows the route and its cost, and a second tap makes the move.
 - **Undo** steps back within the current turn (never re-rolls the dice).
 - The dice roll by themselves at the start of each turn.
 - **⏭ Next piece** (or N / Tab) jumps to your next piece that can still act. **⚠ Threat view** (or H) shades red every hex the enemy could hit on its next turn with an average roll.

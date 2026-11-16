@@ -318,3 +318,5 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 .rule.on .switch i { transform: translateX(16px); background: #1f1b15; }
 .fdot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: 0; box-shadow: 0 0 0 1.5px rgba(241, 232, 210, .6); }
 .blurb { margin: 6px 2px 0; font-size: 12.5px; color: var(--muted); }
+.board .route { fill: none; stroke: #fff6c8; stroke-width: 4; stroke-dasharray: 2 9; stroke-linecap: round; opacity: .95; }
+.board .route-end { fill: #fff6c8; fill-opacity: .35; stroke: #fff6c8; stroke-width: 3; }

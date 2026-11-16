@@ -217,6 +217,8 @@ export interface Overlay {
   rings: Hex[];
   /** Threat view: hexes the enemy could hit on its next turn. */
   danger: Hex[];
+  /** A move waiting for a second tap: the route to show, ending at the destination. */
+  route: Hex[];
 }
 
 /** One-off effects for what just happened: they play once, on the render right after. */
@@ -303,6 +305,15 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
       `<polygon points="${corners(hex, v, L, S - 3)}" fill="#fffbe0" fill-opacity=".28" stroke="#fff3a6" stroke-width="2.5"/>`,
       `<text x="${cx.toFixed(1)}" y="${(cy + 5).toFixed(1)}" class="cost">−${cost}</text>`,
     );
+  }
+
+  // The planned route: a dotted line through each step, a ring on the destination.
+  if (o.route.length) {
+    const sel = o.selected ? s.units.find((u) => u.id === o.selected) : undefined;
+    const pts = [...(sel ? [sel.pos] : []), ...o.route].map((h) => L.pt(...flat(h, v)));
+    ground.push(`<polyline points="${pts.map(fmt).join(' ')}" class="route"/>`);
+    const end = o.route[o.route.length - 1];
+    ground.push(`<polygon points="${corners(end, v, L, S - 4)}" class="route-end"/>`);
   }
 
   for (const u of s.units) {

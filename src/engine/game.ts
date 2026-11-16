@@ -87,11 +87,25 @@ export interface Reach {
 
 /** Every empty hex the unit can end a move on with the points left, and its cheapest cost. */
 export function reachable(s: GameState, unitId: string, cfg: GameConfig = CONFIG): Map<string, Reach> {
+  return search(s, unitId, cfg).out;
+}
+
+/** The cheapest route from a unit to a hex it can reach (start excluded), for showing the path. */
+export function routeTo(s: GameState, unitId: string, to: Hex, cfg: GameConfig = CONFIG): Hex[] {
+  const { out, prev } = search(s, unitId, cfg);
+  if (!out.has(key(to))) return [];
+  const path: Hex[] = [];
+  for (let h: Hex | undefined = to; h; h = prev.get(key(h))) path.unshift(h);
+  return path.slice(1);
+}
+
+function search(s: GameState, unitId: string, cfg: GameConfig): { out: Map<string, Reach>; prev: Map<string, Hex> } {
   const out = new Map<string, Reach>();
+  const prev = new Map<string, Hex>();
   const u = getUnit(s, unitId);
-  if (!u || s.phase !== 'act' || u.owner !== s.current) return out;
-  if (u.moved && !cfg.movement.multipleMovesPerUnit) return out;
-  if (u.attacked && !cfg.combat.moveAfterAttack) return out;
+  if (!u || s.phase !== 'act' || u.owner !== s.current) return { out, prev };
+  if (u.moved && !cfg.movement.multipleMovesPerUnit) return { out, prev };
+  if (u.attacked && !cfg.combat.moveAfterAttack) return { out, prev };
 
   const base = cfg.units[u.type].moveCost;
   const best = new Map<string, number>([[key(u.pos), 0]]);
@@ -112,11 +126,12 @@ export function reachable(s: GameState, unitId: string, cfg: GameConfig = CONFIG
       const cost = cur.cost + base * t.moveCostMultiplier;
       if (cost > s.points || cost >= (best.get(key(n)) ?? Infinity)) continue;
       best.set(key(n), cost);
+      prev.set(key(n), cur.hex);
       open.push({ hex: n, cost });
       if (!occ) out.set(key(n), { hex: n, cost });
     }
   }
-  return out;
+  return { out, prev };
 }
 
 const enemyNext = (s: GameState, h: Hex, owner: Player) => s.units.some((e) => e.owner !== owner && distance(e.pos, h) === 1);

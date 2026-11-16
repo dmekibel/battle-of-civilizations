@@ -20,6 +20,7 @@ import {
   reachable,
   rollDice,
   shoot,
+  routeTo,
   startSession,
   takeHex,
   strikeTargets,
@@ -321,8 +322,12 @@ function overlay(s: GameState): Overlay {
     trail: battle ? lastEnemyTurn(s) : { moves: [], kills: [] },
     rings: own && CONFIG.units[own.type].ranged && !setupPhase(s) ? shotZone(s, own) : [],
     danger: dangerOn && battle ? threatZone(s) : [],
+    route: mine && pending ? routeTo(s, own.id, pending) : [],
   };
 }
+
+/** On a touch screen the first tap on a hex shows the route and its cost; a second tap moves. */
+let pending: Hex | null = null;
 
 /** Threat view: every hex the other side could attack or shoot next turn with an average
  *  roll (10 points), so you can see where it's safe to stand. */
@@ -951,13 +956,23 @@ function onHex(col: number, row: number) {
       return render();
     }
     if (!u) {
-      if (reachable(s, own.id).has(key(hex))) return void run((st) => moveUnit(st, own.id, hex));
+      const reach = reachable(s, own.id).get(key(hex));
+      if (reach) {
+        if (touchScreen && !(pending && pending.col === hex.col && pending.row === hex.row)) {
+          pending = hex;
+          message = `${t(lang, 'tapAgain')} (−${reach.cost})`;
+          return render();
+        }
+        pending = null;
+        return void run((st) => moveUnit(st, own.id, hex));
+      }
       selected = null;
       message = null;
       return render();
     }
   }
   selected = u ? (u.id === selected ? null : u.id) : null;
+  pending = null;
   message = null;
   render();
 }
@@ -966,6 +981,7 @@ app.addEventListener('click', (e) => {
   const el = e.target as Element;
   const hex = el.closest('[data-col]');
   if (hex) confirmEnd = false;
+  if (!hex) pending = null;
   if (hex) return onHex(Number(hex.getAttribute('data-col')), Number(hex.getAttribute('data-row')));
   const btn = el.closest('[data-act]');
   const act = btn?.getAttribute('data-act');
