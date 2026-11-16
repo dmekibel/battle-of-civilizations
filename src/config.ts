@@ -132,6 +132,8 @@ export interface GameConfig {
     /** Different speeds: each piece pays its own cost per hex (infantry 3, cavalry 1...).
      *  Off = every step costs 1 point for every piece (David, 2026-11-17). */
     unitSpeeds: boolean;
+    /** Top speed: hexes a foot piece may move in one turn (horses x2 / x3). null = no limit. */
+    runLimit: number | null;
   };
   /** Quick-battle army for Red (and tests). Blue gets the mirror image (col -> cols - 1 - col). */
   setup: Placement[];
@@ -206,6 +208,7 @@ export const CONFIG: GameConfig = {
     zoneOfControl: false,
     toughness: 1,
     unitSpeeds: false,
+    runLimit: 3,
   },
   army: {
     budget: 50,

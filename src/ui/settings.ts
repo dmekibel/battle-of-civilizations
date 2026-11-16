@@ -34,15 +34,15 @@ export const RECOMMENDED: GameConfig['options'] = {
   toughness: 2,
 };
 
-export const DEFAULT_SETTINGS: Settings = { budget: 50, map: 'river', dice: '1d6', options: { ...DADS_RULES }, sides: { red: 'novgorod', blue: 'teutonic' } };
+export const DEFAULT_SETTINGS: Settings = { budget: 50, map: 'river', dice: '3d6', options: { ...DADS_RULES }, sides: { red: 'novgorod', blue: 'teutonic' } };
 
 const KEY = 'boc-settings';
 
 export function loadSettings(): Settings {
   try {
     const s = JSON.parse(localStorage.getItem(KEY) ?? 'null');
-    // Version 2 (2026-11-17): every step costs 1 and horses run 2-3x, so one die is the new default.
-    if (s && typeof s.budget === 'number' && s.v !== 2) s.dice = '1d6';
+    // Version 3 (2026-11-17): back to three dice by default, now that pieces have a top speed.
+    if (s && typeof s.budget === 'number' && s.v !== 3) s.dice = '3d6';
     if (s && typeof s.budget === 'number') return { ...DEFAULT_SETTINGS, ...s, options: { ...DADS_RULES, ...s.options }, sides: { red: known(s.sides?.red, 'novgorod'), blue: known(s.sides?.blue, 'teutonic') } };
   } catch {
     /* fall through to the defaults */
@@ -50,12 +50,12 @@ export function loadSettings(): Settings {
   return structuredClone(DEFAULT_SETTINGS);
 }
 
-/** "No luck" points: about one die's worth (4), or 10 with the old per-piece speeds. */
-export const fixedPoints = (s: Settings) => (s.options.unitSpeeds ? 10 : 4);
+/** "No luck" points each turn. */
+export const fixedPoints = (_s: Settings) => 10;
 
 export function saveSettings(s: Settings) {
   try {
-    localStorage.setItem(KEY, JSON.stringify({ ...s, v: 2 }));
+    localStorage.setItem(KEY, JSON.stringify({ ...s, v: 3 }));
   } catch {
     /* keep them for this visit only */
   }

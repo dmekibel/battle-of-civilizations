@@ -546,6 +546,7 @@ const RULE_ICON: Record<keyof Settings['options'], string> = {
   charge: '<path d="M13 3L5 13h6l-1 8 8-10h-6z"/>',
   kingAura: '<path d="M5 15V8l3.5 3L12 6l3.5 5L19 8v7z"/><path d="M3 19h18" fill="none"/>',
   unitSpeeds: '<path d="M4 17h4l3-8 3 8h6" fill="none"/><circle cx="6" cy="8" r="2.2"/>',
+  runLimit: '<circle cx="12" cy="13" r="8" fill="none"/><path d="M12 13l4-4M10 3h4" fill="none"/>',
   zoneOfControl: '<path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z" fill="none"/><path d="M8 12h8" fill="none"/>',
   longShotFrom: '<circle cx="12" cy="12" r="8" fill="none"/><circle cx="12" cy="12" r="3"/>',
   volleys: '<path d="M6 21L18 3M9 21L21 3M3 21L15 3" fill="none"/>',
