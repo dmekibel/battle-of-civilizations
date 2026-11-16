@@ -80,3 +80,13 @@ Options saved for later. Nothing here is decided. Rule changes need Dad's yes fi
 - Accessibility: colour-blind safe army colours and patterns, larger text option.
 - Tablet and desktop layouts with a permanent side panel and keyboard shortcuts.
 - Map editor: paint forest, river and bridges, save and share maps.
+
+## From the simulation (2026-11-16, 400 computer-vs-computer games, `npm run sim`)
+
+Findings: typical game 60 rounds (far too long); archers make 52% of kills from 13% of pieces; heavy infantry 0.12 kills each (no job); light cavalry 0% survival; 23% of rolled points unused; first mover wins 54%; luckier roller wins 59%; King captured in only 3 of 80 games. Report: https://claude.ai/artifact/MopJeX6vBAnCZJruauzzZo
+
+- Rules to test with Dad: morale (rout at half the army's points lost), shield wall (+1 defense for adjacent heavy infantry, spears hit charging cavalry back), arrows weaker past 3 hexes and limited volleys, cavalry charge and flanking, King's command aura, carry up to 3 unused points, second player +2 points on turn 1.
+- Factions: Mongols (horse archers, feigned retreat), Japanese (samurai, ashigaru spears, honour), Teutonic (knight brothers, discipline), Novgorod (militia, home forest), Vikings (berserkers, longships), English (longbow, stakes), Byzantines (cataphracts, Greek fire), Saracens (camels scare horses).
+- Custom battle screen: army points, map type, board size, factions, dice / fixed points, victory type, fog of war, hidden setup, turn timer, computer difficulty, saved setups.
+- Chess-like: no-dice Tactician mode, zone of control, facing, counters, key ground, activations.
+- UX: piece card bottom sheet, tap-to-preview path then confirm, threat view, next-piece button, installable app; desktop hover info, right-click menu, tab through pieces.
