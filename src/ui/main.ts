@@ -118,7 +118,9 @@ let prevPos = new Map<string, Hex>(sess.state.units.map((u) => [u.id, u.pos]));
 
 const isPortrait = () => window.innerHeight > window.innerWidth;
 let portrait = isPortrait();
-const ZOOMS = [1, 1.6, 2.4];
+/** Steps for the + / − buttons; pinching can stop anywhere between the first and last. */
+const ZOOMS = [1, 1.6, 2.4, 3.2];
+const [ZOOM_MIN, ZOOM_MAX] = [ZOOMS[0], ZOOMS[ZOOMS.length - 1]];
 let zoom = 1;
 
 type Buyable = keyof ArmyCounts;
@@ -457,8 +459,8 @@ function draw() {
       <div class="stage-wrap">
         <div class="stage" style="--z:${zoom}">${renderBoard(s, overlay(s), { portrait }, fx)}</div>
         <div class="zoom">
-          <button data-act="zoom-in" aria-label="Zoom in" ${zoom >= ZOOMS[ZOOMS.length - 1] ? 'disabled' : ''}>+</button>
-          <button data-act="zoom-out" aria-label="Zoom out" ${zoom <= ZOOMS[0] ? 'disabled' : ''}>−</button>
+          <button data-act="zoom-in" aria-label="Zoom in" ${zoom >= ZOOM_MAX - 0.01 ? 'disabled' : ''}>+</button>
+          <button data-act="zoom-out" aria-label="Zoom out" ${zoom <= ZOOM_MIN + 0.01 ? 'disabled' : ''}>−</button>
         </div>
       </div>
       <p class="info" id="info">${info}</p>
@@ -662,8 +664,8 @@ app.addEventListener('click', (e) => {
       return void run((s) => endTurn(s), true);
     case 'zoom-in':
     case 'zoom-out': {
-      const i = ZOOMS.indexOf(zoom) + (act === 'zoom-in' ? 1 : -1);
-      return setZoom(ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, i))]);
+      const next = act === 'zoom-in' ? ZOOMS.find((z) => z > zoom + 0.01) : [...ZOOMS].reverse().find((z) => z < zoom - 0.01);
+      return setZoom(next ?? zoom);
     }
     case 'menu':
       menuOpen = !menuOpen;
@@ -714,6 +716,79 @@ app.addEventListener('mouseover', (e) => {
   const p = u && overlay(s).targets.get(u.id);
   if (u && p) info.innerHTML = previewText(s, u.id, p);
 });
+
+// ---------- pinch to zoom the map ----------
+// Two fingers on the board zoom the map around the point between them, like the + / −
+// buttons; the page itself never zooms. During the pinch only the map's size changes
+// (no re-render), and the buttons catch up when the fingers lift.
+
+let pinch: { dist: number; zoom: number } | null = null;
+
+const spread = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+
+function zoomAround(next: number, clientX: number, clientY: number) {
+  const st = app.querySelector<HTMLElement>('.stage');
+  if (!st) return;
+  next = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next));
+  const box = st.getBoundingClientRect();
+  const mx = clientX - box.left;
+  const my = clientY - box.top;
+  const ratio = next / zoom;
+  const [cx, cy] = [st.scrollLeft + mx, st.scrollTop + my];
+  zoom = next;
+  st.style.setProperty('--z', String(zoom));
+  st.scrollLeft = cx * ratio - mx;
+  st.scrollTop = cy * ratio - my;
+}
+
+app.addEventListener(
+  'touchstart',
+  (e) => {
+    if (e.touches.length === 2 && (e.target as Element).closest('.stage')) {
+      pinch = { dist: spread(e.touches), zoom };
+      e.preventDefault();
+    }
+  },
+  { passive: false },
+);
+
+app.addEventListener(
+  'touchmove',
+  (e) => {
+    if (!pinch || e.touches.length !== 2) return;
+    e.preventDefault();
+    const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+    const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+    zoomAround(pinch.zoom * (spread(e.touches) / pinch.dist), midX, midY);
+  },
+  { passive: false },
+);
+
+app.addEventListener('touchend', (e) => {
+  if (pinch && e.touches.length < 2) {
+    pinch = null;
+    render();
+  }
+});
+
+// Safari's own pinch gestures would zoom the page: stop them everywhere.
+for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
+  document.addEventListener(type, (e) => e.preventDefault(), { passive: false });
+}
+
+// Trackpad pinch on a computer arrives as ctrl + wheel: zoom the map instead of the page.
+app.addEventListener(
+  'wheel',
+  (e) => {
+    if (!e.ctrlKey || !(e.target as Element).closest('.stage')) return;
+    e.preventDefault();
+    zoomAround(zoom * Math.exp(-e.deltaY / 100), e.clientX, e.clientY);
+    clearTimeout(wheelEnd);
+    wheelEnd = window.setTimeout(render, 200);
+  },
+  { passive: false },
+);
+let wheelEnd = 0;
 
 window.addEventListener('resize', () => {
   if (isPortrait() !== portrait && !rolling) render();

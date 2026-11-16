@@ -33,6 +33,8 @@ body {
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
   overflow: hidden;
+  /* No page zoom: two-finger pinch zooms the map only (handled in main.ts). */
+  touch-action: manipulation;
 }
 
 #app { height: 100%; }
@@ -70,7 +72,7 @@ body {
 .icon { font-size: 20px; padding: 6px 10px; }
 
 .stage-wrap { grid-area: stage; position: relative; min-height: 0; min-width: 0; }
-.stage { position: absolute; inset: 0; overflow: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.stage { position: absolute; inset: 0; overflow: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; touch-action: pan-x pan-y; }
 .board { width: calc(100% * var(--z, 1)); height: calc(100% * var(--z, 1)); display: block; user-select: none; -webkit-user-select: none; }
 .zoom { position: absolute; right: 6px; bottom: 6px; display: flex; flex-direction: column; gap: 6px; }
 .zoom button { width: 44px; height: 44px; padding: 0; font-size: 22px; line-height: 1; border-radius: 50%; background: rgba(43, 38, 30, .92); color: var(--ink); border-color: var(--line); box-shadow: 0 2px 6px rgba(0, 0, 0, .4); }
