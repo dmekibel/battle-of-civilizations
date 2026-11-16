@@ -441,6 +441,7 @@ function menuBody(s: GameState): string {
   return `<div class="drawer-buttons">
       <button data-act="lang">${t(lang, 'language')}</button>
       <button data-act="view">${tilt ? t(lang, 'viewTilt') : t(lang, 'viewFlat')}</button>
+      <button data-act="cam-reset">${t(lang, 'camResetMenu')}</button>
       ${mode === 'pvp' ? `<button data-act="face">${faceTurn ? t(lang, 'faceOn') : t(lang, 'faceOff')}</button>` : ''}
       <button data-act="mute">${isMuted() ? t(lang, 'soundOff') : t(lang, 'soundOn')}</button>
       <button data-act="quick">${t(lang, 'quick')}</button>
@@ -594,12 +595,7 @@ function draw() {
       <div class="stage-wrap">
         <div class="stage" style="--z:${zoom}">${renderBoard(s, overlay(s), view(), fx)}</div>
         <div class="cam" aria-label="${t(lang, 'camera')}">
-          <button data-act="cam-left" title="${t(lang, 'camLeft')}" aria-label="${t(lang, 'camLeft')}">⟲</button>
-          <button data-act="cam-right" title="${t(lang, 'camRight')}" aria-label="${t(lang, 'camRight')}">⟳</button>
-          <button data-act="cam-up" title="${t(lang, 'camSteeper')}" aria-label="${t(lang, 'camSteeper')}" ${tilt && cam.pitch < 1 ? '' : 'disabled'}>⤒</button>
-          <button data-act="cam-down" title="${t(lang, 'camFlatter')}" aria-label="${t(lang, 'camFlatter')}" ${tilt && cam.pitch > 0 ? '' : 'disabled'}>⤓</button>
           <button data-act="cam-mine" title="${t(lang, 'camMine')}" aria-label="${t(lang, 'camMine')}">⬇</button>
-          <button data-act="cam-reset" title="${t(lang, 'camReset')}" aria-label="${t(lang, 'camReset')}">⌂</button>
         </div>
         <div class="zoom">
           <button data-act="zoom-in" aria-label="Zoom in" ${zoom >= ZOOM_MAX - 0.01 ? 'disabled' : ''}>+</button>
@@ -619,6 +615,19 @@ function draw() {
   document.title = t(lang, 'title');
   saveGame();
   scheduleAi();
+  scheduleRoll();
+}
+
+/** A new turn rolls its own dice after a short beat, so the handover is visible first. */
+let rollTimer: number | null = null;
+function scheduleRoll() {
+  const s = sess.state;
+  if (rollTimer !== null || rolling || cover || choosing || s.phase !== 'roll' || aiTurn(s)) return;
+  rollTimer = window.setTimeout(() => {
+    rollTimer = null;
+    const st = sess.state;
+    if (!rolling && !cover && !choosing && st.phase === 'roll' && !aiTurn(st)) roll(selected);
+  }, 600);
 }
 
 // ---------- computer opponent ----------
@@ -840,16 +849,6 @@ app.addEventListener('click', (e) => {
       selected = null;
       return void run((st) => endTurn(st), true);
     }
-    case 'cam-left':
-    case 'cam-right':
-      cam = { ...cam, yaw: cam.yaw + (act === 'cam-left' ? -1 : 1) * (Math.PI / 6) };
-      saveCam();
-      return render();
-    case 'cam-up':
-    case 'cam-down':
-      cam = { ...cam, pitch: clampPitch(cam.pitch + (act === 'cam-up' ? 0.15 : -0.15)) };
-      saveCam();
-      return render();
     case 'cam-mine': {
       // Your army at the bottom; against the computer "you" are always Novgorod.
       const me = mode === 'ai' ? 'red' : sess.state.current;
@@ -1035,20 +1034,47 @@ app.addEventListener('touchend', (e) => {
   }
 });
 
-// Safari's own pinch gestures would zoom the page: stop them everywhere.
+// Safari's own pinch gestures would zoom the page: stop them everywhere. On a Mac trackpad
+// (no touch screen) Safari's two-finger rotate turns the board, like Apple Maps.
+const touchScreen = 'ontouchstart' in window;
+let gestureYaw = 0;
 for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
-  document.addEventListener(type, (e) => e.preventDefault(), { passive: false });
+  document.addEventListener(
+    type,
+    (e) => {
+      e.preventDefault();
+      if (touchScreen) return;
+      const rotation = (e as Event & { rotation?: number }).rotation ?? 0;
+      if (type === 'gesturestart') gestureYaw = cam.yaw;
+      else if (type === 'gesturechange') {
+        cam = { ...cam, yaw: gestureYaw + (rotation * Math.PI) / 180 };
+        camFrame();
+      } else camDone();
+    },
+    { passive: false },
+  );
 }
 
-// Trackpad pinch on a computer arrives as ctrl + wheel: zoom the map instead of the page.
+// Trackpad, Apple Maps style: pinch (it arrives as ctrl + wheel) zooms, two-finger scroll up
+// and down tilts, left and right turns the board. Shift + scroll moves the map instead.
 app.addEventListener(
   'wheel',
   (e) => {
-    if (!e.ctrlKey || !(e.target as Element).closest('.stage')) return;
+    if (!(e.target as Element).closest('.stage') || e.shiftKey) return;
     e.preventDefault();
-    zoomAround(zoom * Math.exp(-e.deltaY / 100), e.clientX, e.clientY);
+    if (e.ctrlKey) {
+      zoomAround(zoom * Math.exp(-e.deltaY / 100), e.clientX, e.clientY);
+    } else {
+      // Line-based wheels (a mouse) report much smaller numbers than trackpads.
+      const unit = e.deltaMode === 1 ? 16 : 1;
+      cam = {
+        yaw: cam.yaw + e.deltaX * unit * 0.004,
+        pitch: tilt ? clampPitch(cam.pitch + e.deltaY * unit * 0.0025) : cam.pitch,
+      };
+      camFrame();
+    }
     clearTimeout(wheelEnd);
-    wheelEnd = window.setTimeout(render, 200);
+    wheelEnd = window.setTimeout(camDone, 200);
   },
   { passive: false },
 );
@@ -1073,11 +1099,21 @@ document.addEventListener('keydown', (e) => {
   if (k === 'enter' || k === 'e') return click(app.querySelector('.cover [data-act="ack"]') ? 'ack' : sess.state.phase === 'deploy' ? 'done' : 'end');
   if (k === 'u') return click('undo');
   if (k === 'p') return click('panel');
-  if (k === 'q') return click('cam-left');
-  if (k === 'w') return click('cam-right');
-  if (k === 'z') return click('cam-down');
-  if (k === 'x') return click('cam-up');
-  if (k === 'c') return click('cam-reset');
+  // Camera keys: Q / W turn, Z / X tilt, C reset.
+  const nudge = (yaw: number, pitch: number) => {
+    cam = { yaw: cam.yaw + yaw, pitch: tilt ? clampPitch(cam.pitch + pitch) : cam.pitch };
+    saveCam();
+    render();
+  };
+  if (k === 'q') return nudge(-Math.PI / 12, 0);
+  if (k === 'w') return nudge(Math.PI / 12, 0);
+  if (k === 'z') return nudge(0, -0.1);
+  if (k === 'x') return nudge(0, 0.1);
+  if (k === 'c') {
+    cam = { ...CAM_DEFAULT };
+    saveCam();
+    return render();
+  }
   if (k === 'v') return click('cam-mine');
   if (k === 'f') return click('fullscreen');
   if (k === 't') return click('take');

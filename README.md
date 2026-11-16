@@ -76,12 +76,12 @@ Speed ratio heavy infantry : light infantry : heavy cavalry : light cavalry = 1 
 - On a phone the board fills the screen, in portrait or landscape. **Roll dice**, then tap one of your pieces. Green hexes show where it can reach and what it costs. Red dashed hexes are enemies it can hit; the badge shows the damage (✕ = the hit kills).
 - Tap a green hex to move, tap a red one to attack or shoot.
 - **Undo** steps back within the current turn (never re-rolls the dice).
-- Tapping one of your pieces before rolling rolls the dice for you.
+- The dice roll by themselves at the start of each turn.
 - When you have no points left (or none your pieces can use), the turn ends by itself after a moment; Undo in that moment cancels it.
 - **⬇** puts your army at the bottom of the screen. In a two-player game, **🔄 Face the player** (menu) turns the board to whoever's turn it is.
 - **End turn** passes the screen to the other player. With points still usable, the first press warns and the button turns into **End anyway**.
 - **On a computer** (wide screen): the pieces list, log and settings stay open in a side panel. Keys: Space roll, Enter end turn, U or Ctrl+Z undo, + / − zoom, Esc deselect. Drag the map with the mouse; a trackpad pinch zooms it.
-- **Camera:** turn the board to any angle and change the tilt. Buttons ⟲ ⟳ ⤒ ⤓ ⌂ in the corner of the board; on a phone twist two fingers to turn and slide them up or down to tilt; with a mouse right-drag (or Shift + drag); keys Q / W turn, Z / X tilt, C resets. Pieces always face you.
+- **Camera:** turn the board to any angle and change the tilt. The ⬇ button in the corner of the board puts your army at the bottom; reset the camera from the menu; on a phone twist two fingers to turn and slide them up or down to tilt; on a trackpad (Apple Maps style) pinch zooms, two-finger scroll up and down tilts and left and right turns, Shift + scroll moves the map, and Safari's two-finger rotate turns; with a mouse right-drag (or Shift + drag); keys Q / W turn, Z / X tilt, C resets. Pieces always face you.
 - **2.5D view** (default): the board tilts back like a table and the pieces, trees and bridges stand up. Switch to the flat map in the menu (🗺 View).
 - The log lists every roll, move and hit. **EN / RU** switches the language (in the menu ☰).
 
