@@ -29,13 +29,16 @@ import {
   type ArmyCounts,
   type AttackPreview,
   type GameState,
+  type Hex,
+  type LogEntry,
   type Player,
   type Result,
   type Session,
 } from '../engine';
-import { renderBoard, type Overlay } from './board';
+import { renderBoard, type Effects, type Overlay } from './board';
 import { errorText, logText, playerName, reasonText, t, unitName, type Lang } from './i18n';
-import { unitIcon } from './symbols';
+import { EMBLEM, unitIcon } from './symbols';
+import { isMuted, sound, toggleMute } from './sound';
 
 const app = document.getElementById('app')!;
 
@@ -48,7 +51,41 @@ function loadLang(): Lang {
   }
 }
 
-let sess: Session = startSession(newGame());
+// ---------- saving ----------
+// The game is saved after every change, so closing the app or locking the phone loses nothing.
+
+const SAVE_KEY = 'boc-save-v1';
+
+interface Saved {
+  board: [number, number];
+  state: GameState;
+  cover: boolean;
+}
+
+function loadGame(): Saved | null {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw) as Saved;
+    const ok = saved?.state?.phase && Array.isArray(saved.state.units) && saved.state.reserve && 'advance' in saved.state;
+    const sameBoard = saved.board?.[0] === CONFIG.board.cols && saved.board?.[1] === CONFIG.board.rows;
+    return ok && sameBoard ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveGame() {
+  try {
+    const data: Saved = { board: [CONFIG.board.cols, CONFIG.board.rows], state: sess.state, cover };
+    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+  } catch {
+    /* storage full or blocked: play on without saving */
+  }
+}
+
+const saved = loadGame();
+let sess: Session = startSession(saved?.state ?? newGame());
 let selected: string | null = null;
 let lang: Lang = loadLang();
 let message: string | null = null;
@@ -58,9 +95,13 @@ let confirmNew = false;
 let lastPoints = 0;
 let menuOpen = false;
 /** Pass-the-phone screen: shown whenever the other player must look away. */
-let cover = true;
+// A game reopened during secret setup always starts behind the cover, so nothing leaks.
+let cover = saved ? saved.cover || saved.state.phase === 'draft' || saved.state.phase === 'deploy' : true;
 let draft: ArmyCounts = {};
 let tray: UnitTypeId | null = null;
+/** What the last render showed, so the next one can animate what changed. */
+let prevLog = sess.state.log.length;
+let prevPos = new Map<string, Hex>(sess.state.units.map((u) => [u.id, u.pos]));
 
 const isPortrait = () => window.innerHeight > window.innerWidth;
 let portrait = isPortrait();
@@ -144,31 +185,72 @@ function legendList(owner: Player): string {
 
 // ---------- screens ----------
 
+/** A row of small pieces showing how many of this type are in the army. */
+function strip(type: Buyable, n: number, owner: Player): string {
+  return Array.from({ length: n }, () => unitIcon(type, owner)).join('');
+}
+
+/** Slider track: gold up to the value, pale up to what the budget still allows. */
+function sliderFill(type: Buyable): string {
+  const price = CONFIG.army.cost[type];
+  const max = Math.floor(CONFIG.army.budget / price);
+  const n = draft[type] ?? 0;
+  const reach = n + Math.floor((CONFIG.army.budget - armyCost(draft)) / price);
+  return `--v:${(n / max) * 100}%;--r:${(Math.min(reach, max) / max) * 100}%`;
+}
+
+/** Live update while a slider is dragged: rebuilding the sheet would cancel the drag. */
+function onSlide(input: HTMLInputElement) {
+  const type = input.dataset.type as Buyable;
+  const price = CONFIG.army.cost[type];
+  const others = armyCost({ ...draft, [type]: 0 });
+  const n = Math.min(Number(input.value), Math.floor((CONFIG.army.budget - others) / price));
+  if (Number(input.value) !== n) input.value = String(n);
+  if ((draft[type] ?? 0) === n) return;
+  draft = { ...draft, [type]: n };
+  const owner = sess.state.current;
+  const row = app.querySelector(`[data-row="${type}"]`)!;
+  row.querySelector('.count')!.textContent = String(n);
+  row.querySelector('.strip')!.innerHTML = strip(type, n, owner);
+  const left = CONFIG.army.budget - armyCost(draft);
+  app.querySelector('#left')!.textContent = String(left);
+  (app.querySelector('#meter') as HTMLElement).style.width = `${((CONFIG.army.budget - left) / CONFIG.army.budget) * 100}%`;
+  for (const t2 of BUY_ORDER) {
+    const r = app.querySelector(`[data-row="${t2}"]`)!;
+    (r.querySelector('input') as HTMLInputElement).style.cssText = sliderFill(t2);
+    (r.querySelector('[data-act="less"]') as HTMLButtonElement).disabled = !(draft[t2] ?? 0);
+    (r.querySelector('[data-act="more"]') as HTMLButtonElement).disabled = CONFIG.army.cost[t2] > left;
+  }
+  sound('tick');
+}
+
 function draftSheet(s: GameState): string {
   const spent = armyCost(draft);
   const left = CONFIG.army.budget - spent;
   const rows = BUY_ORDER.map((type) => {
     const n = draft[type] ?? 0;
     const price = CONFIG.army.cost[type];
-    return `<li>
+    return `<li data-row="${type}">
       ${unitIcon(type, s.current)}
       <b class="name">${unitName(lang, type)}</b>
       <span class="price" title="${t(lang, 'power')}">${price}<small>${t(lang, 'pts')}</small></span>
-      <div class="stepper">
+      <output class="count">${n}</output>
+      ${stats(type)}
+      <div class="slide">
         <button data-act="less" data-type="${type}" ${n ? '' : 'disabled'} aria-label="−">−</button>
-        <output>${n}</output>
+        <input type="range" id="sl-${type}" data-type="${type}" min="0" max="${Math.floor(CONFIG.army.budget / price)}" step="1" value="${n}" aria-label="${unitName(lang, type)}" style="${sliderFill(type)}">
         <button data-act="more" data-type="${type}" ${price <= left ? '' : 'disabled'} aria-label="+">+</button>
       </div>
-      ${stats(type)}
+      <div class="strip">${strip(type, n, s.current)}</div>
     </li>`;
   }).join('');
   return `<div class="sheet ${s.current}">
     <div class="sheet-body">
       <h2><span class="dot ${s.current}"></span>${playerName(lang, s.current)}: ${t(lang, 'build')}</h2>
-      <div class="budget"><b>${left}</b> / ${CONFIG.army.budget} ${t(lang, 'pointsLeft')}
-        <div class="meter"><i style="width:${(spent / CONFIG.army.budget) * 100}%"></i></div></div>
+      <div class="budget"><b id="left">${left}</b> / ${CONFIG.army.budget} ${t(lang, 'pointsLeft')}
+        <div class="meter"><i id="meter" style="width:${(spent / CONFIG.army.budget) * 100}%"></i></div></div>
       <ul class="buy">
-        <li class="king">${unitIcon('king', s.current)}<b class="name">${unitName(lang, 'king')}<span class="free">${t(lang, 'kingFree')}</span></b><span class="price free-badge">0<small>${t(lang, 'pts')}</small></span><div class="stepper"><output>1</output></div>${stats('king')}</li>
+        <li class="king">${unitIcon('king', s.current)}<b class="name">${unitName(lang, 'king')}<span class="free">${t(lang, 'kingFree')}</span></b><span class="price free-badge">0<small>${t(lang, 'pts')}</small></span><output class="count">1</output>${stats('king')}</li>
         ${rows}
       </ul>
       ${statKey()}
@@ -181,12 +263,14 @@ function draftSheet(s: GameState): string {
 function passScreen(s: GameState): string {
   if (s.phase === 'roll') {
     return `<div class="cover"><div class="card">
+      <div class="emblem">${EMBLEM.red}${EMBLEM.blue}</div>
       <h2>${t(lang, 'battle')}</h2>
       <p>${t(lang, 'battleText')} <b class="${s.current}">${playerName(lang, s.current)}</b>.</p>
       <button data-act="ack" class="primary wide">${t(lang, 'startBattle')}</button>
     </div></div>`;
   }
   return `<div class="cover ${s.current}"><div class="card">
+    <div class="emblem">${EMBLEM[s.current]}</div>
     <p class="small">${t(lang, 'handTo')}</p>
     <h2 class="${s.current}">${playerName(lang, s.current)}</h2>
     <p>${playerName(lang, other(s.current))} — ${t(lang, 'noPeek')}</p>
@@ -206,6 +290,7 @@ function menu(s: GameState): string {
     <div class="drawer-head"><b>${t(lang, 'title')}</b><button data-act="menu" class="ghost">${t(lang, 'close')}</button></div>
     <div class="drawer-buttons">
       <button data-act="lang">${t(lang, 'language')}</button>
+      <button data-act="mute">${isMuted() ? t(lang, 'soundOff') : t(lang, 'soundOn')}</button>
       <button data-act="quick">${t(lang, 'quick')}</button>
       <button data-act="new">${confirmNew ? t(lang, 'confirmNew') : t(lang, 'newGame')}</button>
     </div>
@@ -265,8 +350,26 @@ function setZoom(next: number) {
   }
 }
 
+/** Effects and sounds for log entries added since the last render. */
+function effects(s: GameState): Effects {
+  const fresh: LogEntry[] = s.log.length > prevLog ? s.log.slice(prevLog) : [];
+  const fx: Effects = { from: fresh.length ? prevPos : new Map(), hits: [] };
+  for (const e of fresh) {
+    if (e.kind === 'attack' || e.kind === 'shoot') {
+      fx.hits.push({ at: e.at, damage: e.damage, killed: e.killed, type: e.target, owner: other(e.player), shotFrom: e.kind === 'shoot' ? e.from : null });
+      sound(e.kind === 'shoot' ? 'arrow' : 'clash');
+      if (e.killed) setTimeout(() => sound('death'), 180);
+    } else if (e.kind === 'move') sound('step');
+    else if (e.kind === 'win') setTimeout(() => sound('win'), 400);
+  }
+  prevLog = s.log.length;
+  prevPos = new Map(s.units.map((u) => [u.id, u.pos]));
+  return fx;
+}
+
 function draw() {
   const s = sess.state;
+  const fx = effects(s);
   portrait = isPortrait();
   const faces = rolling ? rollFaces : s.dice;
   const bump = s.points !== lastPoints ? 'bump' : '';
@@ -290,7 +393,8 @@ function draw() {
 
   const over =
     s.phase === 'over' && s.winner
-      ? `<div class="cover"><div class="card ${s.winner}">
+      ? `<div class="cover ${s.winner}"><div class="card ${s.winner}">
+           <div class="emblem">${EMBLEM[s.winner]}</div>
            <h2 class="${s.winner}">${playerName(lang, s.winner)} ${t(lang, 'wins')}</h2>
            <p>${reasonText(lang, s.winReason!)}</p>
            <button data-act="restart" class="primary wide">${t(lang, 'newGame')}</button>
@@ -306,7 +410,7 @@ function draw() {
         <button data-act="menu" class="ghost icon" aria-label="${t(lang, 'menu')}">☰</button>
       </header>
       <div class="stage-wrap">
-        <div class="stage" style="--z:${zoom}">${renderBoard(s, overlay(s), { portrait })}</div>
+        <div class="stage" style="--z:${zoom}">${renderBoard(s, overlay(s), { portrait }, fx)}</div>
         <div class="zoom">
           <button data-act="zoom-in" aria-label="Zoom in" ${zoom >= ZOOMS[ZOOMS.length - 1] ? 'disabled' : ''}>+</button>
           <button data-act="zoom-out" aria-label="Zoom out" ${zoom <= ZOOMS[0] ? 'disabled' : ''}>−</button>
@@ -321,6 +425,7 @@ function draw() {
     ${menuOpen ? menu(s) : ''}`;
   document.documentElement.lang = lang;
   document.title = t(lang, 'title');
+  saveGame();
 }
 
 // ---------- actions ----------
@@ -348,6 +453,7 @@ function restart(state: GameState) {
 function roll() {
   if (rolling || sess.state.phase !== 'roll') return;
   rolling = true;
+  sound('dice');
   selected = null;
   message = null;
   const spin = () => (rollFaces = Array.from({ length: CONFIG.dice.count }, () => 1 + Math.floor(Math.random() * CONFIG.dice.sides)));
@@ -417,6 +523,7 @@ app.addEventListener('click', (e) => {
   if (act !== 'new') confirmNew = false;
   switch (act) {
     case 'ack':
+      if (sess.state.phase === 'roll') sound('horn');
       cover = false;
       message = null;
       return render();
@@ -473,6 +580,10 @@ app.addEventListener('click', (e) => {
       }
       message = null;
       return render();
+    case 'mute':
+      toggleMute();
+      sound('tick');
+      return render();
     case 'quick':
       return restart(quickStart());
     case 'new':
@@ -484,6 +595,11 @@ app.addEventListener('click', (e) => {
     case 'restart':
       return restart(newGame());
   }
+});
+
+app.addEventListener('input', (e) => {
+  const el = e.target as HTMLInputElement;
+  if (el.type === 'range' && el.dataset.type) onSlide(el);
 });
 
 // Desktop: hovering a target shows the attack preview in the info line.

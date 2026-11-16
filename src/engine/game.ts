@@ -245,6 +245,8 @@ function strike(s: GameState, attackerId: string, targetId: string, kind: 'attac
     {
       kind, turn: s.turn, player: s.current, unit: c.a.type, target: c.t.type, damage: c.damage, killed, cost: c.cost,
       advanced: mode === 'must',
+      from: c.a.pos,
+      at: c.t.pos,
     },
   );
   if (killed && c.t.type === 'king' && cfg.win.killKing) next = declareWin(next, s.current, 'kingKilled');

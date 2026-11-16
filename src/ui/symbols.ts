@@ -4,7 +4,14 @@
 import { CONFIG, type UnitTypeId } from '../config';
 import type { Player } from '../engine';
 
-export const ARMY_COLOR: Record<Player, string> = { red: '#b3261e', blue: '#1f56a8' };
+// Novgorod: crimson. Teutonic Order: black (their white mantles with the black cross).
+export const ARMY_COLOR: Record<Player, string> = { red: '#a8201a', blue: '#1b1b1d' };
+
+/** Coat of arms for each side, for the pass-the-phone and battle screens. */
+export const EMBLEM: Record<Player, string> = {
+  red: `<svg viewBox="0 0 60 70" width="60" height="70" aria-hidden="true"><path d="M4 4H56V30Q56 56 30 66Q4 56 4 30Z" fill="#a8201a" stroke="#d9a521" stroke-width="3"/><path d="M15 44L15 24L22.5 32L30 18L37.5 32L45 24L45 44Z" fill="#e8b923" stroke="#8a6410" stroke-width="1.5" stroke-linejoin="round"/></svg>`,
+  blue: `<svg viewBox="0 0 60 70" width="60" height="70" aria-hidden="true"><path d="M4 4H56V30Q56 56 30 66Q4 56 4 30Z" fill="#f4f1e8" stroke="#1b1b1d" stroke-width="3"/><path d="M24 12H36L33 28H48V40H33L36 58H24L27 40H12V28H27Z" fill="#1b1b1d"/></svg>`,
+};
 
 const W = 40;
 const H = 28;

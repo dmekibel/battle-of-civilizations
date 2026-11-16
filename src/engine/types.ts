@@ -33,6 +33,9 @@ export type LogEntry =
       killed: boolean;
       /** The attacker stepped into the dead piece's hex. */
       advanced?: boolean;
+      /** Where the attacker stood and where the target stood. */
+      from: Hex;
+      at: Hex;
       cost: number;
     }
   | { kind: 'endTurn'; turn: number; player: Player }

@@ -1,7 +1,7 @@
 // Draws the board as one SVG string. The grid is flat-top hexes with odd columns shifted
 // down; in portrait the whole map turns 90° so the armies face each other top and bottom.
 
-import { CONFIG, type TerrainId } from '../config';
+import { CONFIG, type TerrainId, type UnitTypeId } from '../config';
 import type { AttackPreview, GameState, Hex, Player, Reach } from '../engine';
 import { hexName } from './i18n';
 import { ARMY_COLOR, unitSymbol } from './symbols';
@@ -73,7 +73,16 @@ export interface Overlay {
   hide: Player | null;
 }
 
-export function renderBoard(s: GameState, o: Overlay, v: View): string {
+/** One-off effects for what just happened: they play once, on the render right after. */
+export interface Effects {
+  /** Unit id -> where it stood before, so it can slide to its new hex. */
+  from: Map<string, Hex>;
+  hits: { at: Hex; damage: number; killed: boolean; type: UnitTypeId; owner: Player; shotFrom: Hex | null }[];
+}
+
+export const NO_EFFECTS: Effects = { from: new Map(), hits: [] };
+
+export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_EFFECTS): string {
   const parts: string[] = [];
 
   for (let r = 0; r < s.board.length; r++) {
@@ -110,12 +119,30 @@ export function renderBoard(s: GameState, o: Overlay, v: View): string {
     if (u.id === o.selected) parts.push(`<polygon points="${corners(u.pos, v, S - 2)}" fill="#ffe27a" fill-opacity=".55" stroke="#c99a00" stroke-width="3"/>`);
     const p = o.targets.get(u.id);
     if (p) parts.push(`<polygon points="${corners(u.pos, v, S - 3)}" fill="#e53935" fill-opacity=".14" stroke="#d32f2f" stroke-width="3" stroke-dasharray="6 4"/>`);
-    parts.push(`<g transform="translate(${x} ${y - 3})">${unitSymbol(u.type, u.owner, u.hp)}</g>`);
+    const was = fx.from.get(u.id);
+    const hit = fx.hits.some((h) => !h.killed && h.at.col === u.pos.col && h.at.row === u.pos.row);
+    let inner = unitSymbol(u.type, u.owner, u.hp);
+    if (was && (was.col !== u.pos.col || was.row !== u.pos.row)) {
+      const [px, py] = center(was, v);
+      inner = `<g class="slide" style="--dx:${(px - x).toFixed(1)}px;--dy:${(py - y).toFixed(1)}px">${inner}</g>`;
+    }
+    parts.push(`<g transform="translate(${x} ${y - 3})"><g class="${hit ? 'hit' : ''}">${inner}</g></g>`);
     if (p) {
       parts.push(
         `<g transform="translate(${x + 17} ${y - 20})" class="badge"><circle r="10" fill="#d32f2f"/><text y="4">${p.kills ? '✕' : `−${p.damage}`}</text></g>`,
       );
     }
+  }
+
+  // Arrows in flight, pieces that just died, and floating damage numbers.
+  for (const h of fx.hits) {
+    const [x, y] = center(h.at, v);
+    if (h.shotFrom) {
+      const [sx, sy] = center(h.shotFrom, v);
+      parts.push(`<line class="arrow" x1="${sx}" y1="${sy}" x2="${x}" y2="${y}" stroke="#3a2a14" stroke-width="2.5" stroke-linecap="round"/>`);
+    }
+    if (h.killed) parts.push(`<g transform="translate(${x} ${y - 3})"><g class="ghost">${unitSymbol(h.type, h.owner, 0)}</g></g>`);
+    parts.push(`<text class="float" x="${x}" y="${y - 8}">${h.killed ? '✕' : `−${h.damage}`}</text>`);
   }
 
   const [vw, vh] = v.portrait ? [H, W] : [W, H];

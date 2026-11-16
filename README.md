@@ -2,6 +2,8 @@
 
 A digital prototype of a hex-grid war board game designed by David's father. Two players share one screen and take turns (hot-seat). No server.
 
+The first armies are **Novgorod** (crimson and gold) and the **Teutonic Order** (black and white), as in the Battle on the Ice of 1242. The game saves itself after every move, so closing the app or locking the phone loses nothing. Sounds are made in code (dice, steel, arrows, war horn) and can be muted in the menu.
+
 **Play:** https://dmekibel.github.io/battle-of-civilizations/ (after GitHub Pages is switched on)
 
 ## Run locally
@@ -57,7 +59,7 @@ Speed ratio heavy infantry : light infantry : heavy cavalry : light cavalry = 1 
 - Reduce the enemy King to 0 HP, or
 - End your turn with one of your pieces next to the enemy King and no enemy defenders next to him (capture).
 
-**Building an army.** Each player has 50 points to buy pieces. Price = the piece's power: light infantry 1, heavy infantry 2, archers 3, light cavalry 3, heavy cavalry 4. Every army gets one King for free. Unspent points are lost.
+**Building an army.** Each player has 50 points to buy pieces, using a slider (or − / +) per piece type; the chosen pieces appear right under each slider. Price = the piece's power: light infantry 1, heavy infantry 2, archers 3, light cavalry 3, heavy cavalry 4. Every army gets one King for free. Unspent points are lost.
 
 **Secret setup.** Red builds an army and places it while Blue looks away, then hands the phone over and Blue does the same. Each side places pieces only in its own zone: the 5 columns nearest its edge. Neither player sees the other army until the battle starts. **Auto** places the remaining pieces for you (King at the back).
 
