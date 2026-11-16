@@ -1099,11 +1099,6 @@ function onHex(col: number, row: number) {
     if (!u) {
       const reach = reachable(s, own.id).get(key(hex));
       if (reach) {
-        if (touchScreen && !(pending && pending.col === hex.col && pending.row === hex.row)) {
-          pending = hex;
-          message = `${t(lang, 'tapAgain')} (−${reach.cost})`;
-          return render();
-        }
         pending = null;
         return void run((st) => moveUnit(st, own.id, hex));
       }
