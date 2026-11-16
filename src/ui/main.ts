@@ -183,10 +183,48 @@ let table: Table = (() => {
 let facedFor: Player | null = null;
 const acrossTable = () => mode === 'pvp' && table === 'across';
 /** Across the table, the far player (Teutonic Order, sitting opposite) sees the screen turned round. */
-const upsideDown = () => acrossTable() && sess.state.current === 'blue';
+const upsideDown = () => acrossTable() && sideShown === 'blue';
+/** Whose seat the screen currently faces across the table; it catches up with the turn by a
+ *  tilt over the top (see tiltOver), so the board never spins round. */
+let sideShown: Player = sess.state.current;
+/** During the tilt-over, the camera tilt being shown instead of the player's own. */
+let tiltShown: number | null = null;
 /** The drawing area's size in pixels: the board picture is drawn to fill it exactly. */
 let stageSize: [number, number] = [window.innerWidth, Math.max(300, window.innerHeight * 0.7)];
-const view = () => ({ portrait, tilt, cam: upsideDown() ? { ...cam, yaw: cam.yaw + Math.PI } : cam, vw: stageSize[0], vh: stageSize[1] });
+const view = () => {
+  const c = tiltShown === null ? cam : { ...cam, pitch: tiltShown };
+  return { portrait, tilt, cam: upsideDown() ? { ...c, yaw: c.yaw + Math.PI } : c, vw: stageSize[0], vh: stageSize[1] };
+};
+
+/** Across the table, a new turn tips the camera down flat, swaps to the other player's seat at
+ *  the flat point (where both seats see the same picture), then tips back up for them. */
+let tilting = false;
+function tiltOver(to: Player) {
+  if (tilting) return;
+  tilting = true;
+  const top = cam.pitch;
+  const ease = (t: number) => t * t * (3 - 2 * t);
+  const run = (from: number, end: number, ms: number, done: () => void) => {
+    const t0 = performance.now();
+    const step = () => {
+      const t = Math.min(1, (performance.now() - t0) / ms);
+      tiltShown = from + (end - from) * ease(t);
+      camFrame();
+      if (t < 1) setTimeout(step, 16);
+      else done();
+    };
+    step();
+  };
+  run(top, 0, 320, () => {
+    sideShown = to;
+    render();
+    run(0, top, 380, () => {
+      tiltShown = null;
+      tilting = false;
+      camDone();
+    });
+  });
+}
 /** Screen directions are reversed for the far player, whose screen is turned round. */
 const flipSign = () => (upsideDown() ? -1 : 1);
 
@@ -578,6 +616,12 @@ function draw() {
     drawnPortrait = isPortrait();
     cam = { ...cam, x: null, y: null };
   }
+  // Across the table: tip the camera over to the player whose turn it now is.
+  if (acrossTable() && sideShown !== s.current && !tilting) {
+    if (setupPhase(s) || !tilt) sideShown = s.current;
+    else setTimeout(() => tiltOver(s.current), 0);
+  }
+  if (!acrossTable()) sideShown = s.current;
   // Two players passing the phone: swing the board round when the turn changes hands.
   if (mode === 'pvp' && table === 'pass' && !setupPhase(s) && facedFor !== s.current) {
     facedFor = s.current;
