@@ -78,12 +78,14 @@ describe('hex geometry', () => {
 describe('setup', () => {
   const s = quickStart();
 
-  it('builds a 17x11 board with a river and two bridges', () => {
-    expect(s.board.length).toBe(11);
-    expect(s.board[0].length).toBe(17);
-    const col = s.board.map((row) => row[8]);
+  it('builds the board with a river and two bridges', () => {
+    const { rows, cols, riverCol } = CONFIG.board;
+    expect(s.board.length).toBe(rows);
+    expect(s.board[0].length).toBe(cols);
+    expect(rows * cols).toBeGreaterThanOrEqual(2 * 17 * 11);
+    const col = s.board.map((row) => row[riverCol!]);
     expect(col.filter((t) => t === 'bridge').length).toBe(2);
-    expect(col.filter((t) => t === 'river').length).toBe(9);
+    expect(col.filter((t) => t === 'river').length).toBe(rows - 2);
   });
 
   it('gives each side 1 King, 4 HI, 4 LI, 2 HC, 2 LC, 2 archers', () => {
@@ -96,7 +98,7 @@ describe('setup', () => {
   it('mirrors blue onto the other side and puts no unit on blocked terrain', () => {
     const redKing = s.units.find((u) => u.owner === 'red' && u.type === 'king')!;
     const blueKing = s.units.find((u) => u.owner === 'blue' && u.type === 'king')!;
-    expect(blueKing.pos).toEqual({ col: 16 - redKing.pos.col, row: redKing.pos.row });
+    expect(blueKing.pos).toEqual({ col: CONFIG.board.cols - 1 - redKing.pos.col, row: redKing.pos.row });
     for (const u of s.units) expect(s.board[u.pos.row][u.pos.col]).toBe('plain');
     expect(new Set(s.units.map((u) => key(u.pos))).size).toBe(s.units.length);
   });
@@ -183,15 +185,16 @@ describe('movement', () => {
   });
 
   it('crosses the river only at a bridge', () => {
-    const s = scenario([['red', 'lightCavalry', 7, 5]], 18, CONFIG);
+    const R = CONFIG.board.riverCol!;
+    const s = scenario([['red', 'lightCavalry', R - 1, 7]], 18, CONFIG);
     const reach = reachable(s, s.units[0].id, CONFIG);
-    expect(reach.has('8,5')).toBe(false); // river
-    expect(reach.has('8,2')).toBe(true); // bridge
+    expect(reach.has(`${R},7`)).toBe(false); // river
+    expect(reach.has(`${R},${CONFIG.board.bridgeRows[0]}`)).toBe(true); // bridge
     // Straight across is 2 hexes, but the detour via a bridge costs more.
-    expect(reach.get('9,5')!.cost).toBeGreaterThan(2);
+    expect(reach.get(`${R + 1},7`)!.cost).toBeGreaterThan(2);
     const noBridges = { ...CONFIG, board: { ...CONFIG.board, bridgeRows: [] } };
-    const s2 = scenario([['red', 'lightCavalry', 7, 5]], 18, noBridges);
-    expect([...reachable(s2, s2.units[0].id, noBridges).values()].every((r) => r.hex.col < 8)).toBe(true);
+    const s2 = scenario([['red', 'lightCavalry', R - 1, 7]], 18, noBridges);
+    expect([...reachable(s2, s2.units[0].id, noBridges).values()].every((r) => r.hex.col < R)).toBe(true);
   });
 });
 
@@ -258,7 +261,8 @@ describe('archers', () => {
     const s = scenario([['red', 'archer', 3, 3], ['blue', 'heavyInfantry', 3, 5]], 18, cfg);
     expect(hasLineOfSight(s, { col: 3, row: 3 }, { col: 3, row: 5 }, cfg)).toBe(false);
     expect(shoot(s, s.units[0].id, s.units[1].id, cfg)).toEqual({ ok: false, error: 'noLineOfSight' });
-    const r = scenario([['red', 'archer', 7, 5], ['blue', 'lightInfantry', 9, 5]], 18, CONFIG);
+    const R = CONFIG.board.riverCol!;
+    const r = scenario([['red', 'archer', R - 1, 7], ['blue', 'lightInfantry', R + 1, 7]], 18, CONFIG);
     expect(shoot(r, r.units[0].id, r.units[1].id, CONFIG).ok).toBe(true);
   });
 

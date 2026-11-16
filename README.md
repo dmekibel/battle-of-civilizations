@@ -28,7 +28,7 @@ Every push to `main` runs the tests, builds, and deploys to GitHub Pages (`.gith
 
 **Goal.** Kill the enemy King, or capture him.
 
-**Board.** 17 x 11 hexes. A river runs down the middle with 2 bridges. Forest hexes block movement. The armies start on opposite sides.
+**Board.** 25 x 15 hexes (about twice the first 17 x 11). A river runs down the middle with 2 bridges. Forest hexes block movement. The armies start on opposite sides.
 
 **Turns.** Red goes first. On your turn, roll 3 six-sided dice. The total (3 to 18) is your movement points for the turn. Split them however you like among your pieces: move, attack and shoot until you run out or press **End turn**. Unused points are lost.
 

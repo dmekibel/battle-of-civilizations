@@ -63,6 +63,8 @@ let tray: UnitTypeId | null = null;
 
 const isPortrait = () => window.innerHeight > window.innerWidth;
 let portrait = isPortrait();
+const ZOOMS = [1, 1.6, 2.4];
+let zoom = 1;
 
 type Buyable = keyof ArmyCounts;
 const BUY_ORDER: Buyable[] = ['lightInfantry', 'heavyInfantry', 'archer', 'lightCavalry', 'heavyCavalry'];
@@ -218,7 +220,30 @@ function bar(s: GameState): string {
 
 // ---------- render ----------
 
+/** Re-rendering replaces the board, so keep where the player had scrolled the zoomed map to. */
 function render() {
+  const old = app.querySelector<HTMLElement>('.stage');
+  const scroll = old ? [old.scrollLeft, old.scrollTop] : [0, 0];
+  draw();
+  const stage = app.querySelector<HTMLElement>('.stage');
+  if (stage) [stage.scrollLeft, stage.scrollTop] = scroll;
+}
+
+/** Zoom in or out around the middle of what's on screen. */
+function setZoom(next: number) {
+  const st = app.querySelector<HTMLElement>('.stage');
+  const fx = st ? (st.scrollLeft + st.clientWidth / 2) / st.scrollWidth : 0.5;
+  const fy = st ? (st.scrollTop + st.clientHeight / 2) / st.scrollHeight : 0.5;
+  zoom = next;
+  draw();
+  const s2 = app.querySelector<HTMLElement>('.stage');
+  if (s2) {
+    s2.scrollLeft = fx * s2.scrollWidth - s2.clientWidth / 2;
+    s2.scrollTop = fy * s2.scrollHeight - s2.clientHeight / 2;
+  }
+}
+
+function draw() {
   const s = sess.state;
   portrait = isPortrait();
   const faces = rolling ? rollFaces : s.dice;
@@ -257,7 +282,13 @@ function render() {
         ${right}
         <button data-act="menu" class="ghost icon" aria-label="${t(lang, 'menu')}">☰</button>
       </header>
-      <div class="stage">${renderBoard(s, overlay(s), { portrait })}</div>
+      <div class="stage-wrap">
+        <div class="stage" style="--z:${zoom}">${renderBoard(s, overlay(s), { portrait })}</div>
+        <div class="zoom">
+          <button data-act="zoom-in" aria-label="Zoom in" ${zoom >= ZOOMS[ZOOMS.length - 1] ? 'disabled' : ''}>+</button>
+          <button data-act="zoom-out" aria-label="Zoom out" ${zoom <= ZOOMS[0] ? 'disabled' : ''}>−</button>
+        </div>
+      </div>
       <p class="info" id="info">${info}</p>
       <footer class="bar">${bar(s)}</footer>
     </div>
@@ -400,6 +431,11 @@ app.addEventListener('click', (e) => {
     case 'end':
       selected = null;
       return void run((s) => endTurn(s), true);
+    case 'zoom-in':
+    case 'zoom-out': {
+      const i = ZOOMS.indexOf(zoom) + (act === 'zoom-in' ? 1 : -1);
+      return setZoom(ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, i))]);
+    }
     case 'menu':
       menuOpen = !menuOpen;
       return render();

@@ -55,8 +55,8 @@ describe('deployment', () => {
   const drafted = ok(draftArmy(newGame(), { lightInfantry: 2, archer: 1 }));
 
   it('places pieces only in your own zone, on open ground, one per hex', () => {
-    expect(placeUnit(drafted, 'king', { col: 8, row: 5 })).toEqual({ ok: false, error: 'outsideZone' });
-    expect(placeUnit(drafted, 'king', { col: 4, row: 1 })).toEqual({ ok: false, error: 'blocked' }); // forest
+    expect(placeUnit(drafted, 'king', { col: CONFIG.board.riverCol!, row: 5 })).toEqual({ ok: false, error: 'outsideZone' });
+    expect(placeUnit({ ...drafted, board: drafted.board.map((r, i) => (i === 1 ? r.map((t, c) => (c === 2 ? 'forest' : t)) : r)) }, 'king', { col: 2, row: 1 })).toEqual({ ok: false, error: 'blocked' }); // forest
     const a = ok(placeUnit(drafted, 'king', { col: 0, row: 5 }));
     expect(placeUnit(a, 'archer', { col: 0, row: 5 })).toEqual({ ok: false, error: 'occupied' });
     expect(placeUnit(a, 'heavyCavalry', { col: 1, row: 5 })).toEqual({ ok: false, error: 'notInReserve' });
