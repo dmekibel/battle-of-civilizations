@@ -982,7 +982,22 @@ function camFrame() {
   requestAnimationFrame(() => {
     camQueued = false;
     const st = app.querySelector<HTMLElement>('.stage');
-    if (st && camOverlay) st.innerHTML = renderBoard(sess.state, camOverlay, view(), NO_EFFECTS);
+    if (!st || !camOverlay) return;
+    // On iPhone the rest of a touch goes to the exact element the finger first landed on; if
+    // that element left the page the gesture would stop. So the board drawn when the move
+    // began stays in place, invisible, and each frame only swaps the live copy drawn over it.
+    let anchor = st.querySelector<SVGElement>('svg.board.anchor');
+    if (!anchor) {
+      anchor = st.querySelector<SVGElement>('svg.board');
+      anchor?.classList.add('anchor');
+    }
+    const tmp = document.createElement('div');
+    tmp.innerHTML = renderBoard(sess.state, camOverlay, view(), NO_EFFECTS);
+    const live = tmp.firstElementChild as SVGElement;
+    live.classList.add('live');
+    const old = st.querySelector('svg.board.live');
+    if (old) old.replaceWith(live);
+    else st.append(live);
   });
 }
 function camDone() {
