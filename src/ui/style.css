@@ -293,8 +293,7 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
   .die.spin, .points.bump b, .board .slide, .board .hit, .army-pieces svg, .thinking { animation: none; }
 }
 
-/* Across the table: on the far player's turn the whole screen turns round for them,
-   except the board itself, which stays where it lies (its pieces turn instead). */
+/* Across the table: on the far player's turn the whole screen turns round for them. The camera
+   swings to their side at the same time, so the board stays where it lies on the phone. */
 .screen.flipped { transform: rotate(180deg); }
-.screen.flipped .stage { transform: rotate(180deg); }
 #app.upside .cover, #app.upside .sheet, #app.upside .drawer, #app.upside .drawer-bg { transform: rotate(180deg); }

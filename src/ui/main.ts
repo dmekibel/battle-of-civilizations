@@ -168,8 +168,9 @@ function yawFor(p: Player): number {
 
 /** Two players on one device:
  *  'pass'   = they hand it over; the board turns to face whoever's turn it is.
- *  'across' = it lies flat between them; the board stays put, seen from straight above, and on
- *             the far player's turn the pieces and buttons turn upside down to face them. */
+ *  'across' = it lies flat between them. On the far player's turn the camera swings round to
+ *             their side and the whole screen turns 180°, so the board stays where it lies on
+ *             the phone while each player gets the 3D view from their own seat. */
 type Table = 'pass' | 'across';
 const TABLE_KEY = 'boc-table';
 let table: Table = (() => {
@@ -181,14 +182,13 @@ let table: Table = (() => {
 })();
 let facedFor: Player | null = null;
 const acrossTable = () => mode === 'pvp' && table === 'across';
-/** Across the table, the far player (Teutonic Order, sitting opposite) reads everything turned round. */
+/** Across the table, the far player (Teutonic Order, sitting opposite) sees the screen turned round. */
 const upsideDown = () => acrossTable() && sess.state.current === 'blue';
 /** The drawing area's size in pixels: the board picture is drawn to fill it exactly. */
 let stageSize: [number, number] = [window.innerWidth, Math.max(300, window.innerHeight * 0.7)];
-const view = () =>
-  acrossTable()
-    ? { portrait, tilt: false, cam: { ...cam, yaw: yawFor('red') }, vw: stageSize[0], vh: stageSize[1], upsideDown: upsideDown() }
-    : { portrait, tilt, cam, vw: stageSize[0], vh: stageSize[1] };
+const view = () => ({ portrait, tilt, cam: upsideDown() ? { ...cam, yaw: cam.yaw + Math.PI } : cam, vw: stageSize[0], vh: stageSize[1] });
+/** Screen directions are reversed for the far player, whose screen is turned round. */
+const flipSign = () => (upsideDown() ? -1 : 1);
 
 /** 2.5D board (tilted, pieces standing) or the flat map; remembered per device. */
 const VIEW_KEY = 'boc-view';
@@ -893,6 +893,8 @@ app.addEventListener('click', (e) => {
       return render();
     case 'table':
       table = table === 'pass' ? 'across' : 'pass';
+      // Across the table starts from Novgorod's side; the far player's turn adds the half turn.
+      if (table === 'across') cam = { ...cam, yaw: yawFor('red') };
       try {
         localStorage.setItem(TABLE_KEY, table);
       } catch {
@@ -1021,7 +1023,8 @@ function camDone() {
 /** A pointer position inside the stage, in the same pixels the board is drawn in. */
 function stagePoint(clientX: number, clientY: number): [number, number] {
   const box = app.querySelector<HTMLElement>('.stage')!.getBoundingClientRect();
-  return [clientX - box.left, clientY - box.top];
+  // On a screen turned round for the far player, its own left/top are the page's right/bottom.
+  return upsideDown() ? [box.right - clientX, box.bottom - clientY] : [clientX - box.left, clientY - box.top];
 }
 
 /** After a drag, the click that ends it must not move or select a piece. */
@@ -1082,7 +1085,7 @@ app.addEventListener(
       if (turn > Math.PI) turn -= 2 * Math.PI;
       if (turn < -Math.PI) turn += 2 * Math.PI;
       const [mx, my] = middle(e.touches);
-      const slide = my - touch.midY;
+      const slide = (my - touch.midY) * flipSign();
       // Decide once what the two fingers are doing: sliding together up or down tilts;
       // spreading zooms; twisting turns (zoom and turn can mix, tilt stays on its own).
       if (!touch.live.size) {
@@ -1156,11 +1159,11 @@ app.addEventListener(
     else if (e.altKey) {
       cam = {
         ...cam,
-        yaw: cam.yaw + e.deltaX * unit * 0.004,
-        pitch: tilt ? clampPitch(cam.pitch + e.deltaY * unit * 0.0025) : cam.pitch,
+        yaw: cam.yaw + e.deltaX * flipSign() * unit * 0.004,
+        pitch: tilt ? clampPitch(cam.pitch + e.deltaY * flipSign() * unit * 0.0025) : cam.pitch,
       };
     } else if (mouseWheel) zoomAt(Math.exp((-e.deltaY * unit) / 500), px, py);
-    else panBy(-e.deltaX, -e.deltaY);
+    else panBy(-e.deltaX * flipSign(), -e.deltaY * flipSign());
     camFrame();
     clearTimeout(wheelEnd);
     wheelEnd = window.setTimeout(camDone, 200);
@@ -1277,8 +1280,8 @@ app.addEventListener('pointermove', (e) => {
   if (!cubeDrag || e.pointerId !== cubeDrag.id) return;
   cam = {
     ...cam,
-    yaw: cubeDrag.yaw + (e.clientX - cubeDrag.x) * 0.012,
-    pitch: tilt ? clampPitch(cubeDrag.pitch + (e.clientY - cubeDrag.y) * 0.006) : cam.pitch,
+    yaw: cubeDrag.yaw + (e.clientX - cubeDrag.x) * flipSign() * 0.012,
+    pitch: tilt ? clampPitch(cubeDrag.pitch + (e.clientY - cubeDrag.y) * flipSign() * 0.006) : cam.pitch,
   };
   camFrame();
 });
