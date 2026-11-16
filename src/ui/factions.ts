@@ -92,11 +92,11 @@ export const FACTIONS: Record<FactionId, Faction> = {
     art: { king: 'star', lightInfantry: 'shotgun', heavyCavalry: 'saber' },
   },
   comanche: {
-    name: { en: 'Comanche', ru: 'Команчи' },
+    name: { en: 'Indians', ru: 'Индейцы' },
     color: '#1f8a8a',
     text: '#7fd6d0',
     roster: ['lightInfantry', 'archer', 'lightCavalry', 'horseArcher'],
-    blurb: { en: 'Lords of the Southern Plains, the finest riders of the West: fast mounted warriors and archers, no heavy troops.', ru: 'Хозяева южных равнин, лучшие всадники Запада: быстрые конные воины и лучники, без тяжёлых войск.' },
+    blurb: { en: 'Plains warriors, the finest riders of the West: fast mounted warriors and archers, no heavy troops.', ru: 'Воины равнин, лучшие всадники Запада: быстрые конные воины и лучники, без тяжёлых войск.' },
     emblem: shield('#1f8a8a', '#e9e4d6', '<g transform="rotate(-48 30 48)"><path d="M30 48Q24.5 31 30 12Q35.5 31 30 48Z" fill="#f4f1e8"/><path d="M30 12Q27.8 16.5 30 21Q32.2 16.5 30 12Z" fill="#1b1b1d"/></g><g transform="rotate(-24 30 48)"><path d="M30 48Q24.5 31 30 12Q35.5 31 30 48Z" fill="#f4f1e8"/><path d="M30 12Q27.8 16.5 30 21Q32.2 16.5 30 12Z" fill="#1b1b1d"/></g><g transform="rotate(0 30 48)"><path d="M30 48Q24.5 31 30 12Q35.5 31 30 48Z" fill="#f4f1e8"/><path d="M30 12Q27.8 16.5 30 21Q32.2 16.5 30 12Z" fill="#1b1b1d"/></g><g transform="rotate(24 30 48)"><path d="M30 48Q24.5 31 30 12Q35.5 31 30 48Z" fill="#f4f1e8"/><path d="M30 12Q27.8 16.5 30 21Q32.2 16.5 30 12Z" fill="#1b1b1d"/></g><g transform="rotate(48 30 48)"><path d="M30 48Q24.5 31 30 12Q35.5 31 30 48Z" fill="#f4f1e8"/><path d="M30 12Q27.8 16.5 30 21Q32.2 16.5 30 12Z" fill="#1b1b1d"/></g><path d="M17 44H43V50H17Z" fill="#e1b12c"/><path d="M21 47H23M27 47H29M31 47H33M37 47H39" stroke="#a8201a" stroke-width="2"/>'),
     names: {
       king: { en: 'Chief', ru: 'Вождь' },
