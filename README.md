@@ -55,7 +55,11 @@ Speed ratio heavy infantry : light infantry : heavy cavalry : light cavalry = 1 
 - Reduce the enemy King to 0 HP, or
 - End your turn with one of your pieces next to the enemy King and no enemy defenders next to him (capture).
 
-**Starting army per side.** 1 King, 4 heavy infantry, 4 light infantry, 2 heavy cavalry, 2 light cavalry, 2 archers.
+**Building an army.** Each player has 50 points to buy pieces. Price = the piece's power: light infantry 1, heavy infantry 2, archers 3, light cavalry 3, heavy cavalry 4. Every army gets one King for free. Unspent points are lost.
+
+**Secret setup.** Red builds an army and places it while Blue looks away, then hands the phone over and Blue does the same. Each side places pieces only in its own zone: the 5 columns nearest its edge. Neither player sees the other army until the battle starts. **Auto** places the remaining pieces for you (King at the back).
+
+**Quick battle** (in the menu) skips setup with a fixed army: 1 King, 4 heavy infantry, 4 light infantry, 2 heavy cavalry, 2 light cavalry, 2 archers.
 
 **Rule switches in config.** Capture on/off, King kill on/off, several moves per piece per turn, several attacks per piece per turn, moving after attacking, passing through your own pieces, attack cost, archer cost/range/damage, dice count and sides, board size, river column, bridge rows, forest hexes, starting positions.
 
@@ -63,18 +67,19 @@ Speed ratio heavy infantry : light infantry : heavy cavalry : light cavalry = 1 
 
 ## Controls
 
-- **Roll dice**, then tap one of your pieces. Green hexes show where it can reach and what it costs. Red dashed hexes are enemies it can hit; the badge shows the damage (✕ = the hit kills).
+- On a phone the board fills the screen, in portrait or landscape. **Roll dice**, then tap one of your pieces. Green hexes show where it can reach and what it costs. Red dashed hexes are enemies it can hit; the badge shows the damage (✕ = the hit kills).
 - Tap a green hex to move, tap a red one to attack or shoot.
 - **Undo** steps back within the current turn (never re-rolls the dice).
 - **End turn** passes the screen to the other player.
-- The log lists every roll, move and hit. **EN / RU** switches the language.
+- The log lists every roll, move and hit. **EN / RU** switches the language (in the menu ☰).
 
 ## Open design questions (for Dad)
 
 1. **Castle.** What does it do? Defence bonus, slower to enter, holds several pieces, can archers shoot from it, can it be captured?
 2. **Archers.** Can archers fight hand to hand? (Now: no.) Range 2-3 and 1 damage for 2 points: right? Do other pieces, or only forest, block shots? Can they shoot over the river?
 3. **Combat.** Is combat really without dice, or is there a roll? Does attacking cost points, and how many? Can one piece attack several times a turn? Does the defender hit back?
-4. **Army size.** How many of each piece per side, and where do they start?
+4. **Army building.** Is 50 points right? Does the King cost anything? Is there a limit per piece type (for example at most 6 cavalry)? How deep is each side’s setup zone (now 5 columns)?
 5. **Cavalry vs infantry speed.** "Cavalry about 3x infantry" vs the default 1 : 2 : 3 : 6. What are the exact numbers?
 6. **King capture.** Is "end the turn next to the King with no defenders beside him" the right capture rule?
 7. **Board.** How many hexes was the original folding board (about 1.5 x 1 m)? Where are the river, bridges and forests?
+8. **Power.** Is "power" only the price of a piece, or does it also matter in combat?
