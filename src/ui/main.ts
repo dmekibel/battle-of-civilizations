@@ -14,6 +14,7 @@ import {
   liftUnit,
   maxHp,
   stepCost,
+  hexesPerPoint,
   moveUnit,
   newGame,
   other,
@@ -50,7 +51,7 @@ import { errorText, logText, playerName, reasonText, t, unitName, type Key, type
 import { unitIcon } from './symbols';
 import { FACTIONS, FACTION_ORDER, factionOf, rosterOf, type FactionId } from './factions';
 import { isMuted, sound, toggleMute } from './sound';
-import { DADS_RULES, RECOMMENDED, applySettings, loadSettings, saveSettings, type DiceId, type MapId, type Settings } from './settings';
+import { DADS_RULES, RECOMMENDED, applySettings, fixedPoints, loadSettings, saveSettings, type DiceId, type MapId, type Settings } from './settings';
 
 const app = document.getElementById('app')!;
 
@@ -277,7 +278,7 @@ function stats(type: UnitTypeId, defenseLeft?: number): string {
   return `<span class="stats">
     <span class="st atk" title="${t(lang, 'keyAtk')}"><i>${t(lang, 'tagAtk')}</i>${r.attack > 0 ? r.attack : '–'}</span>
     <span class="st def" title="${t(lang, 'keyDef')}"><i>${t(lang, 'tagDef')}</i>${def}</span>
-    <span class="st mov" title="${t(lang, 'keyMove')}"><i>${t(lang, 'tagMove')}</i>${stepCost(type)}</span>
+    <span class="st mov" title="${t(lang, CONFIG.options.unitSpeeds ? 'keyMove' : 'keyMoveFlat')}"><i>${t(lang, 'tagMove')}</i>${CONFIG.options.unitSpeeds ? stepCost(type) : hexesPerPoint(type)}</span>
     ${r.ranged ? `<span class="st rng" title="${t(lang, 'keyRange')}"><i>${t(lang, 'tagRange')}</i>${r.ranged.minRange}–${r.ranged.maxRange}</span>` : ''}
   </span>`;
 }
@@ -287,7 +288,7 @@ function statKey(): string {
   return `<div class="key">
     <span><i class="st atk">${t(lang, 'tagAtk')}</i> ${t(lang, 'keyAtk')}</span>
     <span><i class="st def">${t(lang, 'tagDef')}</i> ${t(lang, 'keyDef')}</span>
-    <span><i class="st mov">${t(lang, 'tagMove')}</i> ${t(lang, 'keyMove')}</span>
+    <span><i class="st mov">${t(lang, 'tagMove')}</i> ${t(lang, CONFIG.options.unitSpeeds ? 'keyMove' : 'keyMoveFlat')}</span>
     <span><i class="st rng">${t(lang, 'tagRange')}</i> ${t(lang, 'keyRange')}</span>
   </div>`;
 }
@@ -640,7 +641,7 @@ function setupScreen(): string {
       ${seg('budget', [['20', `20 <small>${t(lang, 'skirmish')}</small>`], ['30', '30'], ['50', '50'], ['80', `80 <small>${t(lang, 'epic')}</small>`]], String(settings.budget))}
 
       <h3>${t(lang, 'pointsEachTurn')}</h3>
-      ${seg('dice', [['3d6', t(lang, 'dice3')], ['2d6', t(lang, 'dice2')], ['fixed', t(lang, 'diceFixedShort')]], settings.dice)}
+      ${seg('dice', [['1d6', t(lang, 'dice1')], ['2d6', t(lang, 'dice2')], ['3d6', t(lang, 'dice3')], ['fixed', `${t(lang, 'always')} ${fixedPoints(settings)}`]], settings.dice)}
 
       <h3>${t(lang, 'rules')}</h3>
       <div class="presets">

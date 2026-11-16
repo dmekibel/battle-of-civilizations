@@ -7,7 +7,7 @@ import type { Player } from '../engine';
 import { known, setSides, sides, type FactionId } from './factions';
 
 export type MapId = 'river' | 'open' | 'forest' | 'random';
-export type DiceId = '3d6' | '2d6' | 'fixed';
+export type DiceId = '1d6' | '3d6' | '2d6' | 'fixed';
 
 export interface Settings {
   budget: number;
@@ -34,13 +34,15 @@ export const RECOMMENDED: GameConfig['options'] = {
   toughness: 2,
 };
 
-export const DEFAULT_SETTINGS: Settings = { budget: 50, map: 'river', dice: '3d6', options: { ...DADS_RULES }, sides: { red: 'novgorod', blue: 'teutonic' } };
+export const DEFAULT_SETTINGS: Settings = { budget: 50, map: 'river', dice: '1d6', options: { ...DADS_RULES }, sides: { red: 'novgorod', blue: 'teutonic' } };
 
 const KEY = 'boc-settings';
 
 export function loadSettings(): Settings {
   try {
     const s = JSON.parse(localStorage.getItem(KEY) ?? 'null');
+    // Version 2 (2026-11-17): every step costs 1 and horses run 2-3x, so one die is the new default.
+    if (s && typeof s.budget === 'number' && s.v !== 2) s.dice = '1d6';
     if (s && typeof s.budget === 'number') return { ...DEFAULT_SETTINGS, ...s, options: { ...DADS_RULES, ...s.options }, sides: { red: known(s.sides?.red, 'novgorod'), blue: known(s.sides?.blue, 'teutonic') } };
   } catch {
     /* fall through to the defaults */
@@ -48,9 +50,12 @@ export function loadSettings(): Settings {
   return structuredClone(DEFAULT_SETTINGS);
 }
 
+/** "No luck" points: about one die's worth (4), or 10 with the old per-piece speeds. */
+export const fixedPoints = (s: Settings) => (s.options.unitSpeeds ? 10 : 4);
+
 export function saveSettings(s: Settings) {
   try {
-    localStorage.setItem(KEY, JSON.stringify(s));
+    localStorage.setItem(KEY, JSON.stringify({ ...s, v: 2 }));
   } catch {
     /* keep them for this visit only */
   }
@@ -101,7 +106,11 @@ function boardFor(map: MapId): GameConfig['board'] {
 export function applySettings(s: Settings) {
   CONFIG.army.budget = s.budget;
   CONFIG.board = boardFor(s.map);
-  CONFIG.dice = s.dice === 'fixed' ? { count: 0, sides: 6, fixed: 10 } : s.dice === '2d6' ? { count: 2, sides: 6, fixed: null } : { count: 3, sides: 6, fixed: null };
+  CONFIG.dice =
+    s.dice === 'fixed' ? { count: 0, sides: 6, fixed: fixedPoints(s) }
+    : s.dice === '1d6' ? { count: 1, sides: 6, fixed: null }
+    : s.dice === '2d6' ? { count: 2, sides: 6, fixed: null }
+    : { count: 3, sides: 6, fixed: null };
   CONFIG.options = { ...s.options };
   setSides(s.sides ?? DEFAULT_SETTINGS.sides);
   s.sides = { ...sides };

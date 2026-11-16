@@ -49,6 +49,10 @@ export function newGame(cfg: GameConfig = CONFIG): GameState {
 
 /** Points one step costs: 1 for everyone, or the piece's own cost when "different speeds" is on. */
 export const stepCost = (type: Unit['type'], cfg: GameConfig = CONFIG) => (cfg.options.unitSpeeds ? cfg.units[type].moveCost : 1);
+/** Hexes one point buys: horses go 2 (heavy) or 3 (light) when every step costs 1. */
+export const hexesPerPoint = (type: Unit['type'], cfg: GameConfig = CONFIG) => (cfg.options.unitSpeeds ? 1 : (cfg.units[type].speed ?? 1));
+/** Points a walk of this many hexes costs, rounded up: a light rider pays 1 point for 1 to 3 hexes. */
+export const walkCost = (type: Unit['type'], steps: number, cfg: GameConfig = CONFIG) => Math.ceil((steps * stepCost(type, cfg)) / hexesPerPoint(type, cfg));
 
 /** How many hits a fresh piece can take: its defense, times toughness when that rule is on. */
 export const maxHp = (type: Unit['type'], cfg: GameConfig = CONFIG) => cfg.units[type].hp * (cfg.options.toughness || 1);
@@ -88,7 +92,10 @@ export const kingOf = (s: GameState, p: Player) =>
 
 export interface Reach {
   hex: Hex;
+  /** Points the move costs. */
   cost: number;
+  /** Hexes walked. */
+  steps: number;
 }
 
 /** Every empty hex the unit can end a move on with the points left, and its cheapest cost. */
@@ -113,28 +120,29 @@ function search(s: GameState, unitId: string, cfg: GameConfig): { out: Map<strin
   if (u.moved && !cfg.movement.multipleMovesPerUnit) return { out, prev };
   if (u.attacked && !cfg.combat.moveAfterAttack) return { out, prev };
 
-  const base = stepCost(u.type, cfg);
+  // Search by hexes walked (every step is one hex); the price in points comes from the walk's length.
   const best = new Map<string, number>([[key(u.pos), 0]]);
   // Small boards: a simple priority list is plenty.
-  const open: Reach[] = [{ hex: u.pos, cost: 0 }];
+  const open: Reach[] = [{ hex: u.pos, cost: 0, steps: 0 }];
   while (open.length) {
-    open.sort((a, b) => a.cost - b.cost);
+    open.sort((a, b) => a.steps - b.steps);
     const cur = open.shift()!;
-    if (cur.cost > (best.get(key(cur.hex)) ?? Infinity)) continue;
+    if (cur.steps > (best.get(key(cur.hex)) ?? Infinity)) continue;
     // Zone of control: having stepped next to an enemy, the move ends there.
-    if (cfg.options.zoneOfControl && cur.cost > 0 && enemyNext(s, cur.hex, u.owner)) continue;
+    if (cfg.options.zoneOfControl && cur.steps > 0 && enemyNext(s, cur.hex, u.owner)) continue;
     for (const n of neighbors(cur.hex)) {
       if (!onBoard(s, n)) continue;
       const t = cfg.terrain[terrainAt(s, n)];
       if (!t.passable) continue;
       const occ = unitAt(s, n);
       if (occ && (occ.owner !== u.owner || !cfg.movement.passThroughFriendly)) continue;
-      const cost = cur.cost + base * t.moveCostMultiplier;
-      if (cost > s.points || cost >= (best.get(key(n)) ?? Infinity)) continue;
-      best.set(key(n), cost);
+      const steps = cur.steps + t.moveCostMultiplier;
+      const cost = walkCost(u.type, steps, cfg);
+      if (cost > s.points || steps >= (best.get(key(n)) ?? Infinity)) continue;
+      best.set(key(n), steps);
       prev.set(key(n), cur.hex);
-      open.push({ hex: n, cost });
-      if (!occ) out.set(key(n), { hex: n, cost });
+      open.push({ hex: n, cost, steps });
+      if (!occ) out.set(key(n), { hex: n, cost, steps });
     }
   }
   return { out, prev };
@@ -283,7 +291,7 @@ export function moveUnit(s: GameState, unitId: string, to: Hex, cfg: GameConfig 
   if (u.moved && !cfg.movement.multipleMovesPerUnit) return fail('alreadyMoved');
   const r = reachable(s, unitId, cfg).get(key(to));
   if (!r) return fail('unreachable');
-  const hexes = Math.round(r.cost / stepCost(u.type, cfg));
+  const hexes = r.steps;
   const units = s.units.map((x) => (x.id === unitId ? { ...x, pos: to, moved: true, ran: (x.ran ?? 0) + hexes } : x));
   const next: GameState = { ...s, units, points: s.points - r.cost, advance: null };
   return {

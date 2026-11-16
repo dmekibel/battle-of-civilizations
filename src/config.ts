@@ -40,6 +40,8 @@ export interface RangedRules {
 export interface UnitRules {
   /** Movement points to enter one plain hex. */
   moveCost: number;
+  /** Hexes one point moves this piece when every step costs 1 (horses are faster). Default 1. */
+  speed?: number;
   /** Melee damage dealt per attack. 0 means the unit cannot melee. */
   attack: number;
   /** Hit points; equal to the defence value. */
@@ -168,17 +170,17 @@ export const CONFIG: GameConfig = {
     king: { moveCost: 6, attack: 1, hp: 2, ranged: null, heavy: true },
     heavyInfantry: { moveCost: 6, attack: 1, hp: 2, ranged: null, heavy: true },
     lightInfantry: { moveCost: 3, attack: 1, hp: 1, ranged: null, heavy: false },
-    heavyCavalry: { moveCost: 2, attack: 2, hp: 2, ranged: null, heavy: true, mounted: true },
-    lightCavalry: { moveCost: 1, attack: 1, hp: 1, ranged: null, heavy: false, mounted: true },
+    heavyCavalry: { moveCost: 2, speed: 2, attack: 2, hp: 2, ranged: null, heavy: true, mounted: true },
+    lightCavalry: { moveCost: 1, speed: 3, attack: 1, hp: 1, ranged: null, heavy: false, mounted: true },
     // Mongols: fast riders who shoot from the saddle (shorter range than foot archers).
-    horseArcher: { moveCost: 1, attack: 1, hp: 1, ranged: { cost: 2, minRange: 2, maxRange: 4, damage: 1 }, heavy: false, mounted: true },
+    horseArcher: { moveCost: 1, speed: 3, attack: 1, hp: 1, ranged: { cost: 2, minRange: 2, maxRange: 4, damage: 1 }, heavy: false, mounted: true },
     // Japanese: samurai fight hard and move like light infantry; ashigaru are cheap spearmen.
     samurai: { moveCost: 3, attack: 2, hp: 2, ranged: null, heavy: true },
     ashigaru: { moveCost: 3, attack: 1, hp: 1, ranged: null, heavy: false, antiCavalry: true },
     // Old West: guns reach about as far as bows; pistols are short-ranged but on the move.
     gunslinger: { moveCost: 3, attack: 1, hp: 1, ranged: { cost: 2, minRange: 2, maxRange: 3, damage: 1 }, heavy: false },
     rifleman: { moveCost: 4, attack: 0, hp: 1, ranged: { cost: 2, minRange: 2, maxRange: 6, damage: 1 }, heavy: false },
-    cowboy: { moveCost: 1, attack: 1, hp: 1, ranged: { cost: 2, minRange: 2, maxRange: 3, damage: 1 }, heavy: false, mounted: true },
+    cowboy: { moveCost: 1, speed: 3, attack: 1, hp: 1, ranged: { cost: 2, minRange: 2, maxRange: 3, damage: 1 }, heavy: false, mounted: true },
     // Melee for archers is an open question; 0 = they only shoot.
     archer: {
       moveCost: 4,

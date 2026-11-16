@@ -99,9 +99,9 @@ describe('optional rules', () => {
 
   it('zone of control: stepping next to an enemy ends the move', () => {
     const cfg = withRule({ zoneOfControl: true });
-    // A light cavalry with 3 points, an enemy two hexes ahead: the hexes behind the enemy are
-    // only reachable by passing next to it, which zone of control forbids.
-    const s = scenario(cfg, [['red', 'lightCavalry', 4, 4], ['blue', 'heavyInfantry', 4, 6]], 3);
+    // A light cavalry with 1 point (3 hexes), an enemy two hexes ahead: the hexes behind the enemy
+    // are only reachable by passing next to it, which zone of control forbids.
+    const s = scenario(cfg, [['red', 'lightCavalry', 4, 4], ['blue', 'heavyInfantry', 4, 6]], 1);
     const zoc = reachable(s, s.units[0].id, cfg);
     const free = reachable(s, s.units[0].id, withRule({}));
     expect([...zoc.keys()].every((k) => free.has(k))).toBe(true);

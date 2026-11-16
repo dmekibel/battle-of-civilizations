@@ -137,12 +137,20 @@ describe('dice', () => {
 const SPEEDS: GameConfig = { ...OPEN, options: { ...OPEN.options, unitSpeeds: true } };
 
 describe('movement', () => {
-  it('every step costs 1 point for every piece (default)', () => {
+  it('every step costs 1 point on foot; heavy horse goes 2 hexes a point, light horse 3 (default)', () => {
     const furthest = (t: UnitTypeId) => {
       const s = scenario([['red', t, 8, 5]], 4);
       return Math.max(0, ...[...reachable(s, s.units[0].id, OPEN).values()].map((r) => distance(r.hex, { col: 8, row: 5 })));
     };
-    expect([furthest('heavyInfantry'), furthest('lightCavalry'), furthest('king')]).toEqual([4, 4, 4]);
+    expect([furthest('heavyInfantry'), furthest('heavyCavalry'), furthest('lightCavalry'), furthest('king')]).toEqual([4, 8, 12, 4]);
+  });
+
+  it('a light rider pays 1 point for up to 3 hexes', () => {
+    const s = scenario([['red', 'lightCavalry', 8, 5]], 5);
+    const reach = reachable(s, s.units[0].id, OPEN);
+    expect(reach.get('8,6')?.cost).toBe(1);
+    expect(reach.get('8,8')?.cost).toBe(1);
+    expect(reach.get('8,9')?.cost).toBe(2);
   });
 
   it('different speeds: ratio 1:2:3:6 shows in reach for the same points', () => {
@@ -177,7 +185,7 @@ describe('movement', () => {
     ], 2);
     const reach = reachable(s, s.units[0].id, OPEN);
     expect(reach.has('2,1')).toBe(false); // occupied by a friend
-    expect(reach.get('2,2')?.cost).toBe(2); // straight through the friend
+    expect(reach.get('2,2')?.steps).toBe(2); // straight through the friend
     expect(reach.has('2,3')).toBe(false);
   });
 
@@ -192,7 +200,7 @@ describe('movement', () => {
     const s = scenario([['red', 'lightCavalry', 3, 1]], 18, cfg);
     const reach = reachable(s, s.units[0].id, cfg);
     expect(reach.has('3,2')).toBe(false);
-    expect(reach.get('3,3')!.cost).toBeGreaterThan(2); // has to go around
+    expect(reach.get('3,3')!.steps).toBeGreaterThan(2); // has to go around
   });
 
   it('crosses the river only at a bridge', () => {

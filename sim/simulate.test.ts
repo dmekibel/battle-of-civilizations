@@ -96,6 +96,10 @@ it('simulate', () => {
     ['no capture win (only killing the King)', { ...base, win: { ...base.win, captureKing: false } }],
     ['dice 2d6 (2-12) instead of 3d6', { ...base, dice: { count: 2, sides: 6 } }],
     ['recommended rules', recommended],
+    ['one die (1-6)', { ...base, dice: { count: 1, sides: 6 } }],
+    ['one die, recommended', { ...recommended, dice: { count: 1, sides: 6 } }],
+    ['fixed 4 points, recommended', { ...recommended, dice: { count: 0, sides: 6, fixed: 4 } }],
+    ['old speeds (infantry 3-6, cavalry 1-2)', { ...base, options: { ...base.options, unitSpeeds: true } }],
     ['recommended rules, no dice (always 10)', { ...recommended, dice: { count: 0, sides: 6, fixed: 10 } }],
   ];
   // VARIANT=recommended npm run sim runs only the setups whose name contains that word.
