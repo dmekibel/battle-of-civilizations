@@ -31,6 +31,7 @@ export const RECOMMENDED: GameConfig['options'] = {
   spears: true,
   longShotFrom: 3,
   charge: true,
+  toughness: 2,
 };
 
 export const DEFAULT_SETTINGS: Settings = { budget: 50, map: 'river', dice: '3d6', options: { ...DADS_RULES }, sides: { red: 'novgorod', blue: 'teutonic' } };

@@ -69,7 +69,7 @@ Speed ratio heavy infantry : light infantry : heavy cavalry : light cavalry = 1 
 
 **Vanilla rules are kept two ways:** the *Dad's rules* preset (the default) switches every optional rule off, and the git tag `dads-rules-v1` marks the exact game before any optional rules were added.
 
-**New battle screen.** After choosing how to play you set: army points (20 skirmish, 30, 50, 80 epic), map (River crossing, Open field, Great forest, Random), points each turn (3 dice, 2 dice, or always 10 with no luck), and the optional rules, one switch each or two presets: *Dad's rules* (all off, the default) and *Recommended* (morale, shield wall, spears, charge, long shots, save points, catch-up). The choices are remembered and saved with the game.
+**New battle screen.** After choosing how to play you set: army points (20 skirmish, 30, 50, 80 epic), map (River crossing, Open field, Great forest, Random), points each turn (3 dice, 2 dice, or always 10 with no luck), and the optional rules, one switch each or two presets: *Dad's rules* (all off, the default) and *Recommended* (tougher pieces, morale, shield wall, spears, charge, long shots, save points, catch-up). *Tougher pieces* (David's idea, 2026-11-16) gives every piece twice its defense in hits, so a light piece survives one arrow; a thin bar under a wounded piece shows the hits it has left. The choices are remembered and saved with the game.
 
 **Quick battle** (in the menu) skips setup with a fixed army: 1 King, 4 heavy infantry, 4 light infantry, 2 heavy cavalry, 2 light cavalry, 2 archers.
 

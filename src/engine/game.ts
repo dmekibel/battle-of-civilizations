@@ -47,9 +47,12 @@ export function newGame(cfg: GameConfig = CONFIG): GameState {
   };
 }
 
+/** How many hits a fresh piece can take: its defense, times toughness when that rule is on. */
+export const maxHp = (type: Unit['type'], cfg: GameConfig = CONFIG) => cfg.units[type].hp * (cfg.options.toughness || 1);
+
 export function makeUnit(s: GameState, type: Unit['type'], owner: Player, pos: Hex, cfg: GameConfig = CONFIG): [Unit, GameState] {
   const seq = s.seq + 1;
-  const unit: Unit = { id: `${owner}-${type}-${seq}`, type, owner, pos, hp: cfg.units[type].hp, moved: false, attacked: false };
+  const unit: Unit = { id: `${owner}-${type}-${seq}`, type, owner, pos, hp: maxHp(type, cfg), moved: false, attacked: false };
   return [unit, { ...s, seq }];
 }
 

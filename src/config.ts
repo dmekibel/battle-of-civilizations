@@ -125,6 +125,8 @@ export interface GameConfig {
     kingAura: boolean;
     /** Zone of control: a piece moving next to an enemy must stop there. */
     zoneOfControl: boolean;
+    /** Tougher pieces: each piece takes its defense times this many hits (1 = Dad's rules). */
+    toughness: number;
   };
   /** Quick-battle army for Red (and tests). Blue gets the mirror image (col -> cols - 1 - col). */
   setup: Placement[];
@@ -197,6 +199,7 @@ export const CONFIG: GameConfig = {
     charge: false,
     kingAura: false,
     zoneOfControl: false,
+    toughness: 1,
   },
   army: {
     budget: 50,

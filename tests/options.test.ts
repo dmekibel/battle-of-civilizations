@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG, type GameConfig, type UnitTypeId } from '../src/config';
-import { attack, buildBoard, endTurn, getUnit, moveUnit, newGame, previewStrike, reachable, rollDice, shoot, type GameState, type Player, type Result } from '../src/engine';
+import { attack, buildBoard, makeUnit, endTurn, getUnit, moveUnit, newGame, previewStrike, reachable, rollDice, shoot, type GameState, type Player, type Result } from '../src/engine';
 
 /** An open field (no river, no forest) with one optional rule switched on. */
 const withRule = (o: Partial<GameConfig['options']>): GameConfig => ({
@@ -27,7 +27,7 @@ const sixes = () => 5.5 / 6;
 
 describe('optional rules', () => {
   it('all are off by default', () => {
-    expect(CONFIG.options).toEqual({ firstTurnBonus: 0, carryMax: 0, routAt: null, shieldWall: false, spears: false, longShotFrom: null, volleys: null, charge: false, kingAura: false, zoneOfControl: false });
+    expect(CONFIG.options).toEqual({ firstTurnBonus: 0, carryMax: 0, routAt: null, shieldWall: false, spears: false, longShotFrom: null, volleys: null, charge: false, kingAura: false, zoneOfControl: false, toughness: 1 });
   });
 
   it('first-turn bonus: the second player gets extra points on turn 1 only', () => {
@@ -107,5 +107,17 @@ describe('optional rules', () => {
     expect([...zoc.keys()].every((k) => free.has(k))).toBe(true);
     expect(zoc.has('4,5')).toBe(true); // stepping up to the enemy is fine
     expect(free.has('3,6') && !zoc.has('3,6')).toBe(true); // slipping past it is not
+  });
+  it('tougher pieces: each piece takes its defense times two hits, one shot at a time', () => {
+    const cfg = withRule({ toughness: 2 });
+    const [li] = makeUnit(newGame(cfg), 'lightInfantry', 'blue', { col: 5, row: 0 }, cfg);
+    const [hi] = makeUnit(newGame(cfg), 'heavyInfantry', 'blue', { col: 5, row: 0 }, cfg);
+    expect([li.hp, hi.hp]).toEqual([2, 4]);
+    let s = scenario(cfg, [['red', 'king', 0, 0], ['red', 'archer', 1, 0], ['blue', 'king', 20, 0], ['blue', 'lightInfantry', 5, 0]]);
+    s = { ...s, units: s.units.map((u) => (u.type === 'lightInfantry' ? { ...u, hp: 2 } : u)) };
+    s = ok(shoot(s, 'red-archer-1', 'blue-lightInfantry-3', cfg));
+    expect(getUnit(s, 'blue-lightInfantry-3')?.hp).toBe(1);
+    s = ok(shoot(s, 'red-archer-1', 'blue-lightInfantry-3', cfg));
+    expect(getUnit(s, 'blue-lightInfantry-3')).toBeUndefined();
   });
 });

@@ -12,6 +12,7 @@ import {
   getUnit,
   key,
   liftUnit,
+  maxHp,
   moveUnit,
   newGame,
   other,
@@ -270,7 +271,8 @@ function die(face: number | null, spin: boolean): string {
 /** Coloured stat chips, always in the same order: attack, defense, move, range. */
 function stats(type: UnitTypeId, defenseLeft?: number): string {
   const r = CONFIG.units[type];
-  const def = defenseLeft === undefined ? `${r.hp}` : `${defenseLeft}/${r.hp}`;
+  const full = maxHp(type);
+  const def = defenseLeft === undefined ? `${full}` : `${defenseLeft}/${full}`;
   return `<span class="stats">
     <span class="st atk" title="${t(lang, 'keyAtk')}"><i>${t(lang, 'tagAtk')}</i>${r.attack > 0 ? r.attack : '–'}</span>
     <span class="st def" title="${t(lang, 'keyDef')}"><i>${t(lang, 'tagDef')}</i>${def}</span>
@@ -309,11 +311,11 @@ function overlay(s: GameState): Overlay {
   const own = selected ? getUnit(s, selected) : undefined;
   const mine = own && own.owner === s.current && s.phase === 'act';
   const targets = new Map<string, AttackPreview>();
-  if (mine) for (const x of strikeTargets(s, own.id)) if (!targets.has(x.targetId)) targets.set(x.targetId, x.preview);
+  if (mine) for (const x of strikeTargets(s, own.id)) if (!targets.has(x.targetId) && (!aiAim || x.targetId === aiAim)) targets.set(x.targetId, x.preview);
   const battle = s.phase === 'act' || s.phase === 'roll';
   return {
     selected,
-    reach: mine ? reachable(s, own.id) : new Map(),
+    reach: mine && !aiAim ? reachable(s, own.id) : new Map(),
     targets,
     zone: s.phase === 'deploy' ? { owner: s.current, hexes: zoneHexes(s, s.current) } : null,
     // During setup the other side's army stays secret.
@@ -328,6 +330,8 @@ function overlay(s: GameState): Overlay {
 
 /** On a touch screen the first tap on a hex shows the route and its cost; a second tap moves. */
 let pending: Hex | null = null;
+/** The enemy the computer is about to hit, ringed on the board for a moment first. */
+let aiAim: string | null = null;
 
 /** Threat view: every hex the other side could attack or shoot next turn with an average
  *  roll (10 points), so you can see where it's safe to stand. */
@@ -514,6 +518,7 @@ function draftSheet(s: GameState): string {
 
 /** The optional rules as shown on the New battle screen, with the value each switches to. */
 const RULES: { key: keyof Settings['options']; on: Settings['options'][keyof Settings['options']] }[] = [
+  { key: 'toughness', on: 2 },
   { key: 'routAt', on: 0.5 },
   { key: 'shieldWall', on: true },
   { key: 'spears', on: true },
@@ -848,15 +853,29 @@ function aiSetup() {
 function scheduleAi() {
   const s = sess.state;
   if (aiTimer !== null || rolling || cover || choosing || !aiTurn(s)) return;
+  // Each computer attack gets its own beat: the target is marked first, then the hit lands,
+  // so a volley never looks like one click doing several attacks at once.
+  const next = s.phase === 'act' ? aiNextAction(s) : null;
+  const strike = next && (next.kind === 'attack' || next.kind === 'shoot');
+  if (strike) {
+    aiAim = next.targetId;
+    selected = next.unitId;
+    message = `${playerName(lang, s.current)}: ${unitName(lang, getUnit(s, next.unitId)!.type, s.current)} → ${unitName(lang, getUnit(s, next.targetId)!.type, other(s.current)).toLowerCase()}`;
+  }
   aiTimer = window.setTimeout(() => {
     aiTimer = null;
+    aiAim = null;
     const st = sess.state;
     if (rolling || cover || choosing || !aiTurn(st)) return;
     if (st.phase === 'roll') return roll();
     const a = aiNextAction(st);
-    if (a) run((x) => applyAi(x, a));
-    else run((x) => endTurn(x), true);
-  }, sess.state.phase === 'roll' ? 700 : 650);
+    if (a) {
+      run((x) => applyAi(x, a));
+      if (a.kind === 'attack' || a.kind === 'shoot') selected = null;
+    } else run((x) => endTurn(x), true);
+  }, s.phase === 'roll' ? 700 : strike ? 1300 : 650);
+  // Drawn after the timer is set, so this render doesn't schedule a second move.
+  if (strike) render();
 }
 
 // ---------- actions ----------
@@ -1530,3 +1549,15 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 }
 
 render();
+
+// Dev only: lets the test browser read and set the session (stripped from the built game).
+if (import.meta.env.DEV) {
+  (window as unknown as { boc: object }).boc = {
+    get sess() { return sess; },
+    set sess(v: typeof sess) { sess = v; render(); },
+    get selected() { return selected; },
+    get message() { return message; },
+    set mode(m: typeof mode) { mode = m; },
+    scheduleAi,
+  };
+}

@@ -2,7 +2,7 @@
 // of the piece. Heavy units have a filled box and a light picture; light units the reverse.
 
 import { CONFIG, type UnitTypeId } from '../config';
-import type { Player } from '../engine';
+import { maxHp, type Player } from '../engine';
 import { factionOf, kabuto } from './factions';
 
 /** A side's army colour comes from the faction it leads. */
@@ -96,18 +96,32 @@ function picture(type: UnitTypeId, ink: string): string {
   }
 }
 
+function healthBar(hp: number, full: number): string {
+  const gap = 1.5;
+  const w = (W - 4 - gap * (full - 1)) / full;
+  let out = `<rect x="${-W / 2}" y="${H / 2 + 2}" width="${W}" height="5" rx="2.5" fill="#000000aa"/>`;
+  for (let i = 0; i < full; i++) {
+    const x = -W / 2 + 2 + i * (w + gap);
+    out += `<rect x="${x.toFixed(1)}" y="${H / 2 + 3}" width="${w.toFixed(1)}" height="3" rx="1.5" fill="${i < hp ? '#7ed957' : '#ffffff33'}"/>`;
+  }
+  return out;
+}
+
 /** A piece: a square counter with its picture. Heavy pieces are filled in the army colour,
  *  light pieces white with a coloured outline. A wounded piece (below full defense) gets a red edge. */
 export function unitSymbol(type: UnitTypeId, owner: Player, hp: number): string {
   const color = armyColor(owner);
   const heavy = CONFIG.units[type].heavy;
-  const wounded = hp < CONFIG.units[type].hp;
+  const full = maxHp(type);
+  const wounded = hp < full;
   const box = `<rect x="${-W / 2}" y="${-H / 2}" width="${W}" height="${H}" rx="3" fill="${heavy ? color : '#fffdf6'}" stroke="${wounded ? '#ff4d3d' : color}" stroke-width="${wounded ? 3.2 : 2.4}"/>`;
   const ink = heavy ? '#fffdf6' : color;
   const own = factionOf(owner).art?.[type];
-  return `<g>${box}<g>${own ? art(own, ink, heavy ? color : '#fffdf6') : picture(type, ink)}</g></g>`;
+  // Once hit, a thin bar under the counter shows the hits it has left.
+  const bar = wounded ? healthBar(hp, full) : '';
+  return `<g>${box}${bar}<g>${own ? art(own, ink, heavy ? color : '#fffdf6') : picture(type, ink)}</g></g>`;
 }
 
 /** A stand-alone icon for lists and the army builder. */
 export const unitIcon = (type: UnitTypeId, owner: Player) =>
-  `<svg viewBox="-22 -16 44 32" width="44" height="32" aria-hidden="true">${unitSymbol(type, owner, CONFIG.units[type].hp)}</svg>`;
+  `<svg viewBox="-22 -16 44 32" width="44" height="32" aria-hidden="true">${unitSymbol(type, owner, maxHp(type))}</svg>`;
