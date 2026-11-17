@@ -184,9 +184,16 @@ function damageOn(s: GameState, target: Unit, raw: number, cfg: GameConfig) {
   return Math.max(0, raw - guard);
 }
 
-/** Melee bonuses from the optional rules: cavalry charge and the King's command. */
-function meleeBonus(s: GameState, a: Unit, cfg: GameConfig): number {
+/** Flanking: another of the attacker's pieces touches the target, and not from the attacker's side
+ *  (it isn't next to the attacker), so the target is hit from two directions. */
+export function isFlanked(s: GameState, a: Unit, t: Unit): boolean {
+  return s.units.some((f) => f.id !== a.id && f.owner === a.owner && distance(f.pos, t.pos) === 1 && distance(f.pos, a.pos) > 1);
+}
+
+/** Melee bonuses from the optional rules: cavalry charge, the King's command and flanking. */
+function meleeBonus(s: GameState, a: Unit, t: Unit, cfg: GameConfig): number {
   let bonus = 0;
+  if (cfg.options.flanking && isFlanked(s, a, t)) bonus += 1;
   if (cfg.options.charge && mounted(a, cfg) && (a.ran ?? 0) >= 3) bonus += 1;
   if (cfg.options.kingAura && a.type !== 'king') {
     const king = kingOf(s, a.owner);
@@ -218,7 +225,7 @@ function checkStrike(
     if (rules.attack <= 0) return 'cannotMelee';
     if (distance(a.pos, t.pos) !== 1) return 'notAdjacent';
     cost = cfg.combat.attackCost;
-    raw = rules.attack + meleeBonus(s, a, cfg);
+    raw = rules.attack + meleeBonus(s, a, t, cfg);
     // Spearmen hit riders twice as hard.
     if (rules.antiCavalry && mounted(t, cfg)) raw *= 2;
   } else {
@@ -318,11 +325,12 @@ export function moveUnit(s: GameState, unitId: string, to: Hex, cfg: GameConfig 
   const r = reachable(s, unitId, cfg).get(key(to));
   if (!r) return fail('unreachable');
   const hexes = r.steps;
+  const path = routeTo(s, unitId, to, cfg);
   const units = s.units.map((x) => (x.id === unitId ? { ...x, pos: to, moved: true, ran: (x.ran ?? 0) + hexes } : x));
   const next: GameState = { ...s, units, points: s.points - r.cost, advance: null };
   return {
     ok: true,
-    state: withLog(next, { kind: 'move', turn: s.turn, player: s.current, unit: u.type, from: u.pos, to, cost: r.cost }),
+    state: withLog(next, { kind: 'move', turn: s.turn, player: s.current, unit: u.type, from: u.pos, to, cost: r.cost, path }),
   };
 }
 

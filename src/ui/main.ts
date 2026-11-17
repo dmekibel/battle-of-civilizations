@@ -48,7 +48,7 @@ import {
   type Result,
   type Session,
 } from '../engine';
-import { NO_EFFECTS, hexOnMap, mapSize, renderBoard, screenToGround, viewCube, type Camera, type Effects, type Overlay } from './board';
+import { NO_EFFECTS, STEP_MS, hexOnMap, mapSize, renderBoard, screenToGround, viewCube, type Camera, type Effects, type Overlay } from './board';
 import { errorText, logText, playerName, reasonText, t, unitName, type Key, type Lang } from './i18n';
 import { unitIcon } from './symbols';
 import { FACTIONS, FACTION_ORDER, factionOf, rosterOf, type FactionId } from './factions';
@@ -531,6 +531,7 @@ const RULES: { key: keyof Settings['options']; on: Settings['options'][keyof Set
   { key: 'kingAura', on: true },
   { key: 'zoneOfControl', on: true },
   { key: 'kingsGuard', on: true },
+  { key: 'flanking', on: true },
   { key: 'longShotFrom', on: 3 },
   { key: 'volleys', on: 6 },
   { key: 'carryMax', on: 3 },
@@ -557,12 +558,13 @@ const RULE_ICON: Record<keyof Settings['options'], string> = {
   carryMax: '<ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5" fill="none"/>',
   firstTurnBonus: '<path d="M12 5v14M5 12h14" fill="none"/>',
   routAt: '<path d="M6 21V3M6 4h11l-3 4 3 4H6" />',
+  flanking: '<path d="M3 7l6 5-6 5M21 7l-6 5 6 5" fill="none"/><circle cx="12" cy="12" r="2.5"/>',
   rerolls: '<path d="M19 8a8 8 0 1 0 1 6" fill="none"/><path d="M20 3v5h-5"/>',
   kingsGuard: '<path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z" fill="none"/><path d="M8.5 13.5V10l2 1.5L12 9l1.5 2.5 2-1.5v3.5z"/>',
 };
 
 const RULE_GROUPS: { title: Key; color: string; keys: (keyof Settings['options'])[] }[] = [
-  { title: 'groupCombat', color: '#c2453a', keys: ['toughness', 'shieldWall', 'spears', 'charge', 'kingAura', 'kingsGuard'] },
+  { title: 'groupCombat', color: '#c2453a', keys: ['toughness', 'flanking', 'shieldWall', 'spears', 'charge', 'kingAura', 'kingsGuard'] },
   { title: 'groupRanged', color: '#3f8f5a', keys: ['longShotFrom', 'volleys'] },
   { title: 'groupMove', color: '#3a6fb0', keys: ['unitSpeeds', 'zoneOfControl'] },
   { title: 'groupTurn', color: '#a8811a', keys: ['routAt', 'carryMax', 'rerolls', 'firstTurnBonus'] },
@@ -691,6 +693,43 @@ function startScreen(): string {
   </div></div>`;
 }
 
+/** The end of a battle: the winner's banner, how it was won, and the battle in numbers. */
+function victory(s: GameState, w: Player): string {
+  const sides: Player[] = [w, other(w)];
+  const stat = { kills: { red: 0, blue: 0 }, damage: { red: 0, blue: 0 } };
+  const killsBy = new Map<UnitTypeId, number>();
+  for (const e of s.log) {
+    if (e.kind !== 'attack' && e.kind !== 'shoot') continue;
+    stat.damage[e.player] += e.damage;
+    if (e.killed) {
+      stat.kills[e.player] += 1;
+      if (e.player === w) killsBy.set(e.unit, (killsBy.get(e.unit) ?? 0) + 1);
+    }
+  }
+  const best = [...killsBy].sort((a, b) => b[1] - a[1])[0];
+  const left = (p: Player) => s.units.filter((u) => u.owner === p).length;
+  const row = (label: string, f: (p: Player) => number) =>
+    `<div class="vrow"><b>${f(sides[0])}</b><span>${label}</span><b>${f(sides[1])}</b></div>`;
+  return `<div class="cover victory ${w}"><div class="card ${w}">
+    <div class="vbanner"><div class="vrays" aria-hidden="true"></div><div class="vemblem">${factionOf(w).emblem}</div></div>
+    <p class="small">${t(lang, 'victory')}</p>
+    <h2 class="${w}">${playerName(lang, w)}</h2>
+    <p>${reasonText(lang, s.winReason!)}<br>${t(lang, 'onTurn')} ${s.turn}.</p>
+    <div class="vstats">
+      <div class="vrow vhead"><span class="vcrest">${factionOf(sides[0]).emblem}</span><span></span><span class="vcrest">${factionOf(sides[1]).emblem}</span></div>
+      ${row(t(lang, 'statKills'), (p) => stat.kills[p])}
+      ${row(t(lang, 'statDamage'), (p) => stat.damage[p])}
+      ${row(t(lang, 'statLeft'), left)}
+    </div>
+    ${best ? `<p class="vbest">${t(lang, 'bestFighter')}: <b>${unitName(lang, best[0], w)}</b> · ${best[1]} ${t(lang, best[1] === 1 ? 'killOne' : 'killMany')}</p>` : ''}
+    <button data-act="restart" class="primary wide">${t(lang, 'newGame')}</button>
+    <button data-act="see-board" class="ghost wide">${t(lang, 'seeBoard')}</button>
+  </div></div>`;
+}
+
+/** The winner's screen can be put away to look at the final board. */
+let overHidden = false;
+
 function passScreen(s: GameState): string {
   if (s.phase === 'roll') {
     return `<div class="cover"><div class="card">
@@ -785,6 +824,7 @@ function bar(s: GameState): string {
         <button data-act="done" class="primary" ${left.length ? 'disabled' : ''}>${t(lang, 'done')} →</button>
       </div>`;
   }
+  if (s.phase === 'over' && overHidden) return `<div class="row"><button data-act="show-result">${t(lang, 'result')}</button><button data-act="restart" class="primary">${t(lang, 'newGame')}</button></div>`;
   if (s.phase === 'roll') return `<div class="row"><button data-act="roll" class="primary" ${rolling ? 'disabled' : ''}>${t(lang, 'roll')}</button></div>`;
   if (s.phase === 'act') {
     const take = s.advance
@@ -856,10 +896,15 @@ function setZoom(factor: number) {
 /** Effects and sounds for log entries added since the last render. */
 function effects(s: GameState): Effects {
   const fresh: LogEntry[] = s.log.length > prevLog ? s.log.slice(prevLog) : [];
-  const fx: Effects = { from: fresh.length ? prevPos : new Map(), hits: [] };
+  const fx: Effects = { from: fresh.length ? prevPos : new Map(), hits: [], walks: new Map() };
   for (const e of fresh) {
+    if (e.kind === 'move' && e.path?.length) {
+      // The piece now standing where the move ended walks the route hex by hex.
+      const u = s.units.find((x) => x.pos.col === e.to.col && x.pos.row === e.to.row);
+      if (u) fx.walks.set(u.id, [e.from, ...e.path]);
+    }
     if (e.kind === 'attack' || e.kind === 'shoot') {
-      fx.hits.push({ at: e.at, damage: e.damage, killed: e.killed, type: e.target, owner: other(e.player), shotFrom: e.kind === 'shoot' ? e.from : null });
+      fx.hits.push({ at: e.at, damage: e.damage, killed: e.killed, type: e.target, owner: other(e.player), shotFrom: e.kind === 'shoot' ? e.from : null, by: e.unit, from: e.from, advanced: !!e.advanced });
       sound(e.kind === 'shoot' ? 'arrow' : 'clash');
       if (e.killed) setTimeout(() => sound('death'), 180);
     } else if (e.kind === 'move') sound('step');
@@ -913,15 +958,8 @@ function draw() {
       ? `<div class="points"><b>${s.reserve[s.current].length}</b><span>${t(lang, 'left')}</span></div>`
       : '';
 
-  const over =
-    s.phase === 'over' && s.winner
-      ? `<div class="cover ${s.winner}"><div class="card ${s.winner}">
-           <div class="emblem">${factionOf(s.winner).emblem}</div>
-           <h2 class="${s.winner}">${playerName(lang, s.winner)} ${t(lang, 'wins')}</h2>
-           <p>${reasonText(lang, s.winReason!)}</p>
-           <button data-act="restart" class="primary wide">${t(lang, 'newGame')}</button>
-         </div></div>`
-      : '';
+  if (s.phase !== 'over') overHidden = false;
+  const over = s.phase === 'over' && s.winner && !overHidden ? victory(s, s.winner) : '';
 
   app.innerHTML = `
     <div class="screen ${portrait ? 'portrait' : 'landscape'} ${withPanel() ? 'desktop' : desktop ? 'full' : ''} ${s.current} ${upsideDown() ? 'flipped' : ''}">
@@ -1010,9 +1048,15 @@ function scheduleAi() {
       run((x) => applyAi(x, a));
       if (a.kind === 'attack' || a.kind === 'shoot') selected = null;
     } else run((x) => endTurn(x), true);
-  }, s.phase === 'roll' ? 700 : strike ? 1300 : 650);
+  }, s.phase === 'roll' ? 700 : strike ? 1300 : Math.max(650, 350 + walkTime(s)));
   // Drawn after the timer is set, so this render doesn't schedule a second move.
   if (strike) render();
+}
+
+/** How long the last move's walk takes to play, in ms (the computer waits for it). */
+function walkTime(s: GameState): number {
+  const e = s.log[s.log.length - 1];
+  return e?.kind === 'move' && e.path ? e.path.length * STEP_MS : 0;
 }
 
 // ---------- actions ----------
@@ -1365,6 +1409,13 @@ app.addEventListener('click', (e) => {
       return render();
     case 'restart':
       choosing = true;
+      overHidden = false;
+      return render();
+    case 'show-result':
+      overHidden = false;
+      return render();
+    case 'see-board':
+      overHidden = true;
       return render();
   }
 });

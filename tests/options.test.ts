@@ -27,7 +27,7 @@ const sixes = () => 5.5 / 6;
 
 describe('optional rules', () => {
   it('all are off by default', () => {
-    expect(CONFIG.options).toEqual({ firstTurnBonus: 0, carryMax: 0, routAt: null, shieldWall: false, spears: false, longShotFrom: null, volleys: null, charge: false, kingAura: false, zoneOfControl: false, rerolls: 0, kingsGuard: false, toughness: 1, unitSpeeds: false, runLimit: 3 });
+    expect(CONFIG.options).toEqual({ firstTurnBonus: 0, carryMax: 0, routAt: null, shieldWall: false, spears: false, longShotFrom: null, volleys: null, charge: false, kingAura: false, zoneOfControl: false, rerolls: 0, kingsGuard: false, flanking: false, toughness: 1, unitSpeeds: false, runLimit: 3 });
   });
 
   it('first-turn bonus: the second player gets extra points on turn 1 only', () => {
@@ -147,5 +147,15 @@ describe('optional rules', () => {
     expect(attack(s, s.units[0].id, s.units[1].id, cfg)).toEqual({ ok: false, error: 'kingGuarded' });
     const alone = scenario(cfg, [['red', 'heavyCavalry', 3, 3], ['blue', 'king', 3, 4], ['blue', 'lightInfantry', 9, 9]]);
     expect(attack(alone, alone.units[0].id, alone.units[1].id, cfg).ok).toBe(true);
+  });
+
+  it('flanking: +1 in melee when another of your pieces touches the target from a different side', () => {
+    const cfg = withRule({ flanking: true });
+    // Attacker above the target, a friend below it: two sides.
+    const s = scenario(cfg, [['red', 'lightInfantry', 3, 3], ['blue', 'heavyInfantry', 3, 4], ['red', 'lightInfantry', 3, 5]]);
+    expect(previewStrike(s, s.units[0].id, s.units[1].id, 'attack', cfg)!.damage).toBe(2);
+    const alone = scenario(cfg, [['red', 'lightInfantry', 3, 3], ['blue', 'heavyInfantry', 3, 4]]);
+    expect(previewStrike(alone, alone.units[0].id, alone.units[1].id, 'attack', cfg)!.damage).toBe(1);
+    expect(previewStrike(s, s.units[0].id, s.units[1].id, 'attack', withRule({}))!.damage).toBe(1);
   });
 });

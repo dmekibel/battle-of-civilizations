@@ -225,10 +225,29 @@ export interface Overlay {
 export interface Effects {
   /** Unit id -> where it stood before, so it can slide to its new hex. */
   from: Map<string, Hex>;
-  hits: { at: Hex; damage: number; killed: boolean; type: UnitTypeId; owner: Player; shotFrom: Hex | null }[];
+  hits: {
+    at: Hex; damage: number; killed: boolean; type: UnitTypeId; owner: Player; shotFrom: Hex | null;
+    /** The attacker's type and where it struck from; whether it stepped into the hex after a kill. */
+    by?: UnitTypeId; from?: Hex; advanced?: boolean;
+  }[];
+  /** Unit id -> every hex of the walk it just made, start first, so it walks the route step by step. */
+  walks: Map<string, Hex[]>;
 }
 
-export const NO_EFFECTS: Effects = { from: new Map(), hits: [] };
+export const NO_EFFECTS: Effects = { from: new Map(), hits: [], walks: new Map() };
+
+/** Time for one step of a walk, in ms. */
+export const STEP_MS = 130;
+/** Pieces that fire guns: a quick tracer and smoke instead of an arrow in flight. */
+const GUNS = new Set<UnitTypeId>(['gunslinger', 'rifleman', 'cowboy']);
+/** When the blow lands after the attack starts (seconds): arrows fly, bullets and blades are quick. */
+const impact = (h: Effects['hits'][number]) => (h.shotFrom ? (h.by && GUNS.has(h.by) ? 0.12 : 0.42) : 0.14);
+const same = (a: Hex | undefined, b: Hex) => !!a && a.col === b.col && a.row === b.row;
+/** Eight short rays: the flash of a blow landing. */
+const RAYS = Array.from({ length: 8 }, (_, i) => {
+  const a = (i * Math.PI) / 4 + 0.2;
+  return `M${(5 * Math.cos(a)).toFixed(1)} ${(5 * Math.sin(a)).toFixed(1)}L${(12 * Math.cos(a)).toFixed(1)} ${(12 * Math.sin(a)).toFixed(1)}`;
+}).join('');
 
 /** A piece: flat it lies on the hex; in 2.5D the counter itself stands upright on the hex,
  *  with a thin edge underneath and a shadow, low enough not to hide the hex behind it. */
@@ -282,6 +301,15 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
     ground.push(`<polygon points="${corners(hex, v, L, S - 4)}" fill="#a066ff" fill-opacity=".32" stroke="#d4b0ff" stroke-opacity=".8" stroke-width="1.5"/>`);
   }
 
+  // Where pieces fell this battle the grass stays trampled.
+  for (const e of s.log) {
+    if ((e.kind === 'attack' || e.kind === 'shoot') && e.killed) {
+      const [mx, my] = L.pt(...flat(e.at, v));
+      const k = L.size(...flat(e.at, v));
+      ground.push(`<ellipse class="scar" cx="${mx.toFixed(1)}" cy="${(my + 2 * k).toFixed(1)}" rx="${(13 * k).toFixed(1)}" ry="${((L.tilt ? 4.5 : 10) * k).toFixed(1)}"/>`);
+    }
+  }
+
   // Last turn's enemy moves: a faint dashed arrow per move, a cross where a piece fell.
   for (const m of o.trail.moves) {
     const [ax, ay] = L.pt(...flat(m.from, v));
@@ -324,10 +352,23 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
     if (u.id === o.selected) ground.push(`<polygon points="${corners(u.pos, v, L, S - 2)}" fill="#ffe27a" fill-opacity=".6" stroke="#c99a00" stroke-width="3"/>`);
     const p = o.targets.get(u.id);
     if (p) ground.push(`<polygon points="${corners(u.pos, v, L, S - 3)}" fill="#e53935" fill-opacity=".2" stroke="#d32f2f" stroke-width="3" stroke-dasharray="6 4"/>`);
-    const hit = fx.hits.some((h) => !h.killed && h.at.col === u.pos.col && h.at.row === u.pos.row);
-    let svg = piece(u.type, u.owner, u.hp, L, at, k, [hit ? 'hit' : '', o.spent.has(u.id) ? 'spent' : ''].join(' '));
+    const hit = fx.hits.find((h) => !h.killed && same(h.at, u.pos));
+    let svg = piece(u.type, u.owner, u.hp, L, at, k, o.spent.has(u.id) ? 'spent' : '');
+    if (hit) svg = `<g class="hit" style="animation-delay:${impact(hit)}s">${svg}</g>`;
+    // A melee attacker lunges at its target and comes back.
+    const blow = fx.hits.find((h) => !h.shotFrom && !h.advanced && same(h.from, u.pos) && u.owner !== h.owner);
+    if (blow) {
+      const [tx, ty] = L.pt(...flat(blow.at, v));
+      svg = `<g class="lunge" style="--lx:${((tx - at[0]) * 0.4).toFixed(1)}px;--ly:${((ty - at[1]) * 0.4).toFixed(1)}px">${svg}</g>`;
+    }
     const was = fx.from.get(u.id);
-    if (was && (was.col !== u.pos.col || was.row !== u.pos.row)) {
+    const walk = fx.walks.get(u.id);
+    if (walk && walk.length > 1) {
+      // Walk the route one hex at a time, with a small hop on every step.
+      const vals = walk.map((h) => L.pt(...flat(h, v))).map(([px, py]) => `${(px - at[0]).toFixed(1)} ${(py - at[1]).toFixed(1)}`).join(';');
+      const n = walk.length - 1;
+      svg = `<g><animateTransform attributeName="transform" type="translate" values="${vals}" dur="${(n * STEP_MS) / 1000}s" fill="freeze"/><g class="hop" style="animation-duration:${STEP_MS}ms;animation-iteration-count:${n}">${svg}</g></g>`;
+    } else if (was && (was.col !== u.pos.col || was.row !== u.pos.row)) {
       const [px, py] = L.pt(...flat(was, v));
       svg = `<g class="slide" style="--dx:${(px - at[0]).toFixed(1)}px;--dy:${(py - at[1]).toFixed(1)}px">${svg}</g>`;
     }
@@ -340,19 +381,37 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
     }
   }
 
-  // Arrows in flight, pieces that just died, and floating damage numbers.
+  // Arrows in flight, bullets, the flash of each blow, pieces falling, and floating damage numbers.
   for (const h of fx.hits) {
     const [x, y] = flat(h.at, v);
     const [hx, hy] = L.pt(x, y);
     const k = L.size(x, y);
+    const ty = hy - lift(L, k);
+    const d = impact(h);
     if (h.shotFrom) {
       const [fx0, fy0] = flat(h.shotFrom, v);
       const [sx, sy] = L.pt(fx0, fy0);
-      const sl = lift(L, L.size(fx0, fy0));
-      top.push(`<line class="arrow" x1="${sx}" y1="${sy - sl}" x2="${hx}" y2="${hy - lift(L, k)}" stroke="#3a2a14" stroke-width="2.5" stroke-linecap="round"/>`);
+      const y0 = sy - lift(L, L.size(fx0, fy0));
+      if (h.by && GUNS.has(h.by)) {
+        top.push(
+          `<line class="tracer" x1="${sx.toFixed(1)}" y1="${y0.toFixed(1)}" x2="${hx.toFixed(1)}" y2="${ty.toFixed(1)}"/>`,
+          `<g transform="translate(${sx.toFixed(1)} ${(y0 - 4).toFixed(1)})"><circle class="smoke" r="7"/></g>`,
+        );
+      } else {
+        // The arrow flies in an arc, turning to follow its path, and lands on the target.
+        const mx = (sx + hx) / 2;
+        const my = (y0 + ty) / 2 - (Math.hypot(hx - sx, ty - y0) * 0.28 + 10);
+        top.push(`<g class="flight"><path transform="scale(1.4)" d="M-10 0H8M8 0l-5-3.5M8 0l-5 3.5M-10 0l-3.5-3M-10 0l-3.5 3"/>
+          <animateMotion dur="${d}s" fill="freeze" rotate="auto" path="M${sx.toFixed(1)} ${y0.toFixed(1)}Q${mx.toFixed(1)} ${my.toFixed(1)} ${hx.toFixed(1)} ${ty.toFixed(1)}"/>
+          <animate attributeName="opacity" values="1;1;0" keyTimes="0;.75;1" dur="${d + 0.15}s" fill="freeze"/></g>`);
+      }
     }
-    if (h.killed) standing.push({ depth: L.depth(x, y), svg: piece(h.type, h.owner, 0, L, [hx, hy], k, 'ghost') });
-    top.push(`<text class="float" x="${hx}" y="${hy - lift(L, k) - 8}">${h.killed ? '✕' : `−${h.damage}`}</text>`);
+    top.push(`<g transform="translate(${hx.toFixed(1)} ${ty.toFixed(1)})"><path class="spark" style="animation-delay:${d}s" d="${RAYS}"/></g>`);
+    if (h.killed) {
+      ground.push(`<g transform="translate(${hx.toFixed(1)} ${hy.toFixed(1)})"><ellipse class="dust" style="animation-delay:${d + 0.25}s" rx="${(16 * k).toFixed(1)}" ry="${((L.tilt ? 6 : 12) * k).toFixed(1)}"/></g>`);
+      standing.push({ depth: L.depth(x, y), svg: `<g class="ghost" style="animation-delay:${d}s">${piece(h.type, h.owner, 0, L, [hx, hy], k)}</g>` });
+    }
+    top.push(`<text class="float" style="animation-delay:${d}s" x="${hx}" y="${ty - 8}">${h.killed ? '✕' : `−${h.damage}`}</text>`);
   }
 
   // Paint from the back of the board to the front so nearer things overlap farther ones.

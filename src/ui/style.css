@@ -132,12 +132,27 @@ body {
 .board .cost { font: 700 12px 'PT Sans', sans-serif; fill: #fffbe0; stroke: #2b4220; stroke-width: 2.5px; paint-order: stroke; text-anchor: middle; }
 .board .slide { animation: slide .38s cubic-bezier(.3, .7, .4, 1); }
 @keyframes slide { from { transform: translate(var(--dx), var(--dy)); } }
+.board .hop { animation-name: hop; animation-timing-function: ease-in-out; }
+@keyframes hop { 50% { transform: translateY(-5px); } }
+.board .lunge { animation: lunge .34s cubic-bezier(.5, 0, .3, 1); }
+@keyframes lunge { 40% { transform: translate(var(--lx), var(--ly)); } }
+.board .flight path { fill: none; stroke: #2a1c0c; stroke-width: 2; stroke-linecap: round; }
+.board .tracer { stroke: #fff1b0; stroke-width: 2; stroke-linecap: round; animation: tracer .3s ease-out forwards; }
+@keyframes tracer { from { opacity: 1; } to { opacity: 0; } }
+.board .smoke { fill: #e8e2d4; transform-box: fill-box; transform-origin: center; animation: smoke .8s ease-out forwards; }
+@keyframes smoke { from { opacity: .8; transform: scale(.4); } to { opacity: 0; transform: scale(2.2) translateY(-4px); } }
+.board .spark { fill: none; stroke: #fff3b8; stroke-width: 2.4; stroke-linecap: round; transform-box: fill-box; transform-origin: center; animation: spark .42s ease-out both; }
+@keyframes spark { 0% { opacity: 0; transform: scale(.3); } 15% { opacity: 1; } 100% { opacity: 0; transform: scale(1.5); } }
+.board .dust { fill: #c9b48a; transform-box: fill-box; transform-origin: center; animation: dust .7s ease-out both; }
+@keyframes dust { 0% { opacity: 0; transform: scale(.3); } 20% { opacity: .7; } 100% { opacity: 0; transform: scale(1.6); } }
+.board .scar { fill: #4a3820; opacity: .22; }
 .board .hit { animation: hit .5s ease-out; }
-@keyframes hit { 0%, 40% { transform: translateX(-3px); filter: brightness(1.8); } 20%, 60% { transform: translateX(3px); } 100% { transform: none; } }
-.board .ghost { animation: ghost .7s ease-in forwards; transform-origin: center; }
-@keyframes ghost { to { opacity: 0; transform: scale(.4) rotate(-25deg); } }
-.board .float { font: 700 20px 'PT Serif', Georgia, serif; fill: #fff3a6; stroke: #5a1010; stroke-width: 4px; paint-order: stroke; text-anchor: middle; animation: float 1s ease-out forwards; }
-@keyframes float { to { transform: translateY(-28px); opacity: 0; } }
+@keyframes hit { 0%, 40% { transform: translateX(-3px); opacity: .45; } 20%, 60% { transform: translateX(3px); opacity: 1; } 100% { transform: none; } }
+/* A piece that dies staggers and topples over its base, then fades. */
+.board .ghost { animation: ghost .8s ease-in forwards; transform-box: fill-box; transform-origin: 50% 100%; }
+@keyframes ghost { 25% { transform: rotate(8deg); } 70% { opacity: .8; } to { opacity: 0; transform: translateY(4px) rotate(-85deg) scale(.85); } }
+.board .float { font: 700 20px 'PT Serif', Georgia, serif; fill: #fff3a6; stroke: #5a1010; stroke-width: 4px; paint-order: stroke; text-anchor: middle; animation: float 1.1s ease-out both; }
+@keyframes float { 0% { opacity: 0; } 10% { opacity: 1; transform: none; } 100% { transform: translateY(-28px); opacity: 0; } }
 .board .arrow { stroke-dasharray: 14 400; animation: arrow .35s linear forwards; }
 @keyframes arrow { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -400; opacity: .2; } }
 .board .badge text { font: 700 11px 'PT Sans', sans-serif; fill: #fff; text-anchor: middle; }
@@ -202,6 +217,23 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 .card h2 { font: 400 34px/1.1 var(--title); margin: 4px 0 8px; }
 .card .emblem { display: flex; justify-content: center; align-items: center; gap: 14px; margin-bottom: 6px; }
 .card p { margin: 0 0 16px; color: var(--muted); }
+/* Victory: the winner's crest on slowly turning light, then the battle in numbers. */
+.victory .card { animation: vdrop .55s cubic-bezier(.2, .9, .3, 1.2) both; }
+@keyframes vdrop { from { transform: translateY(-40px) scale(.94); opacity: 0; } }
+.vbanner { position: relative; height: 128px; display: grid; place-items: center; margin: -6px 0 4px; }
+.vrays { position: absolute; width: 220px; height: 220px; border-radius: 50%; background: repeating-conic-gradient(color-mix(in srgb, var(--gold) 40%, transparent) 0 8deg, transparent 8deg 24deg); -webkit-mask: radial-gradient(circle, #000 20%, transparent 68%); mask: radial-gradient(circle, #000 20%, transparent 68%); animation: vspin 24s linear infinite; }
+@keyframes vspin { to { transform: rotate(1turn); } }
+.vemblem { position: relative; animation: vpop .6s .25s cubic-bezier(.2, 1.4, .4, 1) both; }
+.vemblem svg { width: 92px; height: 108px; filter: drop-shadow(0 8px 16px rgba(0,0,0,.55)); }
+@keyframes vpop { from { transform: scale(.3); opacity: 0; } }
+.vstats { display: grid; gap: 2px; margin: 0 0 14px; background: var(--track); border-radius: 12px; padding: 8px 10px; }
+.vrow { display: grid; grid-template-columns: 56px 1fr 56px; align-items: center; padding: 6px 0; font-size: 14px; color: var(--muted); }
+.vrow b { font: 700 22px 'PT Serif', Georgia, serif; color: var(--ink); }
+.vrow + .vrow:not(.vhead) { border-top: 1px solid color-mix(in srgb, var(--muted) 18%, transparent); }
+.vhead { padding: 0 0 2px; }
+.vcrest svg { width: 30px; height: 35px; }
+.card .vbest { color: var(--ink); font-size: 15px; }
+.card .ghost.wide { margin-top: 8px; color: var(--muted); }
 .card .small { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: .08em; }
 
 .sheet-body h2 { display: flex; align-items: center; gap: 8px; font: 400 22px/1.2 var(--title); margin: 0 0 10px; }

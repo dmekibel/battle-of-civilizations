@@ -28,6 +28,7 @@ export const RECOMMENDED: GameConfig['options'] = {
   carryMax: 3,
   rerolls: 1,
   kingsGuard: true,
+  flanking: true,
   routAt: 0.5,
   shieldWall: true,
   spears: true,

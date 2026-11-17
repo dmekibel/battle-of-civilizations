@@ -26,7 +26,7 @@ export type WinReason = 'kingKilled' | 'kingCaptured' | 'routed';
 
 export type LogEntry =
   | { kind: 'roll'; turn: number; player: Player; dice: number[]; total: number; reroll?: boolean }
-  | { kind: 'move'; turn: number; player: Player; unit: UnitTypeId; from: Hex; to: Hex; cost: number }
+  | { kind: 'move'; turn: number; player: Player; unit: UnitTypeId; from: Hex; to: Hex; cost: number; /** Every hex walked, start excluded. */ path?: Hex[] }
   | {
       kind: 'attack' | 'shoot';
       turn: number;

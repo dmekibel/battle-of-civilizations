@@ -129,6 +129,8 @@ export interface GameConfig {
     zoneOfControl: boolean;
     /** Rerolls: each side may roll its dice again this many times per battle, before doing anything that turn. */
     rerolls: number;
+    /** Flanking: a melee attack hits for +1 when another of your pieces also touches the target from a different side. */
+    flanking: boolean;
     /** King's guard: the King can't be attacked or shot while one of his own pieces stands next to him. */
     kingsGuard: boolean;
     /** Tougher pieces: each piece takes its defense times this many hits (1 = Dad's rules). */
@@ -212,6 +214,7 @@ export const CONFIG: GameConfig = {
     zoneOfControl: false,
     rerolls: 0,
     kingsGuard: false,
+    flanking: false,
     toughness: 1,
     unitSpeeds: false,
     runLimit: 3,
