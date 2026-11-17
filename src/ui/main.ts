@@ -961,7 +961,7 @@ function setupScreen(): string {
   // Armies grouped by the age they fought in.
   const tiles = ERAS.filter((era) => READY().some((id) => ERA_OF[id] === era)).map((era) => `<h4 class="era">${t(lang, `era${era[0].toUpperCase()}${era.slice(1)}` as Key)}</h4><div class="ftiles">${READY().filter((id) => ERA_OF[id] === era).map(tile).join('')}</div>`).join('');
 
-  const mapTiles = (['river', 'fords', 'noford', 'island', 'pass', 'longwood', 'lake', 'ridge', 'open', 'forest', 'castles', 'siege', 'village', 'random'] as MapId[]) // Marsh road is shelved until it looks right; High ground back with raised terraces (David, 2026-11-17)
+  const mapTiles = (['river', 'fords', 'noford', 'island', 'pass', 'longwood', 'lake', 'ridge', 'open', 'forest', 'village', 'random'] as MapId[]) // Two castles and Castle siege are shelved until walls are truly 3D (David, 2026-11-18); Marsh road is shelved until it looks right; High ground back with raised terraces (David, 2026-11-17)
     .map((m) => {
       const label = t(lang, `map${m[0].toUpperCase()}${m.slice(1)}` as Key);
       return `<button data-act="set" data-field="map" data-value="${m}" class="mtile ${settings.map === m ? 'on' : ''}" aria-pressed="${settings.map === m}">${mapThumb(m)}<span>${label}</span></button>`;
@@ -988,7 +988,7 @@ function setupScreen(): string {
   return `<div class="sheet"><div class="sheet-body setup">
     <h2><button data-act="setup-back" class="ghost back" aria-label="${t(lang, 'back')}">${icon('back')}</button>${t(lang, 'newBattle')}</h2>
     <div class="sheet-scroll">
-      ${mode === 'online' ? `<div class="join-box"><h3>${t(lang, 'joinWithCode')}</h3><div class="join-row"><input class="join-input" maxlength="7" value="${joinText}" placeholder="ABCDE" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" inputmode="text" aria-label="${t(lang, 'joinWithCode')}"><button data-act="join-code" class="primary" ${joinBusy ? 'disabled' : ''}>${t(lang, 'join')}</button></div>${joinErr ? `<p class="join-err">${joinErr}</p>` : ''}<h3>${t(lang, 'orNewGame')}</h3></div>` : ''}
+      ${mode === 'online' ? `<div class="join-box"><h3>${t(lang, 'hostGame')}</h3><p class="join-host-sub">${t(lang, 'hostGameSub')}</p><button data-act="begin" class="primary wide">${t(lang, 'hostGameBtn')}</button><h3>${t(lang, 'joinWithCode')}</h3><div class="join-row"><input class="join-input" maxlength="7" value="${joinText}" placeholder="ABCDE" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" inputmode="text" aria-label="${t(lang, 'joinWithCode')}"><button data-act="join-code" class="primary" ${joinBusy ? 'disabled' : ''}>${t(lang, 'join')}</button></div>${joinErr ? `<p class="join-err">${joinErr}</p>` : ''}<h3>${t(lang, 'orNewGame')}</h3></div>` : ''}
       <div class="vs">
         ${side('red', mode === 'pvp' ? t(lang, 'sideFirst') : t(lang, 'sideYou'))}
         ${mode === 'online' ? `<span class="vs-mid">${t(lang, 'vs')}</span>` : `<button data-act="swap-sides" class="vs-swap" title="${t(lang, 'swapSides')}" aria-label="${t(lang, 'swapSides')}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h15M15 4l4 4-4 4M20 16H5M9 12l-4 4 4 4"/></svg></button>`}
@@ -1025,7 +1025,7 @@ function setupScreen(): string {
       </button>
       ${rulesOpen ? `<div class="rgroups">${groups}</div>` : ''}
     </div>
-    <div class="sheet-foot"><button data-act="begin" class="primary wide">${t(lang, 'startBattle')}</button></div>
+    <div class="sheet-foot"><button data-act="begin" class="primary wide">${t(lang, mode === 'online' ? 'hostGameBtn' : 'startBattle')}</button></div>
   </div></div>`;
 }
 
