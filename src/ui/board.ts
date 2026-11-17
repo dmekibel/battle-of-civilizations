@@ -287,8 +287,9 @@ const AIMS_FORWARD: Record<string, ViewId[]> = {
   'mongols/horseArcher': ['front', 'back'],
 };
 
-/** The carved arrow picture's size in pixels. */
-const [ARROW_W, ARROW_H] = [240, 29];
+/** The carved arrow, drawn from 5 angles (all pointing right, down or up), and each picture's size in pixels. */
+const ARROWS: Record<string, [number, number]> = {"side": [234, 50], "toward-diag": [234, 155], "toward": [63, 236], "away-diag": [233, 151], "away": [53, 236]};
+const ARROW_VIEWS = ['toward', 'toward-diag', 'side', 'away-diag', 'away'];
 
 /** Screen direction shadows fall in (away from the sun), set per render. */
 let SHADOW: Pt = [0.6, 0.4];
@@ -334,7 +335,7 @@ export function preloadFigures() {
   const key = `${sides.red}/${sides.blue}`;
   if (key === preloaded || typeof Image === 'undefined') return;
   preloaded = key;
-  new Image().src = `${import.meta.env.BASE_URL}pieces/arrow.webp?v=${ART_VERSION}`;
+  for (const av of ARROW_VIEWS) new Image().src = `${import.meta.env.BASE_URL}pieces/arrow-${av}.webp?v=${ART_VERSION}`;
   for (const fac of [sides.red, sides.blue]) {
     for (const [type, set] of Object.entries(SPRITES[fac] ?? {})) {
       for (const view of Object.keys(set)) new Image().src = SPRITE_URL(fac, type, view);
@@ -496,7 +497,7 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
           `<line class="tracer" x1="${sx.toFixed(1)}" y1="${y0.toFixed(1)}" x2="${hx.toFixed(1)}" y2="${ty.toFixed(1)}"/>`,
           `<g transform="translate(${sx.toFixed(1)} ${y0.toFixed(1)})"><path class="muzzle" d="M0-9L2-2 9 0 2 2 0 9-2 2-9 0-2-2Z"/></g>`,
           `<g class="bullet"><ellipse rx="9" ry="2.6"/><ellipse class="core" rx="4.5" ry="1.4"/>
-            <animateMotion dur="${d}s" fill="freeze" rotate="auto" path="${path}"/>
+            <animateMotion dur="${d}s" fill="freeze" path="${path}"/>
             <animate attributeName="opacity" values="1;1;0" keyTimes="0;.9;1" dur="${d + 0.05}s" fill="freeze"/></g>`,
           `<g transform="translate(${sx.toFixed(1)} ${(y0 - 4).toFixed(1)})"><circle class="smoke" r="7"/></g>`,
         );
@@ -504,8 +505,14 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
         // The arrow flies in an arc, turning to follow its path, and lands on the target.
         const mx = (sx + hx) / 2;
         const my = (y0 + ty) / 2 - (Math.hypot(hx - sx, ty - y0) * 0.28 + 10);
-        top.push(`<g class="flight"><image href="${import.meta.env.BASE_URL}pieces/arrow.webp?v=${ART_VERSION}" x="-24" y="-2.2" width="36" height="${(36 * ARROW_H / ARROW_W).toFixed(1)}"/>
-          <animateMotion dur="${d}s" fill="freeze" rotate="auto" path="M${sx.toFixed(1)} ${y0.toFixed(1)}Q${mx.toFixed(1)} ${my.toFixed(1)} ${hx.toFixed(1)} ${ty.toFixed(1)}"/>
+        // The arrow is seen from the angle it flies at, like the pieces: towards the viewer, diagonally, side on,
+        // or away; side and diagonal views are mirrored when it flies to the left (an arrow has no left or right hand).
+        const rx = hx - sx, ry = (ty - y0) / Math.max(0.2, Math.cos(tiltAngle(v)));
+        const av = ARROW_VIEWS[Math.round(Math.atan2(Math.abs(rx), ry) / (Math.PI / 4))];
+        const [aw, ah] = ARROWS[av].map((n) => n * (36 / ARROWS.side[0]));
+        const amirror = rx < 0 && av !== 'toward' && av !== 'away' ? ' transform="scale(-1 1)"' : '';
+        top.push(`<g class="flight"><image href="${import.meta.env.BASE_URL}pieces/arrow-${av}.webp?v=${ART_VERSION}" x="${(-aw / 2).toFixed(1)}" y="${(-ah / 2).toFixed(1)}" width="${aw.toFixed(1)}" height="${ah.toFixed(1)}"${amirror}/>
+          <animateMotion dur="${d}s" fill="freeze" path="M${sx.toFixed(1)} ${y0.toFixed(1)}Q${mx.toFixed(1)} ${my.toFixed(1)} ${hx.toFixed(1)} ${ty.toFixed(1)}"/>
           <animate attributeName="opacity" values="1;1;0" keyTimes="0;.75;1" dur="${d + 0.15}s" fill="freeze"/></g>`);
       }
     }
