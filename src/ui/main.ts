@@ -48,11 +48,11 @@ import {
   type Result,
   type Session,
 } from '../engine';
-import { NO_EFFECTS, STEP_MS, hexOnMap, mapSize, renderBoard, screenToGround, viewCube, type Camera, type Effects, type Overlay } from './board';
+import { GROUND_SIZE, GROUND_URL, NO_EFFECTS, STEP_MS, groundTransform, hasGround, hexOnMap, loadGround, mapSize, renderBoard, screenToGround, viewCube, type Camera, type Effects, type Overlay } from './board';
 import { errorText, logText, playerName, reasonText, t, unitName, type Key, type Lang } from './i18n';
 import { unitIcon } from './symbols';
-import { FACTIONS, FACTION_ORDER, factionOf, rosterOf, type FactionId } from './factions';
-import { isMuted, sound, toggleMute } from './sound';
+import { FACTIONS, FACTION_ORDER, factionOf, rosterOf, sides, type FactionId } from './factions';
+import { isMuted, musicOn, setMusic, sound, toggleMusic, toggleMute } from './sound';
 import { DADS_RULES, RECOMMENDED, applySettings, fixedPoints, loadSettings, saveSettings, type DiceId, type MapId, type Settings } from './settings';
 
 const app = document.getElementById('app')!;
@@ -773,6 +773,7 @@ function menuBody(s: GameState): string {
     seats: '<circle cx="12" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><rect x="7" y="10" width="10" height="4" rx="1" fill="none"/>',
     sound: '<path d="M4 9h4l5-4v14l-5-4H4z"/><path d="M16 9c1.5 1.5 1.5 4.5 0 6M18.5 6.5c3 3 3 8 0 11" fill="none"/>',
     bolt: '<path d="M13 3L5 13h6l-1 8 8-10h-6z"/>',
+    note: '<path d="M9 18V5l10-2v13" fill="none"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/>',
     plus: '<path d="M12 5v14M5 12h14" fill="none"/>',
   };
   return `<div class="mgroup">
@@ -781,6 +782,7 @@ function menuBody(s: GameState): string {
       ${row('cam-reset', '#5b6b7a', G.target, t(lang, 'camResetMenu'))}
       ${mode === 'pvp' ? row('table', '#a8811a', G.seats, t(lang, 'rowSeating'), table === 'pass' ? t(lang, 'seatPass') : t(lang, 'seatAcross')) : ''}
       ${row('mute', '#3f8f5a', G.sound, t(lang, 'rowSound'), '', !isMuted())}
+      ${row('music', '#8a5fb0', G.note, t(lang, 'rowMusic'), '', musicOn())}
     </div>
     <div class="mgroup">
       ${row('quick', '#c2453a', G.bolt, t(lang, 'quick'))}
@@ -845,15 +847,42 @@ function bar(s: GameState): string {
 
 // ---------- render ----------
 
+/** The painted ground: one picture kept between renders (so it never reloads), laid under the board. */
+let groundEl: HTMLImageElement | null = null;
+function placeGround() {
+  if (!hasGround()) return;
+  const wrap = app.querySelector<HTMLElement>('.stage-wrap');
+  if (!wrap) return;
+  if (!groundEl) {
+    groundEl = new Image();
+    groundEl.src = GROUND_URL;
+    groundEl.className = 'ground';
+    groundEl.alt = '';
+    groundEl.draggable = false;
+    groundEl.width = GROUND_SIZE[0];
+    groundEl.height = GROUND_SIZE[1];
+  }
+  let clip = wrap.querySelector<HTMLElement>('.ground-clip');
+  if (!clip) {
+    clip = document.createElement('div');
+    clip.className = 'ground-clip';
+    wrap.prepend(clip);
+  }
+  if (groundEl.parentElement !== clip) clip.append(groundEl);
+  groundEl.style.transform = groundTransform(view());
+}
+
 /** Re-rendering replaces the board, so keep where the player had scrolled the zoomed map to. */
 function render() {
   const list = app.querySelector<HTMLElement>('.sheet-scroll')?.scrollTop ?? 0;
   draw();
+  placeGround();
   // The board is drawn to the stage's exact size; if the layout changed it, draw once more.
   const stage = app.querySelector<HTMLElement>('.stage');
   if (stage && stage.clientWidth > 0 && (stage.clientWidth !== stageSize[0] || stage.clientHeight !== stageSize[1])) {
     stageSize = [stage.clientWidth, stage.clientHeight];
     stage.innerHTML = renderBoard(sess.state, overlay(sess.state), view(), NO_EFFECTS);
+    placeGround();
   }
   const sheet = app.querySelector<HTMLElement>('.sheet-scroll');
   if (sheet) sheet.scrollTop = list;
@@ -931,6 +960,13 @@ function effects(s: GameState): Effects {
   return fx;
 }
 
+/** Music for this moment: the theme of the army to move, and war drums while a King is in danger. */
+function score(s: GameState) {
+  if (setupPhase(s) || s.phase === 'over') return setMusic([], null, false);
+  const danger = s.units.some((k) => k.type === 'king' && s.units.some((e) => e.owner !== k.owner && distance(e.pos, k.pos) <= 2));
+  setMusic([sides.red, sides.blue], sides[s.current], danger);
+}
+
 let drawnPortrait = portrait;
 function draw() {
   const s = sess.state;
@@ -952,6 +988,7 @@ function draw() {
     saveCam();
   }
   const fx = effects(s);
+  score(s);
   portrait = isPortrait();
   desktop = isDesktop();
   const faces = rolling ? rollFaces : s.dice;
@@ -1414,6 +1451,9 @@ app.addEventListener('click', (e) => {
         /* keep the choice for this visit only */
       }
       return render();
+    case 'music':
+      toggleMusic();
+      return render();
     case 'mute':
       toggleMute();
       sound('tick');
@@ -1487,6 +1527,7 @@ function camFrame() {
     const old = st.querySelector('svg.board.live');
     if (old) old.replaceWith(live);
     else st.append(live);
+    placeGround();
     const cube = app.querySelector('.viewcube');
     if (cube) cube.innerHTML = viewCube(view());
   });
@@ -1783,6 +1824,7 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 }
 
 render();
+loadGround(() => render());
 
 // Dev only: lets the test browser read and set the session (stripped from the built game).
 if (import.meta.env.DEV) {

@@ -109,6 +109,9 @@ body {
 .stage-wrap { grid-area: stage; position: relative; min-height: 0; min-width: 0; }
 /* The camera does all moving and zooming, so the stage itself never scrolls. */
 .stage { position: absolute; inset: 0; overflow: hidden; touch-action: none; cursor: grab; }
+/* The painted ground lies under the (see-through) board and is moved by the camera's own projection. */
+.ground-clip { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.ground { position: absolute; left: 0; top: 0; max-width: none; transform-origin: 0 0; will-change: transform; user-select: none; -webkit-user-select: none; }
 .board { width: 100%; height: 100%; display: block; overflow: visible; user-select: none; -webkit-user-select: none; }
 /* During a camera move: the board the finger first touched stays (invisible) under the live one. */
 .board.anchor { position: absolute; inset: 0; opacity: 0; }

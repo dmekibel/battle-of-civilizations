@@ -53,6 +53,8 @@ interface Lens {
   width: number;
   height: number;
   tilt: boolean;
+  /** The same projection as a 3x3 matrix (rows), flat (x, y, 1) -> screen (X·w, Y·w, w): lays a picture on the ground. */
+  h: number[];
 }
 
 /** Flat map size for this orientation (portrait turns the map 90°). */
@@ -100,7 +102,45 @@ function lens(v: View): Lens {
     width: v.vw,
     height: v.vh,
     tilt: v.tilt,
+    h: (() => {
+      const [r0, q0] = [-tx * cos + ty * sin, -tx * sin - ty * cos];
+      const w = [-sin * sinA, -cos * sinA, dist - q0 * sinA];
+      const rx = [cos, -sin, r0].map((n) => n * dist * scale);
+      const ry = [sin, cos, q0].map((n) => n * cosA * dist * scale);
+      return [...w.map((n, i) => cx * n + rx[i]), ...w.map((n, i) => cy * n + ry[i]), ...w];
+    })(),
   };
+}
+
+// ---------- the painted ground ----------
+// One picture of the whole board (grass, river, bridges, forest shade, the table around it), made by _art/map_build.py.
+// It covers the flat map plus GROUND_M units all round and is laid under the hexes with the camera's own projection.
+const GROUND_M = 70;
+export const GROUND_URL = `${import.meta.env.BASE_URL}map/ground.webp?v=3`;
+/** The picture's size in map units (its CSS size before the camera's transform). */
+export const GROUND_SIZE: Pt = [W + 2 * GROUND_M, H + 2 * GROUND_M];
+const TREES: Pt[] = [[120, 297], [120, 226], [132, 235], [74, 243], [98, 149], [95, 185]];
+const TREE_URL = (i: number) => `${import.meta.env.BASE_URL}map/tree-${i + 1}.webp?v=1`;
+let groundReady = false;
+/** Starts loading the painted ground and trees; `done` runs once they can be drawn. Until then the plain board shows. */
+export function loadGround(done: () => void) {
+  if (typeof Image === 'undefined') return;
+  const all = [GROUND_URL, ...TREES.map((_, i) => TREE_URL(i))].map((src) => {
+    const im = new Image();
+    im.src = src;
+    return im.decode ? im.decode() : new Promise<void>((ok, no) => ((im.onload = () => ok()), (im.onerror = no)));
+  });
+  Promise.all(all).then(() => ((groundReady = true), done())).catch(() => {});
+}
+export const hasGround = () => groundReady;
+/** CSS transform that lays the ground picture (GROUND_SIZE, origin top left) exactly under the board. */
+export function groundTransform(v: View): string {
+  const m = lens(v).h;
+  // Picture point -> flat map point: shift by the margin; portrait turns the map a quarter turn.
+  const P = v.portrait ? [0, 1, -GROUND_M, -1, 0, W + GROUND_M, 0, 0, 1] : [1, 0, -GROUND_M, 0, 1, -GROUND_M, 0, 0, 1];
+  const a = [0, 1, 2].flatMap((r) => [0, 1, 2].map((c) => m[r * 3] * P[c] + m[r * 3 + 1] * P[3 + c] + m[r * 3 + 2] * P[6 + c]));
+  const n = a.map((x) => x / a[8]);
+  return `matrix3d(${[n[0], n[3], 0, n[6], n[1], n[4], 0, n[7], 0, 0, 1, 0, n[2], n[5], 0, 1].map((x) => +x.toPrecision(9)).join(',')})`;
 }
 
 /** The point on the ground under a screen pixel, for panning and zooming about the cursor. */
@@ -174,11 +214,19 @@ function trees(h: Hex, v: View, L: Lens): Standing[] {
   const [x, y] = flat(h, v);
   // A small grove; which trees are pines or leafy is fixed per hex so the map doesn't flicker.
   const spots = [[-13, -2, 0.95], [12, -5, 0.9], [0, -13, 1], [-6, 12, 0.85], [11, 11, 0.8]] as const;
-  return spots.map(([dx, dy, sz], i) => {
+  // Carved trees are big, so three to a hex; the plain drawn ones are small, so five.
+  return (groundReady ? spots.slice(0, 3) : spots).map(([dx, dy, sz], i) => {
     const [tx, ty] = L.pt(x + dx, y + dy);
     const k = L.size(x + dx, y + dy) * sz;
     const leafy = (h.col * 3 + h.row * 5 + i) % 3 === 0;
     const shadow = `<ellipse cx="${tx + 4 * k}" cy="${ty + 1}" rx="${10 * k}" ry="${3.5 * k}" fill="#000" opacity="${L.tilt ? 0.3 : 0.18}"/>`;
+    if (groundReady) {
+      // A carved wooden tree, the same one every time for this spot.
+      const ti = (h.col * 7 + h.row * 11 + i * 5) % TREES.length;
+      const f = (L.tilt ? 0.27 : 0.12) * k; // the tallest tree stands about one and a half soldiers high
+      const [w, hh] = [TREES[ti][0] * f, TREES[ti][1] * f];
+      return { depth: L.depth(x + dx, y + dy), svg: `${shadow}<image href="${TREE_URL(ti)}" x="${(tx - w / 2).toFixed(1)}" y="${(ty - hh + 2 * k).toFixed(1)}" width="${w.toFixed(1)}" height="${hh.toFixed(1)}"/>` };
+    }
     return { depth: L.depth(x + dx, y + dy), svg: shadow + (leafy ? oak(tx, ty, k, L.tilt) : pine(tx, ty, k, L.tilt)) };
   });
 }
@@ -377,12 +425,12 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
       const [x, y] = flat(hex, v);
       const [lx, ly] = L.pt(x, y - S * 0.62);
       ground.push(
-        `<polygon class="hex" data-col="${c}" data-row="${r}" points="${corners(hex, v, L)}" fill="${fill(t, hex)}" stroke="#5d7f40" stroke-width="1"/>`,
+        `<polygon class="hex" data-col="${c}" data-row="${r}" points="${corners(hex, v, L)}" ${groundReady ? 'fill="#000" fill-opacity="0" stroke="#1d3312" stroke-opacity=".28" stroke-width="1"' : `fill="${fill(t, hex)}" stroke="#5d7f40" stroke-width="1"`}/>`,
         `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" class="coord" style="font-size:${(7 * L.size(x, y)).toFixed(1)}px">${hexName(hex)}</text>`,
       );
-      if (t === 'river') ground.push(riverRipple(hex, v, L));
+      if (t === 'river' && !groundReady) ground.push(riverRipple(hex, v, L));
       if (t === 'forest') standing.push(...trees(hex, v, L));
-      if (t === 'bridge') standing.push(bridge(hex, v, L));
+      if (t === 'bridge' && !groundReady) standing.push(bridge(hex, v, L));
     }
   }
 

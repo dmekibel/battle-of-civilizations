@@ -105,3 +105,9 @@ Speed ratio heavy infantry : light infantry : heavy cavalry : light cavalry = 1 
 7. **Board.** How many hexes was the original folding board (about 1.5 x 1 m)? Where are the river, bridges and forests?
 8. **Taking the hex.** After killing a piece, must the attacker step into its hex, or may it choose? (Now: must.)
 9. **Power.** Is "power" only the price of a piece, or does it also matter in combat?
+
+## Sound, music and the painted board
+
+- **Sound effects** are short ElevenLabs recordings in `public/sfx/`, made by `_art/sfx.py` and played by `src/ui/sound.ts` (a synthesized stand-in plays until they load).
+- **Music** is one quiet loop per army in `public/music/` (`_art/music.py`). Both armies' themes run together and the one whose turn it is fades up; war drums join while an enemy is within two hexes of a King. It has its own Music switch.
+- **The board** is one painted picture, `public/map/ground.webp`, composed by `_art/map_build.py` from kie paintings (carved grass, river, bridges, the table). It lies under see-through hexes and follows the camera through a CSS `matrix3d` built from the same projection the board uses. Trees are carved sprites in `public/map/tree-N.webp`. If the picture can't load, the plain drawn board shows.

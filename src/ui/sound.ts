@@ -159,3 +159,111 @@ export function sound(cue: Cue, delay = 0) {
       return;
   }
 }
+
+// ---------- music ----------
+// One quiet looping theme per army (public/music/<army>.mp3, made with ElevenLabs). Both armies' themes run
+// together and the one whose turn it is is faded up, so the music tells you whose move it is. A war-drum layer
+// joins while a King is in danger. Each loop cross-fades into itself, so there's no gap where it repeats.
+
+const MUSIC_KEY = 'boc-music';
+let musicOff = (() => {
+  try {
+    return localStorage.getItem(MUSIC_KEY) === '0';
+  } catch {
+    return false;
+  }
+})();
+export const musicOn = () => !musicOff;
+
+interface Track { gain: GainNode; timer: number; live: AudioBufferSourceNode[] }
+const OVERLAP = 3; // seconds a loop overlaps its own repeat
+const THEME_VOL = 0.2;
+const DRUM_VOL = 0.13;
+const musicBuf = new Map<string, AudioBuffer | 'loading'>();
+const tracks = new Map<string, Track>();
+let scene: { themes: string[]; active: string | null; tension: boolean } = { themes: [], active: null, tension: false };
+
+function loopTrack(c: AudioContext, name: string, buf: AudioBuffer): Track {
+  const gain = c.createGain();
+  gain.gain.value = 0;
+  gain.connect(c.destination);
+  const tr: Track = { gain, timer: 0, live: [] };
+  const play = (first: boolean) => {
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    const g = c.createGain();
+    const t = c.currentTime;
+    g.gain.setValueAtTime(first ? 1 : 0, t);
+    g.gain.linearRampToValueAtTime(1, t + OVERLAP);
+    g.gain.setValueAtTime(1, t + buf.duration - OVERLAP);
+    g.gain.linearRampToValueAtTime(0, t + buf.duration);
+    src.connect(g).connect(gain);
+    src.start(t);
+    tr.live.push(src);
+    src.onended = () => (tr.live = tr.live.filter((x) => x !== src));
+    tr.timer = window.setTimeout(() => play(false), (buf.duration - OVERLAP) * 1000);
+  };
+  play(true);
+  tracks.set(name, tr);
+  return tr;
+}
+
+function stopTrack(name: string) {
+  const tr = tracks.get(name);
+  if (!tr || !ctx) return;
+  tracks.delete(name);
+  clearTimeout(tr.timer);
+  tr.gain.gain.setTargetAtTime(0, ctx.currentTime, 0.4);
+  setTimeout(() => tr.live.forEach((s) => s.stop()), 2500);
+}
+
+function applyMusic() {
+  const c = ctx;
+  if (!c) return; // no sound until the first tap
+  const wanted = musicOff ? [] : [...scene.themes, ...(scene.themes.length ? ['tension'] : [])];
+  for (const name of [...tracks.keys()]) if (!wanted.includes(name)) stopTrack(name);
+  for (const name of wanted) {
+    const buf = musicBuf.get(name);
+    if (!buf) {
+      musicBuf.set(name, 'loading');
+      fetch(`${import.meta.env.BASE_URL}music/${name}.mp3?v=1`)
+        .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(r.status)))
+        .then((b) => new Promise<AudioBuffer>((ok, no) => c.decodeAudioData(b, ok, no)))
+        .then((b) => (musicBuf.set(name, b), applyMusic()))
+        .catch(() => musicBuf.delete(name));
+      continue;
+    }
+    if (buf === 'loading') continue;
+    const tr = tracks.get(name) ?? loopTrack(c, name, buf);
+    const vol = name === 'tension' ? (scene.tension ? DRUM_VOL : 0) : name === scene.active ? THEME_VOL : 0;
+    tr.gain.gain.setTargetAtTime(vol, c.currentTime, name === 'tension' ? 1.2 : 0.9);
+  }
+}
+
+/** Says what should be playing: the armies on the board, whose theme is up front, and whether a King is in danger.
+ *  No themes = silence (menus, setup). Safe to call on every draw. */
+export function setMusic(themes: string[], active: string | null, tension: boolean) {
+  scene = { themes: [...new Set(themes)], active, tension };
+  applyMusic();
+}
+
+export function toggleMusic() {
+  musicOff = !musicOff;
+  try {
+    localStorage.setItem(MUSIC_KEY, musicOff ? '0' : '1');
+  } catch {
+    /* keep the choice for this visit only */
+  }
+  if (!musicOff) audio();
+  applyMusic();
+}
+
+// Music can only start after a tap or key press: start the sound engine on the first one.
+if (typeof window !== 'undefined') {
+  const wake = () => {
+    if (!muted || !musicOff) audio();
+    applyMusic();
+  };
+  window.addEventListener('pointerdown', wake, { passive: true });
+  window.addEventListener('keydown', wake, { passive: true });
+}
