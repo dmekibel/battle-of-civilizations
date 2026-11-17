@@ -56,12 +56,13 @@ import { ERAS, ERA_OF, FACTIONS, FACTION_ORDER, factionOf, rosterOf, sides, type
 import { morph, morphInto } from './morph';
 import { placeWeather, weatherPanel } from './weather';
 import { ART_VERSION, SPRITES } from './sprites';
-import { fetchGame, newId, pushGame } from './online';
+import { createCode, fetchGame, newId, normCode, pushGame, resolveCode } from './online';
 import { initReplay, replayControls, replayState, replaying, resultButtons } from './replay';
 import { isMuted, mixerHtml, musicOn, setMusic, sound, toggleMusic, toggleMute } from './sound';
 import { fightSounds, marchSounds, prepareVoices, selectVoice, toggleVoices, victoryVoice, voiceMode } from './voices';
 import { cachedThumb, paintThumb, thumbAspect } from './thumb';
 import { enemyAction as tutorialEnemy, initTutorial, startTutorial, tutorialLabel, tutorialOn, tutorialRng } from './tutorial';
+import { BIOME_IDS, BIOMES, HOME, HOME_NAMES, type BiomeId } from './biomes';
 import { DADS_RULES, RECOMMENDED, applySettings, boardFor, fixedPoints, loadSettings, newSeed, saveSettings, type DiceId, type MapId, type Settings } from './settings';
 import { buildScenario, campaignScreen, campaignText, checkHold, goalText, scenarioById, scenarioResult, scenarioSettings } from './scenarios';
 import { KNOB_IDS, KNOB_STEPS, MAP_STYLES, PRESET_KNOBS, type KnobId, type MapKnobs, type MapStyle } from '../engine/mapgen';
@@ -195,7 +196,39 @@ let lastBlueAsk = 0;
 const theirTurn = (s: GameState) => mode === 'online' && !!net && s.phase !== 'over' && (net.rev < 0 || s.current !== net.me);
 const notMine = (s: GameState) => aiTurn(s) || theirTurn(s);
 const inviteUrl = () => `${location.origin}${location.pathname}?g=${net?.id ?? ''}`;
+/** The host's short join code (for Home Screen players, who can't open links). */
+let joinCode: string | null = null;
+/** The guest's "join with code" box: what they typed and any error. */
+let joinText = '';
+let joinErr: string | null = null;
+let joinBusy = false;
+async function joinByCode() {
+  const code = normCode(joinText);
+  if (!code) { joinErr = t(lang, 'codeBad'); return render(); }
+  joinBusy = true; joinErr = null; render();
+  let id: string | null;
+  try { id = await resolveCode(code); } catch { joinBusy = false; joinErr = t(lang, 'codeNetErr'); return render(); }
+  joinBusy = false;
+  if (!id) { joinErr = t(lang, 'codeNone'); return render(); }
+  // From here exactly as if the invite link had been opened.
+  let me: Player = 'blue';
+  try {
+    if (localStorage.getItem(roleKey(id)) === 'red') me = 'red';
+    localStorage.setItem(roleKey(id), me);
+  } catch { /* private window: play as Blue */ }
+  mode = 'online';
+  net = { id, me, rev: -1 };
+  netState = null;
+  choosing = false;
+  setupOpen = false;
+  cover = false;
+  joinText = '';
+  history.replaceState(null, '', `?g=${id}`);
+  lastAsk = 0;
+  render();
+}
 function leaveNet() {
+  joinCode = null;
   net = null;
   netState = null;
   history.replaceState(null, '', location.pathname);
@@ -821,10 +854,10 @@ function mapThumb(m: MapId, px = 240): string {
   // Random: the map this seed and land grow into (a question mark until one is chosen).
   if (m === 'random' && settings.map !== 'random') return `<svg viewBox="0 0 72 44" width="72" height="44" aria-hidden="true"><rect width="72" height="44" rx="6" fill="#6f9a4a"/><text x="36" y="30" text-anchor="middle" font-size="22" font-weight="700" fill="#f1e8d2">?</text></svg>`;
   const large = m === 'random' && settings.size === 'large';
-  const key = m === 'random' ? `random|${settings.mapSeed}|${settings.mapStyle ?? 'valley'}|${settings.mapKnobs ? KNOB_IDS.map((id) => settings.mapKnobs![id]).join('') : 'preset'}|${large ? 'L' : 'S'}|${px}` : `${m}|${px}`;
+  const key = m === 'random' ? `random|${settings.mapSeed}|${settings.mapStyle ?? 'valley'}|${settings.mapKnobs ? KNOB_IDS.map((id) => settings.mapKnobs![id]).join('') : 'preset'}|${settings.mapBiome ?? 'meadow'}|${large ? 'L' : 'S'}|${px}` : `${m}|${px}`;
   const done = cachedThumb(key);
   if (!done) {
-    const gen = { seed: settings.mapSeed, style: settings.mapStyle, size: large ? ('large' as const) : ('standard' as const), knobs: settings.mapKnobs };
+    const gen = { seed: settings.mapSeed, style: settings.mapStyle, size: large ? ('large' as const) : ('standard' as const), knobs: settings.mapKnobs, biome: settings.mapBiome };
     thumbJobs.set(key, { board: () => (m === 'random' ? boardFor('random', gen) : boardFor(m)), px });
   }
   const aspect = thumbAspect(large ? { cols: 33, rows: 19 } : { cols: 25, rows: 15 });
@@ -849,6 +882,23 @@ async function fillThumbs() {
   } finally {
     thumbsBusy = false;
   }
+}
+
+// ---------- biomes: home maps and the land a random map grows in ----------
+/** The random map's land: a row of biome chips in "Customize land". */
+function biomeKnob(): string {
+  const cur = settings.mapBiome ?? 'meadow';
+  const chips = BIOME_IDS.map((id) => `<button role="radio" data-act="map-biome" data-value="${id}" class="${id === cur ? 'on' : ''}" aria-checked="${id === cur}" style="display:inline-flex;align-items:center;gap:5px"><i aria-hidden="true" style="width:10px;height:10px;border-radius:50%;background:${BIOMES[id].swatch};box-shadow:0 0 0 1px rgba(0,0,0,.35)"></i>${BIOMES[id].name[lang]}</button>`).join('');
+  return `<div class="knob"><span>${lang === 'ru' ? 'Края' : 'Land'}</span><div class="seg" role="radiogroup" style="flex-wrap:wrap">${chips}</div></div>`;
+}
+/** "Home ground": a tile that plays on the first army's own home map, then every army's home map. */
+function homeSection(): string {
+  const mine = HOME[settings.sides.red];
+  const tile = (value: string, thumbOf: string, label: string, sub = '') =>
+    `<button data-act="set" data-field="map" data-value="${value}" class="mtile ${settings.map === value ? 'on' : ''}" aria-pressed="${settings.map === value}">${mapThumb(thumbOf as MapId)}<span>${label}${sub ? `<small style="display:block;opacity:.7;font-weight:400">${sub}</small>` : ''}</span></button>`;
+  const all = FACTION_ORDER.filter((f) => READY().includes(f)).map((f) => tile(HOME[f], HOME[f], HOME_NAMES[HOME[f]][lang], FACTIONS[f].name[lang])).join('');
+  return `<h3>${lang === 'ru' ? 'Родная земля' : 'Home ground'}</h3>
+      <div class="mtiles">${tile('home', mine, lang === 'ru' ? 'Дом армии' : 'Army home', HOME_NAMES[mine][lang])}${all}</div>`;
 }
 
 /** "Customize land" is open on the random map panel. */
@@ -877,7 +927,7 @@ function randomMapPanel(): string {
     <button data-act="land-open" class="disclose ${landOpen ? 'open' : ''}" aria-expanded="${landOpen}" style="margin-top:0">
       <span>${t(lang, 'customizeLand')}</span><small>${custom ? t(lang, 'presetCustom') : t(lang, `style${cap(style)}` as Key)}</small><i aria-hidden="true">›</i>
     </button>
-    ${landOpen ? `<div class="knobs">${rows}</div>` : ''}
+    ${landOpen ? `<div class="knobs">${rows}${biomeKnob()}</div>` : ''}
     <div style="display:flex;gap:10px;align-items:center">
       <div class="mbig">${mapThumb('random', 480)}</div>
       <button data-act="map-reroll" style="flex:none;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 12px"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></svg>${t(lang, 'rerollMap')}</button>
@@ -938,6 +988,7 @@ function setupScreen(): string {
   return `<div class="sheet"><div class="sheet-body setup">
     <h2><button data-act="setup-back" class="ghost back" aria-label="${t(lang, 'back')}">${icon('back')}</button>${t(lang, 'newBattle')}</h2>
     <div class="sheet-scroll">
+      ${mode === 'online' ? `<div class="join-box"><h3>${t(lang, 'joinWithCode')}</h3><div class="join-row"><input class="join-input" maxlength="7" value="${joinText}" placeholder="ABCDE" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" inputmode="text" aria-label="${t(lang, 'joinWithCode')}"><button data-act="join-code" class="primary" ${joinBusy ? 'disabled' : ''}>${t(lang, 'join')}</button></div>${joinErr ? `<p class="join-err">${joinErr}</p>` : ''}<h3>${t(lang, 'orNewGame')}</h3></div>` : ''}
       <div class="vs">
         ${side('red', mode === 'pvp' ? t(lang, 'sideFirst') : t(lang, 'sideYou'))}
         ${mode === 'online' ? `<span class="vs-mid">${t(lang, 'vs')}</span>` : `<button data-act="swap-sides" class="vs-swap" title="${t(lang, 'swapSides')}" aria-label="${t(lang, 'swapSides')}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h15M15 4l4 4-4 4M20 16H5M9 12l-4 4 4 4"/></svg></button>`}
@@ -951,6 +1002,7 @@ function setupScreen(): string {
       <h3>${t(lang, 'map')}</h3>
       <div class="mtiles">${mapTiles}</div>
       ${settings.map === 'random' ? randomMapPanel() : ''}
+      ${homeSection()}
 
       <h3>${t(lang, 'armyPoints')}</h3>
       ${seg('budget', [['20', `20 <small>${t(lang, 'skirmish')}</small>`], ['30', '30'], ['50', '50'], ['80', `80 <small>${t(lang, 'epic')}</small>`]], String(settings.budget))}
@@ -1010,6 +1062,7 @@ function startScreen(): string {
 function inviteScreen(): string {
   return `<div class="cover"><div class="card start">
     <div class="hero"><h2>${t(lang, 'inviteTitle')}</h2><p>${t(lang, 'inviteText')}</p></div>
+    <div class="join-code" aria-live="polite"><small>${t(lang, 'joinCode')}</small><b>${joinCode ?? '…'}</b>${joinCode ? `<button data-act="copy-code" class="ghost">${t(lang, 'copyCode')}</button>` : ''}</div>
     <input class="invite-url" readonly value="${inviteUrl()}" onclick="this.select()" aria-label="${t(lang, 'inviteLink')}">
     <button data-act="copy-link" class="primary wide">${t(lang, 'copyLink')}</button>
     ${typeof navigator.share === 'function' ? `<button data-act="share" class="wide">${t(lang, 'shareLink')}</button>` : ''}
@@ -1645,6 +1698,9 @@ function restart(state: GameState) {
       } catch { /* the link still works for this visit */ }
       history.replaceState(null, '', `?g=${net.id}`);
       inviting = true;
+      joinCode = null;
+      const id0 = net.id;
+      void createCode(id0).then((c) => { if (net?.id === id0) { joinCode = c; render(); } });
     }
     netState = null; // a new battle on the same link: send it
     if (net.rev < 0) net.rev = 0;
@@ -1767,6 +1823,12 @@ app.addEventListener('click', (e) => {
       void navigator.clipboard?.writeText(inviteUrl()).then(() => { message = t(lang, 'linkCopied'); render(); }, () => {});
       app.querySelector<HTMLInputElement>('.invite-url')?.select();
       return;
+    case 'copy-code':
+      if (joinCode) void navigator.clipboard?.writeText(joinCode).then(() => { message = t(lang, 'codeCopied'); render(); }, () => {});
+      return;
+    case 'join-code':
+      joinText = app.querySelector<HTMLInputElement>('.join-input')?.value ?? joinText;
+      return void joinByCode();
     case 'invite-ok':
       inviting = false;
       return render();
@@ -1889,6 +1951,11 @@ app.addEventListener('click', (e) => {
       const id = btn!.getAttribute('data-knob') as KnobId;
       const base = settings.mapKnobs ?? PRESET_KNOBS[settings.mapStyle ?? 'valley'];
       settings = { ...settings, mapKnobs: { ...base, [id]: Number(btn!.getAttribute('data-value')) } as MapKnobs, mapSeed: settings.mapSeed ?? newSeed() };
+      return render();
+    }
+    case 'map-biome': {
+      const id = btn!.getAttribute('data-value') as BiomeId;
+      settings = { ...settings, mapBiome: id === 'meadow' ? undefined : id, mapSeed: settings.mapSeed ?? newSeed() };
       return render();
     }
     case 'map-reroll':
@@ -2081,6 +2148,16 @@ app.addEventListener('click', (e) => {
 app.addEventListener('input', (e) => {
   const el = e.target as HTMLInputElement;
   if (el.type === 'range' && el.dataset.type) onSlide(el);
+  if (el.classList.contains('join-input')) {
+    el.value = el.value.toUpperCase();
+    joinText = el.value;
+  }
+});
+app.addEventListener('keydown', (e) => {
+  if ((e.target as HTMLElement).classList?.contains('join-input') && e.key === 'Enter') {
+    e.preventDefault();
+    app.querySelector<HTMLButtonElement>('[data-act="join-code"]:not(:disabled)')?.click();
+  }
 });
 
 // Desktop: hovering a target shows the attack preview in the info line.
@@ -2664,8 +2741,11 @@ if (import.meta.env.DEV) {
     // Random maps: &seed=123&style=valley&knobs=woods,water,rivers,hills,villages,rocks (step numbers).
     if (qMap === 'random') {
       const kn = q.get('knobs')?.split(',').map(Number);
-      settings = { ...settings, mapSeed: Number(q.get('seed') ?? 1), mapStyle: (q.get('style') as MapStyle) ?? 'valley', mapKnobs: kn ? (Object.fromEntries(KNOB_IDS.map((id, i) => [id, kn[i] ?? 0])) as unknown as MapKnobs) : undefined };
+      settings = { ...settings, mapSeed: Number(q.get('seed') ?? 1), mapStyle: (q.get('style') as MapStyle) ?? 'valley', mapBiome: (q.get('biome') as BiomeId) ?? undefined, mapKnobs: kn ? (Object.fromEntries(KNOB_IDS.map((id, i) => [id, kn[i] ?? 0])) as unknown as MapKnobs) : undefined };
     }
+    // &sides=frontier,teutonic: the two armies (biomes: home-map screenshots).
+    const qSides = q.get('sides')?.split(',') as FactionId[] | undefined;
+    if (qSides?.length === 2) settings = { ...settings, sides: { red: qSides[0], blue: qSides[1] } };
     const dev = (window as unknown as { boc: { loadMap: (m: MapId, size?: 'standard' | 'large') => void } }).boc;
     dev.loadMap(qMap, q.get('size') === 'large' ? 'large' : 'standard');
     const moves = (q.get('put') ?? '').split(',').filter(Boolean).map((t) => t.split(':'));

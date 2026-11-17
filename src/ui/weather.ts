@@ -5,7 +5,7 @@
 // at dusk, a glow under each piece at night, and snowy ground and trees.
 
 import { CONFIG, type TimeOfDay, type WeatherKind } from '../config';
-import { DETAIL_URL, groundSize, groundToScreen, mapSize, skyNow, weatherPic, weatherPicsFor, type View } from './board';
+import { detailUrl, groundSize, groundToScreen, mapSize, skyNow, weatherPicsFor, type View } from './board';
 import { t, type Key, type Lang } from './i18n';
 import type { Settings } from './settings';
 
@@ -219,7 +219,7 @@ export function placeWeather(wrap: HTMLElement, clip: HTMLElement, groundTransfo
   }
   // Snowy close-up grass under a snowy ground.
   const detail = clip.querySelector<HTMLElement>('.gdetail');
-  const want = sky.kind === 'snow' ? weatherPic(DETAIL_URL) : DETAIL_URL;
+  const want = detailUrl(); // biomes: each land has its own close-up tile (snowy on the meadow when it snows)
   if (detail && detail.dataset.wx !== want) {
     detail.dataset.wx = want;
     detail.style.backgroundImage = `url(${want})`;

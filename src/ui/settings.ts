@@ -8,7 +8,8 @@ import { known, setSides, sides, type FactionId } from './factions';
 import { cleanKnobs, generateMap, MAP_STYLES, type MapKnobs, type MapStyle } from '../engine/mapgen';
 
 import MAPS from './maps.json';
-export type MapId = 'river' | 'open' | 'forest' | 'fords' | 'pass' | 'island' | 'longwood' | 'noford' | 'ridge' | 'marsh' | 'lake' | 'castles' | 'village' | 'siege' | 'waterloo' | 'isandlwana' | 'random';
+import { BIOME_IDS, HOME, type BiomeId } from './biomes';
+export type MapId = 'river' | 'open' | 'forest' | 'fords' | 'pass' | 'island' | 'longwood' | 'noford' | 'ridge' | 'marsh' | 'lake' | 'castles' | 'village' | 'siege' | 'waterloo' | 'isandlwana' | 'random' | 'home' | `home-${FactionId}`;
 export type DiceId = '1d6' | '3d6' | '2d6' | 'fixed';
 
 export interface Settings {
@@ -23,6 +24,8 @@ export interface Settings {
   mapStyle?: MapStyle;
   /** "Customize land": set only when the player moved a knob off the preset (older saves have none: the style alone). */
   mapKnobs?: MapKnobs;
+  /** biomes: the land a random map grows in (none = the meadow). */
+  mapBiome?: BiomeId;
   /** The faction each side leads (Novgorod side moves first). */
   sides: Record<Player, FactionId>;
   /** How well the computer plays (games against the computer only; online games ignore it). Older saves have none: Normal. */
@@ -116,8 +119,13 @@ export const newSeed = () => Math.floor(Math.random() * 2147483647) + 1;
 const styleOf = (s?: string): MapStyle => (MAP_STYLES.includes(s as MapStyle) ? (s as MapStyle) : 'valley');
 
 /** The board for a map. A random map needs its seed and style (and is grown at the board size, not enlarged). */
-export function boardFor(map: MapId, gen?: { seed?: number; style?: MapStyle; size?: 'standard' | 'large'; knobs?: MapKnobs }): GameConfig['board'] {
-  if (map === 'random') return generateMap(gen?.seed ?? 1, styleOf(gen?.style), gen?.size ?? 'standard', cleanKnobs(gen?.knobs));
+export function boardFor(map: MapId, gen?: { seed?: number; style?: MapStyle; size?: 'standard' | 'large'; knobs?: MapKnobs; biome?: BiomeId; home?: FactionId }): GameConfig['board'] {
+  if (map === 'random') {
+    const g = generateMap(gen?.seed ?? 1, styleOf(gen?.style), gen?.size ?? 'standard', cleanKnobs(gen?.knobs));
+    return gen?.biome && gen.biome !== 'meadow' && BIOME_IDS.includes(gen.biome) ? { ...g, biome: gen.biome } : g;
+  }
+  // "Home ground": the home map of the army leading the first side.
+  if (map === 'home') return boardFor(HOME[gen?.home ?? sides.red] as MapId);
   const { cols, rows } = ORIGINAL;
   const mid = Math.floor(cols / 2);
   const made = (MAPS as unknown as Record<string, Partial<GameConfig['board']>>)[map];
@@ -174,7 +182,18 @@ export function enlargeBoard(b: GameConfig['board']): GameConfig['board'] {
   // Castles and villages: each standard hex becomes the large hexes nearest it, so walls stay unbroken lines.
   // A gateway keeps its facing.
   const gates = b.gates ? b.gates.flatMap((g) => (area([[g.col, g.row]]) ?? []).map(([col, row]) => ({ col, row, facing: g.facing }))) : undefined;
-  return { ...b, cols: C, rows: R, riverCol: null, bridgeRows: [], fordRows: [], rivers, forests, hills: area(b.hills), swamps: area(b.swamps), lakes: area(b.lakes), walls: area(b.walls), towers: area(b.towers), gates, houses: area(b.houses), boulders: b.boulders?.map(([c, r]) => [col(c), row(r)] as [number, number]) };
+  return { ...b, cols: C, rows: R, riverCol: null, bridgeRows: [], fordRows: [], rivers, forests, hills: area(b.hills), swamps: area(b.swamps), lakes: area(b.lakes), walls: area(b.walls), towers: area(b.towers), gates, houses: area(b.houses), boulders: b.boulders?.map(([c, r]) => [col(c), row(r)] as [number, number]), ...(b.art ? { art: bigArt(b, back, col, row) } : {}) };
+}
+/** biomes: each large hex keeps the carved building of the standard hex it grew from (boulders move to their matching hex). */
+function bigArt(b: GameConfig['board'], back: (c: number, r: number) => string, col: (c: number) => number, row: (r: number) => number): Record<string, string> {
+  const art = b.art ?? {};
+  const out: Record<string, string> = {};
+  for (let c = 0; c < LARGE[0]; c++) for (let r = 0; r < LARGE[1]; r++) if (art[back(c, r)]) out[`${c},${r}`] = art[back(c, r)];
+  for (const k of Object.keys(art)) {
+    const [c, r] = k.split(',').map(Number);
+    out[`${col(c)},${row(r)}`] = art[k];
+  }
+  return out;
 }
 
 /** Puts the settings into the game's rules. Call before starting or loading a battle. */
@@ -186,8 +205,11 @@ export function applySettings(s: Settings) {
     s.mapStyle = styleOf(s.mapStyle);
     s.mapKnobs = cleanKnobs(s.mapKnobs);
     if (!s.mapKnobs) delete s.mapKnobs;
-    CONFIG.board = boardFor('random', { seed: s.mapSeed, style: s.mapStyle, size: s.size === 'large' ? 'large' : 'standard', knobs: s.mapKnobs });
-  } else CONFIG.board = s.size === 'large' ? enlargeBoard(boardFor(s.map)) : boardFor(s.map);
+    CONFIG.board = boardFor('random', { seed: s.mapSeed, style: s.mapStyle, size: s.size === 'large' ? 'large' : 'standard', knobs: s.mapKnobs, biome: s.mapBiome });
+  } else {
+    const b = boardFor(s.map, { home: s.sides?.red });
+    CONFIG.board = s.size === 'large' ? enlargeBoard(b) : b;
+  }
   // A bigger board leaves more room to set up.
   CONFIG.deploy.depth = s.size === 'large' ? 7 : 5;
   CONFIG.dice =

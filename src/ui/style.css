@@ -1198,3 +1198,15 @@ button.primary.ready { animation: ready 2.2s ease-in-out infinite; }
 /* Night: the hex lines turn a pale moonlit grey and the river catches the moon, so both stay readable. */
 .board.wx-night .hex { stroke: #c8d4f4; stroke-opacity: .2; }
 .ground-clip[data-time="night"] .gpart { filter: brightness(1.75) saturate(1.25); }
+
+/* Join by short code: the host's big code, and the guest's code box on the Play online sheet. */
+.join-code { display: grid; justify-items: center; gap: 6px; padding: 12px; background: #100d09; border: 1px solid var(--hair-2); border-radius: var(--r-md); box-shadow: inset 0 1px 3px rgba(0, 0, 0, .6); }
+.join-code small { font: 700 11px/1 var(--ui); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); }
+.join-code b { font: 400 46px/1 var(--title); letter-spacing: .18em; color: var(--brass-hi); padding-left: .18em; }
+.join-box h3:first-child { margin-top: 0; }
+.join-row { display: flex; gap: 8px; }
+.join-input { flex: 1; min-width: 0; min-height: 52px; box-sizing: border-box; padding: 0 12px; background: #100d09; border: 1px solid var(--hair-2); border-radius: var(--r-md); color: var(--brass-hi); font: 400 28px/1 var(--title); letter-spacing: .2em; text-align: center; text-transform: uppercase; box-shadow: inset 0 1px 3px rgba(0, 0, 0, .6); }
+.join-input::placeholder { color: var(--ink-3); opacity: .45; }
+.join-input:focus { outline: 2px solid var(--brass-lo); outline-offset: 1px; }
+.join-row .primary { min-width: 92px; }
+.join-err { margin: 8px 2px 0; font-size: 14px; color: #e0846f; }

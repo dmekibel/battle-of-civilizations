@@ -5,7 +5,8 @@
 
 import type { GameConfig } from '../config';
 import { neighbors } from '../engine';
-import { GROUND_M, groundUrlFor, lakePart, PART, raisedHills, SC_URL, SCENERY, TREE_KINDS, TREE_URL } from './board';
+import { GROUND_M, lakePart, PART, raisedHills, SC_URL, SCENERY } from './board';
+import { artAt, BIOME_SCENERY, biomeId, BUILD_SCALE, groundUrlOf, riverFile, treeKinds, treeUrlOf } from './biomes';
 
 type Board = GameConfig['board'];
 type Pt = [number, number];
@@ -46,11 +47,12 @@ function load(url: string): Promise<HTMLImageElement | null> {
   return p;
 }
 /** The big ground painting, scaled down once per board size (drawing a 2864 px picture 14 times would stutter). */
-const smallGround = new Map<boolean, Promise<HTMLCanvasElement | null>>();
-function ground(large: boolean): Promise<HTMLCanvasElement | null> {
-  let p = smallGround.get(large);
+// biomes: one per ground picture (each land has its own).
+const smallGround = new Map<string, Promise<HTMLCanvasElement | null>>();
+function ground(url: string): Promise<HTMLCanvasElement | null> {
+  let p = smallGround.get(url);
   if (!p) {
-    p = load(groundUrlFor(large)).then((im) => {
+    p = load(url).then((im) => {
       if (!im) return null;
       const cv = document.createElement('canvas');
       cv.width = Math.round(im.naturalWidth / 3);
@@ -60,7 +62,7 @@ function ground(large: boolean): Promise<HTMLCanvasElement | null> {
       ctx.drawImage(im, 0, 0, cv.width, cv.height);
       return cv;
     });
-    smallGround.set(large, p);
+    smallGround.set(url, p);
   }
   return p;
 }
@@ -99,7 +101,7 @@ async function paint(b: Board, px: number): Promise<string | null> {
   const ctx = cv.getContext('2d');
   if (!ctx) return null;
   ctx.imageSmoothingQuality = 'high';
-  const gr = await ground(large);
+  const gr = await ground(groundUrlOf(biomeId(b), large));
   if (!gr) return null;
   const gscale = gr.width / (g.W + 2 * GROUND_M); // small ground pixels per unit
   // Everything below is drawn in the ground picture's units.
@@ -118,12 +120,12 @@ async function paint(b: Board, px: number): Promise<string | null> {
   const layers: { src: string; x: number; y: number; w: number; h: number }[] = [];
   if (b.overlay && !raised && (b.hills?.length || b.swamps?.length)) layers.push({ src: PART(`over-${b.overlay}${large ? '-large' : ''}`), x: 0, y: 0, w: g.W + 2 * GROUND_M, h: g.H + 2 * GROUND_M });
   else if (b.lakes?.length) {
-    const lp = lakePart(b.lakes);
+    const lp = lakePart(b.lakes, b);
     if (lp) layers.push(lp);
   }
   const rivers = [...(b.riverCol === null ? [] : [{ col: b.riverCol, bridges: b.bridgeRows, fords: b.fordRows ?? [] }]), ...(b.rivers ?? [])];
   const gh = g.H + 2 * GROUND_M;
-  for (const rv of rivers) layers.push({ src: PART(`river${large ? '-large' : ''}`), x: S * 1.5 * rv.col + S + GROUND_M - 47, y: 0, w: 94, h: gh });
+  for (const rv of rivers) layers.push({ src: PART(riverFile(biomeId(b), large)), x: S * 1.5 * rv.col + S + GROUND_M - 47, y: 0, w: 94, h: gh });
   for (const rv of rivers) {
     for (const r of rv.fords) {
       const [x, y] = centre(rv.col, r);
@@ -239,23 +241,33 @@ async function paint(b: Board, px: number): Promise<string | null> {
   // Standing things, back to front: the carved trees (as the flat view shows them), houses and boulders, small.
   const items: { y: number; url: string; nat: Pt; x: number; w: number; h: number; shadow?: number }[] = [];
   const spots = [[-13, -2, 0.95], [12, -5, 0.9], [0, -13, 1]] as const;
+  const treeSet = treeKinds(b); // biomes: the land's own trees
+  const scUrl = (name: string) => (name in SCENERY ? SC_URL(name as keyof typeof SCENERY, 'front') : `${import.meta.env.BASE_URL}map/sc-${name}-front.webp?v=1`);
+  const scNat = (name: string) => ((SCENERY as Record<string, Pt>)[name] ?? BIOME_SCENERY[name] ?? SCENERY.house) as unknown as Pt;
   for (const [c, r] of b.forests ?? []) {
     const [x, y] = centre(c, r);
     spots.forEach(([dx, dy, sz], i) => {
-      const [kind, nat] = TREE_KINDS[(c * 7 + r * 11 + i * 5) % TREE_KINDS.length];
+      const [kind, nat] = treeSet[(c * 7 + r * 11 + i * 5) % treeSet.length];
       const f = 0.21 * sz; // larger than on the board, or a wood is a few specks
-      items.push({ y: y + dy, url: TREE_URL(kind, 'front'), nat, x: x + dx, w: nat[0] * f, h: nat[1] * f, shadow: 15 * sz });
+      items.push({ y: y + dy, url: treeUrlOf(biomeId(b), kind, 'front'), nat, x: x + dx, w: nat[0] * f, h: nat[1] * f, shadow: 15 * sz });
     });
   }
   for (const [c, r] of b.houses ?? []) {
     const [x, y] = centre(c, r);
-    const name = hexSeed(c, r) % 2 ? 'house2' : 'house';
-    const nat = SCENERY[name] as unknown as Pt;
-    const f = 0.26;
-    items.push({ y: y + 14, url: SC_URL(name, 'front'), nat, x, w: nat[0] * f, h: nat[1] * f, shadow: 26 });
+    const name = artAt(b, c, r, 'house', hexSeed(c, r)); // biomes: a saloon, a yurt, a pagoda...
+    const nat = scNat(name);
+    const f = 0.26 * (BUILD_SCALE[name] ?? 1);
+    items.push({ y: y + 14, url: scUrl(name), nat, x, w: nat[0] * f, h: nat[1] * f, shadow: 26 });
   }
   for (const [c, r] of b.boulders ?? []) {
     const [x, y] = centre(c, r);
+    const nm = artAt(b, c, r, 'boulder', hexSeed(c, r));
+    if (nm !== 'boulder') {
+      const n2 = scNat(nm);
+      const f2 = 0.25 * (BUILD_SCALE[nm] ?? 1);
+      items.push({ y: y + 10, url: scUrl(nm), nat: n2, x, w: n2[0] * f2, h: n2[1] * f2, shadow: 16 });
+      continue;
+    }
     const nat = SCENERY.boulder as unknown as Pt;
     ([[-12, -8, 0.8], [13, 4, 0.6], [-4, 14, 0.5]] as const).forEach(([dx, dy, sc]) => items.push({ y: y + dy, url: SC_URL('boulder', 'front'), nat, x: x + dx, w: nat[0] * 0.32 * sc, h: nat[1] * 0.32 * sc }));
   }

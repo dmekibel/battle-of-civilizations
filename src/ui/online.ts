@@ -34,3 +34,56 @@ export async function pushGame(id: string, rev: number, state: string): Promise<
     return false;
   }
 }
+
+// ---------- join by short code ----------
+// Home Screen apps can't open links, so the host also gets a short code to read out or type.
+// The database's rules only accept documents in `games/` with a 16+ letter lower-case id and the
+// game's own fields, so the code's lookup is stored there too: games/codexxxxxxx<code> → { state: <game id> }.
+
+/** No 0/O, 1/I/L, so a code read aloud or off a screen can't be mistyped. */
+export const CODE_ABC = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+export const CODE_LEN = 5;
+const CODE_TTL = 24 * 3600 * 1000;
+
+export function newCode(rand: () => number = () => crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32): string {
+  let s = '';
+  for (let i = 0; i < CODE_LEN; i++) s += CODE_ABC[Math.floor(rand() * CODE_ABC.length)];
+  return s;
+}
+
+/** What someone typed, cleaned up: upper case, no spaces or dashes. Null if it can't be a code. */
+export function normCode(raw: string): string | null {
+  const t = raw.toUpperCase().replace(/[\s\-_.]/g, '');
+  if (t.length !== CODE_LEN || [...t].some((c) => !CODE_ABC.includes(c))) return null;
+  return t;
+}
+
+export const codeDoc = (code: string) => `codexxxxxxx${code.toLowerCase()}`;
+
+async function readCode(code: string): Promise<{ game: string; at: number } | null> {
+  const r = await fetch(BASE + codeDoc(code), { cache: 'no-store' });
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error(`fetch ${r.status}`);
+  const f = (await r.json()).fields;
+  return { game: f.state.stringValue, at: Number(f.at?.integerValue ?? 0) };
+}
+
+/** Gives a game a fresh short code (retrying on a live collision). Null if offline. */
+export async function createCode(game: string): Promise<string | null> {
+  for (let i = 0; i < 6; i++) {
+    const code = newCode();
+    try {
+      const old = await readCode(code);
+      if (old && old.game !== game && Date.now() - old.at < CODE_TTL) continue;
+      if (await pushGame(codeDoc(code), 1, game)) return code;
+    } catch { /* try another */ }
+  }
+  return null;
+}
+
+/** The game id behind a code; null if there is none (or it expired). Throws when offline. */
+export async function resolveCode(code: string): Promise<string | null> {
+  const c = await readCode(code);
+  if (!c || Date.now() - c.at > CODE_TTL || !/^[a-z0-9]{16,40}$/.test(c.game)) return null;
+  return c.game;
+}

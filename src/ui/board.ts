@@ -9,6 +9,7 @@ import { maxHp, neighbors } from '../engine';
 import { sides } from './factions';
 import { hexName } from './i18n';
 import { ART_VERSION, SPRITES } from './sprites';
+import { artAt, BUILD_SCALE, TREE_SCALE, BIOME_SCENERY, biomeId, biomeOf, biomePics, detailUrlOf, groundUrlOf, propsOf, riverFile, treeKinds, treeUrlOf } from './biomes';
 import { armyColor, healthBar, unitSymbol } from './symbols';
 
 const S = 34; // hex radius in SVG units
@@ -149,9 +150,13 @@ function lens(v: View, T: Terraces | null = null): Lens {
 // It covers the flat map plus GROUND_M units all round and is laid under the hexes with the camera's own projection.
 export const GROUND_M = 70;
 export const groundUrlFor = (large: boolean) => `${import.meta.env.BASE_URL}map/ground${large ? '-large' : ''}.webp?v=11`;
-export const groundUrl = () => weatherPic(groundUrlFor(LARGE()));
+// biomes: a map in another land lays its own ground (and close-up tile), snowed over when it snows (_art/biome_snow.py);
+// the snow biome is the meadow's own snowy ground. Biome trees keep their leaves (only the meadow's trees have snowy pictures).
+export const groundUrl = () => (biomeId(CONFIG.board) === 'meadow' ? weatherPic(groundUrlFor(LARGE())) : biomeId(CONFIG.board) === 'snow' ? groundUrlOf('snow', LARGE()) : weatherPic(groundUrlOf(biomeId(CONFIG.board), LARGE())));
 /** Close-up grass (grass-detail.webp, one seamless tile): where the field lies in the ground picture, in map units. */
 export const DETAIL_URL = `${import.meta.env.BASE_URL}map/grass-detail.webp?v=1`;
+/** biomes: this map's close-up tile, snowy when it snows on the meadow. */
+export const detailUrl = () => (biomeId(CONFIG.board) === 'meadow' ? (skyNow().kind === 'snow' ? weatherPic(DETAIL_URL) : DETAIL_URL) : biomeId(CONFIG.board) === 'snow' ? detailUrlOf('snow') : weatherPic(detailUrlOf(biomeId(CONFIG.board))));
 export const detailBox = (): number[] => (syncSize(), [GROUND_M - 12, GROUND_M - 12, W + 24, H + 24]);
 /** The river, each bridge and each ford are their own pictures laid over the ground, so every map places its own.
  *  Positions and sizes are in the ground picture's own units (map units, origin at the picture's top left). */
@@ -166,13 +171,13 @@ export function groundParts(b: GameConfig['board']): GroundPart[] {
   if (b.overlay && !raisedHills(b) && (b.hills?.length || b.swamps?.length)) out.push({ key: `over-${b.overlay}${SUF()}`, src: PART(`over-${b.overlay}${SUF()}`), x: 0, y: 0, w: gw, h: gh });
   // Random maps have no painted overlay: their lakes are painted here, in the same style.
   else if (b.lakes?.length) {
-    const lp = lakePart(b.lakes);
+    const lp = lakePart(b.lakes, b);
     if (lp) out.push(lp);
   }
   const rivers = [...(b.riverCol === null ? [] : [{ col: b.riverCol, bridges: b.bridgeRows, fords: b.fordRows ?? [] }]), ...(b.rivers ?? [])];
   for (const rv of rivers) {
     // The river picture was painted for column 12; other columns slide it sideways.
-    out.push({ key: `river${rv.col}${SUF()}`, src: PART(`river${SUF()}`), x: S * 1.5 * rv.col + S + GROUND_M - 47, y: 0, w: 94, h: gh });
+    out.push({ key: `river${rv.col}${SUF()}`, src: PART(riverFile(biomeId(b), LARGE())), x: S * 1.5 * rv.col + S + GROUND_M - 47, y: 0, w: 94, h: gh });
     const at = (row: number, w: number, h: number): [number, number] => [S * 1.5 * rv.col + S + GROUND_M - w / 2, R3 * S * (row + 0.5 * (rv.col & 1)) + (R3 / 2) * S + GROUND_M - h / 2];
     for (const r of rv.fords) {
       const [x, y] = at(r, 94, 56);
@@ -189,9 +194,10 @@ export function groundParts(b: GameConfig['board']): GroundPart[] {
 // The same recipe as _art/map_build.py: the lake hexes as one shape, softened into a rounded outline with a gently
 // wavy edge, a sandy shore, and water darker towards the banks with painted ripples. Painted once per lake layout.
 const lakeCache = new Map<string, GroundPart | null>();
-export function lakePart(lakes: [number, number][]): GroundPart | null {
+export function lakePart(lakes: [number, number][], b: Pick<GameConfig['board'], 'biome'> = CONFIG.board): GroundPart | null {
+  const { water: W0, sand: S0 } = biomeOf(b).lake; // biomes: the lake's water and shore colours
   if (typeof document === 'undefined') return null;
-  const id = `lake${SUF()}-${lakes.map(([c, r]) => `${c}.${r}`).join('_')}`;
+  const id = `lake${SUF()}-${biomeId(b)}-${lakes.map(([c, r]) => `${c}.${r}`).join('_')}`;
   if (lakeCache.has(id)) return lakeCache.get(id)!;
   const centre = (c: number, r: number): Pt => [S * 1.5 * c + S + GROUND_M, R3 * S * (r + 0.5 * (c & 1)) + (R3 / 2) * S + GROUND_M];
   const pad = S + 40;
@@ -272,10 +278,10 @@ export function lakePart(lakes: [number, number][]): GroundPart | null {
       const ripple = Math.sin((X / 8.5 + 0.55 * Math.sin(Y / 10 + X / 31) + noise(X / 40, Y / 40) * 1.5) * Math.PI * 2);
       const glint = Math.pow(Math.max(0, ripple), 8) * 0.22 - Math.pow(Math.max(0, -ripple), 6) * 0.07;
       const tone = (0.62 + 0.38 * deep) * (1 + noise(X / 60, Y / 60) * 0.12 + glint);
-      const [wr, wg, wb] = [62 * tone, 130 * tone, 160 * tone];
+      const [wr, wg, wb] = [W0[0] * tone, W0[1] * tone, W0[2] * tone];
       // Sand at the shore, a touch of grass mixed in so it sits in the meadow.
       const grit = 1 + noise(X / 3, Y / 3) * 0.08;
-      const [sr, sg, sb] = [140 * grit, 128 * grit, 82 * grit];
+      const [sr, sg, sb] = [S0[0] * grit, S0[1] * grit, S0[2] * grit];
       const o = (py * cv.width + pxl) * 4;
       px[o] = sr + (wr - sr) * water;
       px[o + 1] = sg + (wg - sg) * water;
@@ -478,6 +484,17 @@ function scenery(h: Hex, v: View, L: Lens): Standing[] {
   // Now and then a boulder on maps without a river.
   if (seed % 29 === 3 && openMap()) return [{ depth: L.depth(px, py), svg: carved('boulder', px, py, seed, v, L, 0.55).svg, box: lastPic, on: `${h.col},${h.row}` }];
   if (seed % 5 > 1) return [];
+  // biomes: this land's own props (a cactus, a fern, a hay bale), or the meadow's tufts.
+  const bp = propsOf(CONFIG.board);
+  if (biomeOf(CONFIG.board).props === null) return [];
+  if (bp) {
+    const bi = bp.mix[seed % bp.mix.length];
+    const [[bw, bh], btall] = bp.list[bi];
+    const bk = L.size(px, py);
+    const [bx, by] = L.pt(px, py);
+    const [ww, wh] = [(bw / bh) * btall * bk, btall * bk];
+    return [{ depth: L.depth(px, py), svg: pic(bp.url(bi), [bw, bh], bx - ww / 2, by - wh + 0.8 * bk, ww, wh), box: lastPic, on: `${h.col},${h.row}` }];
+  }
   const pi = PROP_MIX[seed % PROP_MIX.length];
   // Flowers and mushrooms don't come up through snow.
   if (skyNow().kind === 'snow' && (pi === 2 || pi === 3 || pi === 7)) return [];
@@ -497,17 +514,17 @@ const openMap = () => CONFIG.board.riverCol === null && !CONFIG.board.rivers?.le
 /** One carved piece of scenery standing on a ground point: `turn` eighths turned from its front facing the map's +x,
  *  `scale` its size against the trees' (1 = same carving scale). Its foot lies `near` units towards the viewer, so a
  *  block's front edge, not its middle, sits on that point. */
-function carved(name: SceneryId, gx: number, gy: number, turn: number, v: View, L: Lens, scale = 1, near = 0): { svg: string; sy: number } {
+function carved(name: SceneryId | string, gx: number, gy: number, turn: number, v: View, L: Lens, scale = 1, near = 0): { svg: string; sy: number } {
   // The direction on the flat map that points at the viewer (turned() maps it to straight down the screen).
   const [vx, vy] = [Math.sin(v.cam.yaw), Math.cos(v.cam.yaw)];
   const [px, py] = [gx + vx * near, gy + vy * near];
   const [sx, sy] = L.pt(px, py);
   const k = L.size(px, py);
   const dir = DIRS8[(((seenFrom(v) + turn) % 8) + 8) % 8];
-  const size = SCENERY[name];
+  const size = (SCENERY as Record<string, Pt>)[name] ?? BIOME_SCENERY[name] ?? SCENERY.house; // biomes: a saloon, a yurt, a pagoda...
   const f = 0.27 * k * scale;
   const [w, hh] = [size[0] * f, size[1] * f];
-  return { svg: pic(SC_URL(name, dir), size as unknown as Pt, sx - w / 2, sy - hh + 1.5 * k, w, hh), sy };
+  return { svg: pic((name in SCENERY ? SC_URL(name as SceneryId, dir) : `${import.meta.env.BASE_URL}map/sc-${name}-${dir}.webp?v=1`), size as unknown as Pt, sx - w / 2, sy - hh + 1.5 * k, w, hh), sy };
 }
 
 /** Castle walls, towers, gateways and houses, standing on their hex. In the flat top-down view they are drawn as roofs. */
@@ -527,7 +544,11 @@ function building(t: TerrainId, h: Hex, v: View, L: Lens): Standing[] {
     // Drawn just before a piece standing in the gateway, so the piece shows in the doorway, not behind the stone.
     return [{ depth: d - 1, svg: shade + carved('gate', x, y, across ? 2 : 0, v, L, 1.04, S * 0.5).svg, box: lastPic, on: `${h.col},${h.row}` }];
   }
-  if (t === 'house') return [{ depth: d, svg: shade + carved(seed % 2 ? 'house2' : 'house', x, y, seed % 8, v, L, 0.9, S * 0.45).svg, box: lastPic, on: `${h.col},${h.row}` }];
+  if (t === 'house') {
+    // biomes: the map's own building for this hex, else one of its land's houses (the meadow: the two village houses).
+    const nm = artAt(CONFIG.board, h.col, h.row, 'house', seed);
+    return [{ depth: d, svg: shade + carved(nm, x, y, nm in SCENERY ? seed % 8 : [0, 1, 7, 0, 1, 7, 0, 1][seed % 8], v, L, 0.9 * (BUILD_SCALE[nm] ?? 1), S * 0.45).svg, box: lastPic, on: `${h.col},${h.row}` }];
+  }
   return [];
 }
 
@@ -554,6 +575,9 @@ function joints(s: GameState, v: View, L: Lens): Standing[] {
 function boulders(h: Hex, v: View, L: Lens): Standing[] {
   const [x, y] = flat(h, v);
   const seed = hexSeed(h);
+  // biomes: a red rock, a wagon, a rune stone or a torii stands alone on the hex instead of the three boulders.
+  const nm = artAt(CONFIG.board, h.col, h.row, 'boulder', seed);
+  if (nm !== 'boulder') return [{ depth: L.depth(x, y), svg: carved(nm, x, y, [0, 1, 7, 2, 6][seed % 5], v, L, 0.85 * (BUILD_SCALE[nm] ?? 1), S * 0.3).svg, box: lastPic, on: `${h.col},${h.row}` }];
   return ([[-12, -8, 0.8], [13, 4, 0.6], [-4, 14, 0.5]] as const).map(([dx, dy, sc], i) => ({
     depth: L.depth(x + dx, y + dy),
     svg: carved('boulder', x + dx, y + dy, seed + i * 3, v, L, sc).svg,
@@ -589,11 +613,12 @@ function trees(h: Hex, v: View, L: Lens): Standing[] {
       // A carved wooden tree: the same kind, turned the same way, every time for this spot.
       // It is drawn from the side the camera sees it from, so it turns as the camera orbits.
       const seed = h.col * 7 + h.row * 11 + i * 5;
-      const [kind, size] = TREE_KINDS[seed % TREE_KINDS.length];
+      const kinds = treeKinds(CONFIG.board); // biomes: cacti, palms, cypresses... (the meadow: pine, spruce, oak)
+      const [kind, size] = kinds[seed % kinds.length];
       const dir = L.tilt ? DIRS8[(seenFrom(v) + (seed % 8)) % 8] : 'front';
-      const f = (L.tilt ? 0.27 : 0.12) * k; // the tallest tree stands about one and a half soldiers high
+      const f = (L.tilt ? 0.27 : 0.12) * k * (TREE_SCALE[kind] ?? 1); // biomes: a cactus stands lower than a pine // the tallest tree stands about one and a half soldiers high
       const [w, hh] = [size[0] * f, size[1] * f];
-      return { depth: L.depth(x + dx, y + dy), svg: shadow + pic(weatherPic(TREE_URL(kind, dir)), size, tx - w / 2, ty - hh + 2 * k, w, hh), box: lastPic, on: `${h.col},${h.row}` };
+      return { depth: L.depth(x + dx, y + dy), svg: shadow + pic(biomeId(CONFIG.board) === 'meadow' ? weatherPic(TREE_URL(kind, dir)) : treeUrlOf(biomeId(CONFIG.board), kind, dir), size, tx - w / 2, ty - hh + 2 * k, w, hh), box: lastPic, on: `${h.col},${h.row}` };
     }
     return { depth: L.depth(x + dx, y + dy), svg: shadow + (leafy ? oak(tx, ty, k, L.tilt) : pine(tx, ty, k, L.tilt)) };
   });
@@ -1051,7 +1076,22 @@ function slab(v: View, L: Lens): string {
   return out.join('');
 }
 
+// ---------- biomes: fetch a new land's pictures ahead ----------
+const biomeFetched = new Set<string>();
+function fetchBiome() {
+  if (typeof Image === 'undefined') return;
+  const key = `${CONFIG.board.biome}|${LARGE()}|${JSON.stringify(CONFIG.board.art ?? {})}|${CONFIG.board.trees ?? ''}`;
+  if (biomeFetched.has(key)) return;
+  biomeFetched.add(key);
+  for (const src of biomePics(CONFIG.board, LARGE())) {
+    const im = new Image();
+    im.src = src;
+    KEEP.push(im);
+  }
+}
+
 export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_EFFECTS): string {
+  fetchBiome();
   // Raised high ground: the lens lifts every point on a raised hex onto its top.
   const T = terraces(s, v);
   const L = lens(v, T);
