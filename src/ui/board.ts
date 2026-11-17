@@ -118,7 +118,7 @@ function lens(v: View): Lens {
 // One picture of the whole board (grass, river, bridges, forest shade, the table around it), made by _art/map_build.py.
 // It covers the flat map plus GROUND_M units all round and is laid under the hexes with the camera's own projection.
 const GROUND_M = 70;
-export const GROUND_URL = `${import.meta.env.BASE_URL}map/ground.webp?v=9`;
+export const GROUND_URL = `${import.meta.env.BASE_URL}map/ground.webp?v=10`;
 /** The picture's size in map units (its CSS size before the camera's transform). */
 export const GROUND_SIZE: Pt = [W + 2 * GROUND_M, H + 2 * GROUND_M];
 /** Carved trees, each drawn from 8 directions (tree-<kind>-<direction>.webp); picture size in pixels, trunk foot at bottom centre. */
