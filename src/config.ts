@@ -22,9 +22,20 @@ export type UnitTypeId =
   | 'berserker'
   | 'axeThrower'
   // Romans: a bolt-thrower, slow to move, that hits hard from far away.
-  | 'ballista';
+  | 'ballista'
+  // Napoleonic wars (British, French): line infantry and skirmishers shoot; a cannon hits hard from far away.
+  | 'lineInfantry'
+  | 'skirmisher'
+  | 'cannon';
 
-export type TerrainId = 'plain' | 'forest' | 'river' | 'bridge' | 'ford' | 'hill' | 'swamp' | 'lake';
+export type TerrainId = 'plain' | 'forest' | 'river' | 'bridge' | 'ford' | 'hill' | 'swamp' | 'lake' | 'wall' | 'tower' | 'gate' | 'house';
+
+/** A castle gateway. `facing` is the way through it: 'ew' = walk through east-west (a gate in a north-south wall). */
+export interface Gate {
+  col: number;
+  row: number;
+  facing: 'ew' | 'ns';
+}
 
 export interface TerrainRules {
   passable: boolean;
@@ -87,6 +98,16 @@ export interface GameConfig {
     overlay?: string;
     /** [col, row] of each forest hex. */
     forests: [number, number][];
+    /** Castle walls, corner towers and gateways (walls and towers stop movement and sight). */
+    walls?: [number, number][];
+    towers?: [number, number][];
+    gates?: Gate[];
+    /** Village houses: stop movement and sight. */
+    houses?: [number, number][];
+    /** Boulders: only scenery, drawn on open hexes, no effect on play. */
+    boulders?: [number, number][];
+    /** Extra army points for one side on this map, as a share of the budget (0.3 = 30% more). */
+    budgetBonus?: Partial<Record<'red' | 'blue', number>>;
   };
   terrain: Record<TerrainId, TerrainRules>;
   /** Points each turn: roll `count` dice of `sides` sides, or a fixed number when `fixed` is set (no luck). */
@@ -198,6 +219,11 @@ export const CONFIG: GameConfig = {
     hill: { passable: true, blocksSight: false, moveCostMultiplier: 1, defenseBonus: 0, highGround: true },
     swamp: { passable: true, blocksSight: false, moveCostMultiplier: 2, defenseBonus: 0, noMounted: true },
     lake: { passable: false, blocksSight: false, moveCostMultiplier: 1, defenseBonus: 0 },
+    wall: { passable: false, blocksSight: true, moveCostMultiplier: 1, defenseBonus: 0 },
+    tower: { passable: false, blocksSight: true, moveCostMultiplier: 1, defenseBonus: 0 },
+    // A piece standing in a gateway takes 1 less damage from every hit.
+    gate: { passable: true, blocksSight: false, moveCostMultiplier: 1, defenseBonus: 1 },
+    house: { passable: false, blocksSight: true, moveCostMultiplier: 1, defenseBonus: 0 },
   },
   dice: { count: 3, sides: 6 },
   // Speed ratio heavy inf : light inf : heavy cav : light cav = 1 : 2 : 3 : 6.
@@ -219,6 +245,9 @@ export const CONFIG: GameConfig = {
     berserker: { moveCost: 3, attack: 2, hp: 1, ranged: null, heavy: false },
     axeThrower: { moveCost: 3, attack: 1, hp: 1, ranged: { cost: 1, minRange: 2, maxRange: 3, damage: 1 }, heavy: false },
     ballista: { moveCost: 6, attack: 0, hp: 1, ranged: { cost: 2, minRange: 3, maxRange: 8, damage: 2 }, heavy: true },
+    lineInfantry: { moveCost: 6, attack: 1, hp: 2, ranged: { cost: 1, minRange: 2, maxRange: 3, damage: 1 }, heavy: true },
+    skirmisher: { moveCost: 3, attack: 1, hp: 1, ranged: { cost: 1, minRange: 2, maxRange: 5, damage: 1 }, heavy: false },
+    cannon: { moveCost: 6, attack: 0, hp: 1, ranged: { cost: 2, minRange: 3, maxRange: 8, damage: 2 }, heavy: true },
     cowboy: { moveCost: 1, speed: 3, attack: 1, hp: 1, ranged: { cost: 1, minRange: 2, maxRange: 3, damage: 1 }, heavy: false, mounted: true },
     // Melee for archers is an open question; 0 = they only shoot.
     archer: {
@@ -253,7 +282,7 @@ export const CONFIG: GameConfig = {
   },
   army: {
     budget: 50,
-    cost: { lightInfantry: 1, heavyInfantry: 2, archer: 3, lightCavalry: 3, heavyCavalry: 4, horseArcher: 4, samurai: 4, ashigaru: 1, gunslinger: 3, rifleman: 3, cowboy: 4, deputy: 2, berserker: 3, axeThrower: 3, ballista: 5 },
+    cost: { lightInfantry: 1, heavyInfantry: 2, archer: 3, lightCavalry: 3, heavyCavalry: 4, horseArcher: 4, samurai: 4, ashigaru: 1, gunslinger: 3, rifleman: 3, cowboy: 4, deputy: 2, berserker: 3, axeThrower: 3, ballista: 5, lineInfantry: 3, skirmisher: 3, cannon: 5 },
   },
   // 5 columns leave room for the largest possible army (50 light infantry and the King).
   deploy: { depth: 5 },
@@ -275,3 +304,9 @@ export const CONFIG: GameConfig = {
     ['lightInfantry', 3, 8],
   ],
 };
+
+/** The army points one side may spend: the battle's budget plus this map's bonus for that side. */
+export const budgetOf = (side: 'red' | 'blue', cfg: GameConfig = CONFIG) => Math.round(cfg.army.budget * (1 + (cfg.board.budgetBonus?.[side] ?? 0)));
+
+/** The rules with the army budget set to what one side may spend (for buying that side's army). */
+export const sideConfig = (side: 'red' | 'blue', cfg: GameConfig = CONFIG): GameConfig => ({ ...cfg, army: { ...cfg.army, budget: budgetOf(side, cfg) } });

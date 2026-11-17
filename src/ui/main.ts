@@ -1,5 +1,5 @@
 import './style.css';
-import { CONFIG, type UnitTypeId } from '../config';
+import { CONFIG, budgetOf, sideConfig, type UnitTypeId } from '../config';
 import {
   apply,
   armyCost,
@@ -411,7 +411,7 @@ const [ZOOM_MIN, ZOOM_MAX] = [0.7, 18]; // close enough to see the carving on a 
 type Buyable = keyof ArmyCounts;
 /** The side to move's faction decides what it can buy and what the pieces list shows. */
 const buyOrder = () => rosterOf(sess.state.current) as Buyable[];
-const TRAY_ORDER: UnitTypeId[] = ['king', 'heavyCavalry', 'lightCavalry', 'horseArcher', 'heavyInfantry', 'samurai', 'lightInfantry', 'berserker', 'deputy', 'ashigaru', 'axeThrower', 'archer', 'ballista'];
+const TRAY_ORDER: UnitTypeId[] = ['king', 'heavyCavalry', 'lightCavalry', 'horseArcher', 'heavyInfantry', 'lineInfantry', 'samurai', 'lightInfantry', 'berserker', 'deputy', 'ashigaru', 'axeThrower', 'skirmisher', 'archer', 'ballista', 'cannon'];
 
 // ---------- view helpers ----------
 
@@ -602,12 +602,15 @@ function armyPreview(owner: Player): string {
   return `<div class="army-head"><b>${t(lang, 'yourArmy')}</b><span>${total} ${t(lang, 'piecesN')}</span></div><div class="army-pieces">${groups}</div>`;
 }
 
+/** Points the side now building its army may spend (on the siege map Red gets more). */
+const budgetNow = () => budgetOf(sess.state.current);
+
 /** Slider track: gold up to the value, pale up to what the budget still allows. */
 function sliderFill(type: Buyable): string {
   const price = CONFIG.army.cost[type];
-  const max = Math.floor(CONFIG.army.budget / price);
+  const max = Math.floor(budgetNow() / price);
   const n = draft[type] ?? 0;
-  const reach = n + Math.floor((CONFIG.army.budget - armyCost(draft)) / price);
+  const reach = n + Math.floor((budgetNow() - armyCost(draft)) / price);
   return `--v:${(n / max) * 100}%;--r:${(Math.min(reach, max) / max) * 100}%`;
 }
 
@@ -616,7 +619,7 @@ function onSlide(input: HTMLInputElement) {
   const type = input.dataset.type as Buyable;
   const price = CONFIG.army.cost[type];
   const others = armyCost({ ...draft, [type]: 0 });
-  const n = Math.min(Number(input.value), Math.floor((CONFIG.army.budget - others) / price));
+  const n = Math.min(Number(input.value), Math.floor((budgetNow() - others) / price));
   if (Number(input.value) !== n) input.value = String(n);
   if ((draft[type] ?? 0) === n) return;
   draft = { ...draft, [type]: n };
@@ -624,9 +627,9 @@ function onSlide(input: HTMLInputElement) {
   const row = app.querySelector(`[data-row="${type}"]`)!;
   row.querySelector('.count')!.textContent = String(n);
   app.querySelector('#army')!.innerHTML = armyPreview(owner);
-  const left = CONFIG.army.budget - armyCost(draft);
+  const left = budgetNow() - armyCost(draft);
   app.querySelector('#left')!.textContent = String(left);
-  (app.querySelector('#meter') as HTMLElement).style.width = `${((CONFIG.army.budget - left) / CONFIG.army.budget) * 100}%`;
+  (app.querySelector('#meter') as HTMLElement).style.width = `${((budgetNow() - left) / budgetNow()) * 100}%`;
   for (const t2 of buyOrder()) {
     const r = app.querySelector(`[data-row="${t2}"]`)!;
     (r.querySelector('input') as HTMLInputElement).style.cssText = sliderFill(t2);
@@ -649,7 +652,7 @@ function figurePic(fac: string, type: UnitTypeId, view = 'front-left'): string {
 
 function draftSheet(s: GameState): string {
   const spent = armyCost(draft);
-  const left = CONFIG.army.budget - spent;
+  const left = budgetNow() - spent;
   const fac = settings.sides[s.current];
   const rows = buyOrder().map((type) => {
     const n = draft[type] ?? 0;
@@ -670,8 +673,8 @@ function draftSheet(s: GameState): string {
   return `<div class="sheet ${s.current}">
     <div class="sheet-body">
       <h2><span class="dot ${s.current}"></span>${playerName(lang, s.current)}: ${t(lang, 'build')}</h2>
-      <div class="budget"><b id="left">${left}</b> / ${CONFIG.army.budget} ${t(lang, 'pointsLeft')}
-        <div class="meter"><i id="meter" style="width:${(spent / CONFIG.army.budget) * 100}%"></i></div></div>
+      <div class="budget"><b id="left">${left}</b> / ${budgetNow()} ${t(lang, 'pointsLeft')}
+        <div class="meter"><i id="meter" style="width:${(spent / budgetNow()) * 100}%"></i></div></div>
       <div class="sheet-scroll">
       <ul class="buy">
         <li class="ucard king has">
@@ -763,7 +766,7 @@ function mapThumb(m: MapId): string {
     const mark = (rows: number[], fill: string) => rows.map((r) => `<rect x="${(x - 4.5).toFixed(1)}" y="${(at(rv.col, r)[1] - 2).toFixed(1)}" width="9" height="4" rx="1" fill="${fill}"/>`).join('');
     return `<rect x="${(x - 2.5).toFixed(1)}" y="0" width="5" height="44" fill="#4f8fc4"/>${mark(rv.fords, '#d8cfa0')}${mark(rv.bridges, '#8a6038')}`;
   }).join('');
-  return `<svg viewBox="0 0 72 44" width="72" height="44" aria-hidden="true"><rect width="72" height="44" rx="6" fill="#6f9a4a"/>${dots(b.swamps, '#55663c', 1.9)}${dots(b.hills, '#c9cf86', 1.9)}${dots(b.lakes, '#4f8fc4', 2)}${water}${dots(b.forests, '#2f5a22', 1.7)}</svg>`;
+  return `<svg viewBox="0 0 72 44" width="72" height="44" aria-hidden="true"><rect width="72" height="44" rx="6" fill="#6f9a4a"/>${dots(b.swamps, '#55663c', 1.9)}${dots(b.hills, '#c9cf86', 1.9)}${dots(b.lakes, '#4f8fc4', 2)}${water}${dots(b.forests, '#2f5a22', 1.7)}${dots(b.boulders, '#9b968c', 1.2)}${dots(b.walls, '#d4d0c6', 1.7)}${dots(b.towers, '#ece8de', 2.2)}${dots(b.gates?.map((g) => [g.col, g.row] as [number, number]), '#7a5432', 1.7)}${dots(b.houses, '#a5633a', 2.1)}</svg>`;
 }
 
 function setupScreen(): string {
@@ -792,7 +795,7 @@ function setupScreen(): string {
   // Armies grouped by the age they fought in.
   const tiles = ERAS.filter((era) => READY().some((id) => ERA_OF[id] === era)).map((era) => `<h4 class="era">${t(lang, `era${era[0].toUpperCase()}${era.slice(1)}` as Key)}</h4><div class="ftiles">${READY().filter((id) => ERA_OF[id] === era).map(tile).join('')}</div>`).join('');
 
-  const mapTiles = (['river', 'fords', 'noford', 'island', 'pass', 'longwood', 'lake', 'open', 'forest', 'random'] as MapId[]) // High ground and Marsh road are shelved until they look right (David, 2026-11-17)
+  const mapTiles = (['river', 'fords', 'noford', 'island', 'pass', 'longwood', 'lake', 'open', 'forest', 'castles', 'siege', 'village', 'random'] as MapId[]) // High ground and Marsh road are shelved until they look right (David, 2026-11-17)
     .map((m) => {
       const label = t(lang, `map${m[0].toUpperCase()}${m.slice(1)}` as Key);
       return `<button data-act="set" data-field="map" data-value="${m}" class="mtile ${settings.map === m ? 'on' : ''}" aria-pressed="${settings.map === m}">${mapThumb(m)}<span>${label}</span></button>`;
@@ -1177,7 +1180,7 @@ function setZoom(factor: number) {
 }
 
 /** Pieces that fire guns, and which gunshot they make. */
-const GUN_SOUND: Partial<Record<UnitTypeId, 'pistol' | 'rifle'>> = { gunslinger: 'pistol', cowboy: 'pistol', rifleman: 'rifle', deputy: 'rifle' };
+const GUN_SOUND: Partial<Record<UnitTypeId, 'pistol' | 'rifle'>> = { gunslinger: 'pistol', cowboy: 'pistol', rifleman: 'rifle', deputy: 'rifle', lineInfantry: 'rifle', skirmisher: 'rifle', cannon: 'rifle' };
 
 /** When the animations now on the board are over (ms clock); the computer waits for it before redrawing. */
 let fxUntil = 0;
@@ -1331,7 +1334,7 @@ function scheduleRoll() {
 function quickBattle(): GameState {
   let s = newGame();
   for (let i = 0; i < 2; i++) {
-    for (const step of [(x: GameState) => draftArmy(x, suggestArmy(Math.random, CONFIG, rosterOf(x.current) as Buyable[])), (x: GameState) => autoDeploy(x), (x: GameState) => finishDeploy(x)]) {
+    for (const step of [(x: GameState) => draftArmy(x, suggestArmy(Math.random, sideConfig(x.current), rosterOf(x.current) as Buyable[]), sideConfig(x.current)), (x: GameState) => autoDeploy(x), (x: GameState) => finishDeploy(x)]) {
       const r = step(s);
       if (!r.ok) return quickStart(); // never expected; the plain line-up still plays
       s = r.state;
@@ -1341,7 +1344,7 @@ function quickBattle(): GameState {
 }
 
 function aiSetup() {
-  const steps: ((s: GameState) => Result)[] = [(s) => draftArmy(s, suggestArmy(Math.random, CONFIG, rosterOf(s.current) as Buyable[])), (s) => autoDeploy(s), (s) => finishDeploy(s)];
+  const steps: ((s: GameState) => Result)[] = [(s) => draftArmy(s, suggestArmy(Math.random, sideConfig(s.current), rosterOf(s.current) as Buyable[]), sideConfig(s.current)), (s) => autoDeploy(s), (s) => finishDeploy(s)];
   for (const step of steps) {
     const { sess: next, result } = apply(sess, step, true);
     if (!result.ok) return;
@@ -1636,12 +1639,12 @@ app.addEventListener('click', (e) => {
       const b = type as Buyable;
       const n = Math.max(0, (draft[b] ?? 0) + (act === 'more' ? 1 : -1));
       const next = { ...draft, [b]: n };
-      if (armyCost(next) <= CONFIG.army.budget) draft = next;
+      if (armyCost(next) <= budgetNow()) draft = next;
       message = null;
       return render();
     }
     case 'draft':
-      if (run((s) => draftArmy(s, draft))) draft = {};
+      if (run((s) => draftArmy(s, draft, sideConfig(s.current)))) draft = {};
       return;
     case 'tray':
       tray = type;
@@ -1657,13 +1660,13 @@ app.addEventListener('click', (e) => {
       }
       return;
     case 'auto-army':
-      draft = suggestArmy(Math.random, CONFIG, buyOrder());
+      draft = suggestArmy(Math.random, sideConfig(sess.state.current), buyOrder());
       message = null;
       return render();
     case 'auto-all': {
       // Build a balanced army, place it in formation and hand over, all in one tap.
-      draft = suggestArmy(Math.random, CONFIG, buyOrder());
-      if (!run((s) => draftArmy(s, draft))) return;
+      draft = suggestArmy(Math.random, sideConfig(sess.state.current), buyOrder());
+      if (!run((s) => draftArmy(s, draft, sideConfig(s.current)))) return;
       draft = {};
       run((s) => autoDeploy(s));
       if (run((s) => finishDeploy(s), true)) {
@@ -2213,6 +2216,8 @@ if (import.meta.env.DEV) {
     get selected() { return selected; },
     get message() { return message; },
     set mode(m: typeof mode) { mode = m; },
+    get cam() { return cam; },
+    set cam(c: Camera) { cam = c; render(); },
     scheduleAi,
   };
 }

@@ -93,6 +93,15 @@ function picture(type: UnitTypeId, ink: string): string {
     case 'ballista':
       // A bolt-thrower: bow arms, stock and bolt.
       return `<path d="M-3 -12Q8 0 -3 12" fill="none" stroke="${ink}" stroke-width="2.4" stroke-linecap="round"/><path d="M-13 0H12" stroke="${ink}" stroke-width="3" stroke-linecap="round"/><path d="M15 0L9 -3.5L9 3.5Z" fill="${ink}"/><path d="M-13 -4V4" stroke="${ink}" stroke-width="2"/>`;
+    case 'lineInfantry':
+      // A musket with a fixed bayonet.
+      return `<path d="M-13 8L9 -5" stroke="${ink}" stroke-width="2.6" stroke-linecap="round"/><path d="M-14 4L-8 3L-6 9L-13 12Z" fill="${ink}"/><path d="M9 -5L16 -9" stroke="${ink}" stroke-width="1.3" stroke-linecap="round"/><path d="M7 -6.5L9.5 -2.5" stroke="${ink}" stroke-width="1.6"/>`;
+    case 'skirmisher':
+      // A short rifle aimed level, with a sight.
+      return `<path d="M-12 3H13" stroke="${ink}" stroke-width="2.6" stroke-linecap="round"/><path d="M-13 1H-5L-4 4L-12 10L-15 7Z" fill="${ink}"/><path d="M11 3V-0.5" stroke="${ink}" stroke-width="1.6"/><path d="M-1 4L-1 7.5" stroke="${ink}" stroke-width="1.6" stroke-linecap="round"/>`;
+    case 'cannon':
+      // A field gun: barrel on a two-wheeled carriage.
+      return `<path d="M-10 -1L13 -8" stroke="${ink}" stroke-width="4.2" stroke-linecap="round"/><path d="M-6 1L-14 10" stroke="${ink}" stroke-width="2.4" stroke-linecap="round"/><circle cx="-2" cy="5" r="6" fill="none" stroke="${ink}" stroke-width="2"/><circle cx="-2" cy="5" r="1.4" fill="${ink}"/>`;
     case 'samurai':
       // A katana: a long, slightly curved blade with a round guard.
       return `<path d="M-11 10Q1 4 12 -11" fill="none" stroke="${ink}" stroke-width="2.4" stroke-linecap="round"/><circle cx="-5" cy="6.3" r="2.6" fill="none" stroke="${ink}" stroke-width="1.8"/>`;

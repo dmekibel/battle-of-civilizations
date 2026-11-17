@@ -26,6 +26,10 @@ export function buildBoard(cfg: GameConfig = CONFIG): TerrainId[][] {
   for (const [kind, list] of [['hill', cfg.board.hills], ['swamp', cfg.board.swamps], ['lake', cfg.board.lakes]] as const)
     for (const [c, r] of list ?? []) if (onBoardSize(cfg, { col: c, row: r })) board[r][c] = kind;
   for (const [c, r] of forests) if (onBoardSize(cfg, { col: c, row: r })) board[r][c] = 'forest';
+  // Castles and villages go on last: a wall or house stands wherever it is drawn.
+  for (const [kind, list] of [['wall', cfg.board.walls], ['tower', cfg.board.towers], ['house', cfg.board.houses]] as const)
+    for (const [c, r] of list ?? []) if (onBoardSize(cfg, { col: c, row: r })) board[r][c] = kind;
+  for (const g of cfg.board.gates ?? []) if (onBoardSize(cfg, g)) board[g.row][g.col] = 'gate';
   return board;
 }
 
@@ -162,7 +166,7 @@ function search(s: GameState, unitId: string, cfg: GameConfig): { out: Map<strin
 const enemyNext = (s: GameState, h: Hex, owner: Player) => s.units.some((e) => e.owner !== owner && distance(e.pos, h) === 1);
 
 const mounted = (u: Unit, cfg: GameConfig) => !!cfg.units[u.type].mounted;
-const INFANTRY = new Set(['heavyInfantry', 'lightInfantry', 'deputy', 'samurai', 'ashigaru', 'berserker', 'axeThrower']);
+const INFANTRY = new Set(['heavyInfantry', 'lightInfantry', 'deputy', 'samurai', 'ashigaru', 'berserker', 'axeThrower', 'lineInfantry', 'skirmisher']);
 
 /** Points value of an army (its King not counted), for the morale rule. */
 export function armyValue(s: GameState, p: Player, cfg: GameConfig = CONFIG): number {

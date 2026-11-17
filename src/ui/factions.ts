@@ -6,11 +6,11 @@ import type { ArmyCounts, Player } from '../engine';
 import type { Lang } from './i18n';
 import type { ArtId } from './symbols';
 
-export type FactionId = 'novgorod' | 'teutonic' | 'mongols' | 'japanese' | 'frontier' | 'comanche' | 'vikings' | 'romans';
+export type FactionId = 'novgorod' | 'teutonic' | 'mongols' | 'japanese' | 'frontier' | 'comanche' | 'vikings' | 'romans' | 'british' | 'french';
 /** Armies are grouped by the age they fought in. */
 export type Era = 'ancient' | 'medieval' | 'gunpowder';
 export const ERAS: Era[] = ['ancient', 'medieval', 'gunpowder'];
-export const ERA_OF: Record<FactionId, Era> = { romans: 'ancient', vikings: 'medieval', novgorod: 'medieval', teutonic: 'medieval', mongols: 'medieval', japanese: 'medieval', frontier: 'gunpowder', comanche: 'gunpowder' };
+export const ERA_OF: Record<FactionId, Era> = { romans: 'ancient', vikings: 'medieval', novgorod: 'medieval', teutonic: 'medieval', mongols: 'medieval', japanese: 'medieval', frontier: 'gunpowder', comanche: 'gunpowder', british: 'gunpowder', french: 'gunpowder' };
 
 export interface Faction {
   name: Record<Lang, string>;
@@ -137,9 +137,41 @@ export const FACTIONS: Record<FactionId, Faction> = {
       heavyCavalry: { en: 'Equites', ru: 'Всадники' },
     },
   },
+  british: {
+    name: { en: 'British', ru: 'Британцы' },
+    color: '#2f5d3a',
+    text: '#8fd19e',
+    roster: ['skirmisher', 'lineInfantry', 'lightCavalry', 'heavyCavalry', 'cannon'],
+    blurb: { en: 'Napoleonic redcoats: a firing line that shoots and stands, riflemen who pick off targets from far, and cannon.', ru: 'Красные мундиры наполеоновских войн: стойкая стреляющая линия, стрелки, бьющие издалека, и пушки.' },
+    emblem: shield('#f4f1e8', '#2f5d3a', '<path d="M26 6H34V28H54V36H34V64H26V36H6V28H26Z" fill="#c8202c"/>'),
+    names: {
+      king: { en: 'Duke', ru: 'Герцог' },
+      lineInfantry: { en: 'Redcoats', ru: 'Красные мундиры' },
+      skirmisher: { en: 'Riflemen', ru: 'Стрелки' },
+      heavyCavalry: { en: 'Scots Greys', ru: 'Шотландские серые' },
+      lightCavalry: { en: 'Light Dragoons', ru: 'Лёгкие драгуны' },
+      cannon: { en: 'Cannon', ru: 'Пушка' },
+    },
+  },
+  french: {
+    name: { en: 'French', ru: 'Французы' },
+    color: '#27408b',
+    text: '#9fb4ef',
+    roster: ['skirmisher', 'lineInfantry', 'lightCavalry', 'heavyCavalry', 'cannon'],
+    blurb: { en: "Napoleon's Grande Armée: the Old Guard's volleys, voltigeurs out front, cuirassiers and lancers to break the line, and cannon.", ru: 'Великая армия Наполеона: залпы Старой гвардии, вольтижёры впереди, кирасиры и уланы ломают строй, и пушки.' },
+    emblem: shield('#27408b', '#e8b923', '<path d="M22 14L26 18L30 12L34 18L38 14L37 21H23Z" fill="#e8b923"/><path d="M22 52V25H26.5L34 42.5V25H38V52H33.5L26 34.5V52Z" fill="#e8b923"/>'),
+    names: {
+      king: { en: 'Emperor', ru: 'Император' },
+      lineInfantry: { en: 'Old Guard', ru: 'Старая гвардия' },
+      skirmisher: { en: 'Voltigeurs', ru: 'Вольтижёры' },
+      heavyCavalry: { en: 'Cuirassiers', ru: 'Кирасиры' },
+      lightCavalry: { en: 'Lancers', ru: 'Уланы' },
+      cannon: { en: 'Cannon', ru: 'Пушка' },
+    },
+  },
 };
 
-export const FACTION_ORDER: FactionId[] = ['romans', 'vikings', 'novgorod', 'teutonic', 'mongols', 'japanese', 'frontier', 'comanche'];
+export const FACTION_ORDER: FactionId[] = ['romans', 'vikings', 'novgorod', 'teutonic', 'mongols', 'japanese', 'frontier', 'comanche', 'british', 'french'];
 
 /** Which faction each side leads in the current battle. */
 export let sides: Record<Player, FactionId> = { red: 'novgorod', blue: 'teutonic' };

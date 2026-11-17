@@ -5,7 +5,7 @@
 
 import { CONFIG, type GameConfig, type TerrainId, type UnitTypeId } from '../config';
 import type { AttackPreview, GameState, Hex, Player, Reach } from '../engine';
-import { maxHp } from '../engine';
+import { maxHp, neighbors } from '../engine';
 import { sides } from './factions';
 import { hexName } from './i18n';
 import { ART_VERSION, SPRITES } from './sprites';
@@ -174,6 +174,11 @@ const PROPS: [Pt, number][] = [[[100, 135], 9], [[160, 117], 8], [[116, 128], 9]
 /** Which prop a hex gets: mostly grass, now and then flowers, a bush, stones or mushrooms. */
 const PROP_MIX = [0, 1, 0, 1, 0, 2, 1, 3, 0, 4, 1, 6, 0, 5, 2, 7];
 const PROP_URL = (i: number) => `${import.meta.env.BASE_URL}map/prop-${i + 1}.webp?v=2`;
+/** Carved castle and village pieces, each drawn from 8 directions (sc-<name>-<direction>.webp).
+ *  Picture size in pixels (_art/scenery-manifest.json), foot at bottom centre. */
+const SCENERY = { wall: [250, 311], gate: [258, 316], tower: [270, 502], house: [296, 311], house2: [296, 310], reeds: [110, 153], boulder: [166, 94] } as const satisfies Record<string, Pt>;
+type SceneryId = keyof typeof SCENERY;
+const SC_URL = (name: SceneryId, dir: string) => `${import.meta.env.BASE_URL}map/sc-${name}-${dir}.webp?v=1`;
 // ---------- pictures ----------
 // Every picture on the board (pieces, trees, scenery) is loaded once into a hidden sheet that stays in the page,
 // and the board only points at it. Turning a piece to another view is then instant: nothing is loaded, so nothing blinks.
@@ -213,7 +218,7 @@ let groundReady = false;
 /** Starts loading the painted ground and trees; `done` runs once they can be drawn. Until then the plain board shows. */
 export function loadGround(done: () => void) {
   if (typeof Image === 'undefined') return;
-  const all = [groundUrl(), PART('river'), PART('bridge'), PART('ford'), ...TREE_KINDS.flatMap(([k]) => DIRS8.map((d) => TREE_URL(k, d))), ...PROPS.map((_, i) => PROP_URL(i))].map((src) => {
+  const all = [groundUrl(), PART('river'), PART('bridge'), PART('ford'), ...TREE_KINDS.flatMap(([k]) => DIRS8.map((d) => TREE_URL(k, d))), ...PROPS.map((_, i) => PROP_URL(i)), ...(Object.keys(SCENERY) as SceneryId[]).flatMap((n) => DIRS8.map((d) => SC_URL(n, d)))].map((src) => {
     const im = new Image();
     im.src = src;
     KEEP.push(im);
@@ -271,6 +276,9 @@ function fill(t: TerrainId, h: Hex): string {
   if (t === 'ford') return '#9fb8a0'; // shallows
   if (t === 'hill') return '#a9b56a';
   if (t === 'swamp') return '#5f6f45';
+  if (t === 'wall' || t === 'tower') return '#8d8a84';
+  if (t === 'gate') return '#a39a8a';
+  if (t === 'house') return '#9a5a35';
   return '#5f9ccc'; // river and the water under a bridge
 }
 
@@ -326,17 +334,104 @@ function seenFrom(v: View): number {
 
 /** Small standing scenery on open ground: a grass tuft, flowers, a stone. Fixed per hex, set off-centre so pieces don't hide it. */
 function scenery(h: Hex, v: View, L: Lens): Standing[] {
-  const seed = (h.col * 73 + h.row * 151 + ((h.col * h.row) % 7) * 31) % 97;
-  if (seed % 5 > 1) return [];
+  const seed = hexSeed(h);
   const [x, y] = flat(h, v);
   const a = (seed * 2.399) % (Math.PI * 2);
   const [px, py] = [x + Math.cos(a) * S * 0.62, y + Math.sin(a) * S * 0.62];
+  // Now and then a boulder on maps without a river.
+  if (seed % 29 === 3 && openMap()) return [{ depth: L.depth(px, py), svg: carved('boulder', px, py, seed, v, L, 0.55).svg }];
+  if (seed % 5 > 1) return [];
   const pi = PROP_MIX[seed % PROP_MIX.length];
   const [[pw, ph], tall] = PROPS[pi];
   const k = L.size(px, py);
   const [sx, sy] = L.pt(px, py);
   const [w, hh] = [(pw / ph) * tall * k, tall * k];
   return [{ depth: L.depth(px, py), svg: pic(PROP_URL(pi), [pw, ph], sx - w / 2, sy - hh + 0.8 * k, w, hh) }];
+}
+
+/** A hex's own fixed number, so its scenery never changes between redraws. */
+const hexSeed = (h: Hex) => (h.col * 73 + h.row * 151 + ((h.col * h.row) % 7) * 31) % 97;
+
+/** Is there any river on this map? Boulders turn up now and then on maps without one. */
+const openMap = () => CONFIG.board.riverCol === null && !CONFIG.board.rivers?.length;
+
+/** One carved piece of scenery standing on a ground point: `turn` eighths turned from its front facing the map's +x,
+ *  `scale` its size against the trees' (1 = same carving scale). Its foot lies `near` units towards the viewer, so a
+ *  block's front edge, not its middle, sits on that point. */
+function carved(name: SceneryId, gx: number, gy: number, turn: number, v: View, L: Lens, scale = 1, near = 0): { svg: string; sy: number } {
+  // The direction on the flat map that points at the viewer (turned() maps it to straight down the screen).
+  const [vx, vy] = [Math.sin(v.cam.yaw), Math.cos(v.cam.yaw)];
+  const [px, py] = [gx + vx * near, gy + vy * near];
+  const [sx, sy] = L.pt(px, py);
+  const k = L.size(px, py);
+  const dir = DIRS8[(((seenFrom(v) + turn) % 8) + 8) % 8];
+  const size = SCENERY[name];
+  const f = 0.27 * k * scale;
+  const [w, hh] = [size[0] * f, size[1] * f];
+  return { svg: pic(SC_URL(name, dir), size as unknown as Pt, sx - w / 2, sy - hh + 1.5 * k, w, hh), sy };
+}
+
+/** Castle walls, towers, gateways and houses, standing on their hex. In the flat top-down view they are drawn as roofs. */
+function building(t: TerrainId, h: Hex, v: View, L: Lens): Standing[] {
+  const [x, y] = flat(h, v);
+  const seed = hexSeed(h);
+  if (!L.tilt) return [];
+  const d = L.depth(x, y);
+  // A soft shadow on the ground keeps the block standing on the grass.
+  const shade = `<polygon points="${corners(h, v, L, S * 0.92)}" fill="#1b1a12" fill-opacity=".22"/>`;
+  if (t === 'wall') return [{ depth: d, svg: shade + carved('wall', x, y, 0, v, L, 1.04, S * 0.5).svg }];
+  if (t === 'tower') return [{ depth: d, svg: shade + carved('tower', x, y, seed % 8, v, L, 1, S * 0.45).svg }];
+  if (t === 'gate') {
+    // The door faces along the way through: front and back of the gatehouse are the two doorways.
+    const g = CONFIG.board.gates?.find((q) => q.col === h.col && q.row === h.row);
+    const across = (g?.facing === 'ns') !== v.portrait;
+    // Drawn just before a piece standing in the gateway, so the piece shows in the doorway, not behind the stone.
+    return [{ depth: d - 1, svg: shade + carved('gate', x, y, across ? 2 : 0, v, L, 1.04, S * 0.5).svg }];
+  }
+  if (t === 'house') return [{ depth: d, svg: shade + carved(seed % 2 ? 'house2' : 'house', x, y, seed % 8, v, L, 0.9, S * 0.45).svg }];
+  return [];
+}
+
+/** Stone between two neighbouring wall or tower hexes, so the blocks read as one unbroken wall. */
+const STONE = new Set<TerrainId>(['wall', 'tower']);
+function joints(s: GameState, v: View, L: Lens): Standing[] {
+  const out: Standing[] = [];
+  for (let r = 0; r < s.board.length; r++)
+    for (let c = 0; c < s.board[r].length; c++) {
+      if (!STONE.has(s.board[r][c])) continue;
+      const a = flat({ col: c, row: r }, v);
+      for (const n of neighbors({ col: c, row: r })) {
+        // Each pair once; gateways stay open.
+        if (n.col < c || (n.col === c && n.row < r) || s.board[n.row]?.[n.col] === undefined || !STONE.has(s.board[n.row][n.col])) continue;
+        const b = flat(n, v);
+        const [mx, my] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+        out.push({ depth: L.depth(mx, my), svg: carved('wall', mx, my, 0, v, L, 0.92, S * 0.4).svg });
+      }
+    }
+  return out;
+}
+
+/** A few boulders on a hex (the map's boulder hexes). Only scenery: pieces stand among them. */
+function boulders(h: Hex, v: View, L: Lens): Standing[] {
+  const [x, y] = flat(h, v);
+  const seed = hexSeed(h);
+  return ([[-12, -8, 0.8], [13, 4, 0.6], [-4, 14, 0.5]] as const).map(([dx, dy, sc], i) => ({
+    depth: L.depth(x + dx, y + dy),
+    svg: carved('boulder', x + dx, y + dy, seed + i * 3, v, L, sc).svg,
+  }));
+}
+
+/** Flat top-down view: walls, towers and houses as plain roofs seen from above. */
+function roof(t: TerrainId, h: Hex, v: View, L: Lens): string {
+  const [x, y] = flat(h, v);
+  const k = L.size(x, y);
+  const [cx, cy] = L.pt(x, y);
+  if (t === 'wall') return `<polygon points="${corners(h, v, L, S * 0.86)}" fill="#8d8a84" stroke="#5b5852" stroke-width="${(2 * k).toFixed(1)}"/>`;
+  if (t === 'tower') return `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${(S * 0.95 * k).toFixed(1)}" fill="#97938c" stroke="#5b5852" stroke-width="${(2.5 * k).toFixed(1)}"/><circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${(S * 0.6 * k).toFixed(1)}" fill="#7d7a73"/>`;
+  // A gateway: stone with the wooden door showing in its middle.
+  if (t === 'gate') return `<polygon points="${corners(h, v, L, S * 0.86)}" fill="#a39a8a" stroke="#5b5852" stroke-width="${(2 * k).toFixed(1)}"/><polygon points="${corners(h, v, L, S * 0.5)}" fill="#7a5432"/>`;
+  if (t === 'house') return `<polygon points="${corners(h, v, L, S * 0.78)}" fill="${hexSeed(h) % 2 ? '#8a4f2c' : '#c9a24e'}" stroke="#5a3a20" stroke-width="${(2 * k).toFixed(1)}"/>`;
+  return '';
 }
 
 function trees(h: Hex, v: View, L: Lens): Standing[] {
@@ -422,7 +517,7 @@ export const NO_EFFECTS: Effects = { from: new Map(), hits: [], walks: new Map()
 /** Time for one step of a walk, in ms. */
 export const STEP_MS = 130;
 /** Pieces that fire guns: a quick tracer and smoke instead of an arrow in flight. */
-const GUNS = new Set<UnitTypeId>(['gunslinger', 'rifleman', 'cowboy', 'deputy']);
+const GUNS = new Set<UnitTypeId>(['gunslinger', 'rifleman', 'cowboy', 'deputy', 'lineInfantry', 'skirmisher', 'cannon']);
 /** When the blow lands after the attack starts (seconds): arrows fly, bullets and blades are quick. */
 /** How long an arrow is in the air (seconds): slow enough to follow with the eye. */
 export const ARROW_S = 0.65;
@@ -604,10 +699,17 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
       );
       if (t === 'river' && !groundReady) ground.push(riverRipple(hex, v, L));
       if (t === 'forest') standing.push(...trees(hex, v, L));
+      if (t === 'wall' || t === 'tower' || t === 'gate' || t === 'house') {
+        if (groundReady && L.tilt) standing.push(...building(t, hex, v, L));
+        else if (groundReady) ground.push(roof(t, hex, v, L));
+      }
+      if (t === 'plain' && groundReady && L.tilt && CONFIG.board.boulders?.some(([bc, br]) => bc === c && br === r)) standing.push(...boulders(hex, v, L));
       if ((t === 'plain' || t === 'hill') && groundReady && L.tilt) standing.push(...scenery(hex, v, L));
       if (t === 'bridge' && !groundReady) standing.push(bridge(hex, v, L));
     }
   }
+
+  if (groundReady && L.tilt) standing.push(...joints(s, v, L));
 
   if (o.zone) {
     const c = armyColor(o.zone.owner);

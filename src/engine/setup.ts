@@ -75,7 +75,7 @@ export function liftUnit(s: GameState, unitId: string): Result {
 // heavy infantry holds the front centre, light infantry extends the line, archers stand
 // one rank behind the infantry, cavalry guards the wings (light cavalry furthest out),
 // and the King stays at the back in the middle.
-const DEPLOY_ORDER: UnitTypeId[] = ['king', 'heavyInfantry', 'samurai', 'archer', 'rifleman', 'gunslinger', 'deputy', 'lightInfantry', 'berserker', 'ashigaru', 'axeThrower', 'ballista', 'heavyCavalry', 'lightCavalry', 'horseArcher', 'cowboy'];
+const DEPLOY_ORDER: UnitTypeId[] = ['king', 'heavyInfantry', 'lineInfantry', 'samurai', 'archer', 'rifleman', 'gunslinger', 'deputy', 'lightInfantry', 'berserker', 'ashigaru', 'axeThrower', 'skirmisher', 'ballista', 'cannon', 'heavyCavalry', 'lightCavalry', 'horseArcher', 'cowboy'];
 
 function formationScore(type: UnitTypeId, depth: number, front: number, lateral: number, maxLateral: number): number {
   const wing = maxLateral - lateral; // 0 at the very edge of the board
@@ -83,6 +83,7 @@ function formationScore(type: UnitTypeId, depth: number, front: number, lateral:
     case 'king':
       return depth * 10 + lateral;
     case 'heavyInfantry':
+    case 'lineInfantry':
     case 'samurai':
     case 'lightInfantry':
     case 'deputy':
@@ -93,6 +94,8 @@ function formationScore(type: UnitTypeId, depth: number, front: number, lateral:
     case 'rifleman':
     case 'axeThrower':
     case 'ballista':
+    case 'skirmisher':
+    case 'cannon':
     case 'gunslinger':
       return Math.abs(front - 1 - depth) * 10 + lateral;
     case 'heavyCavalry':
@@ -154,6 +157,9 @@ const ARMY_MIX: Record<keyof ArmyCounts, number> = {
   berserker: 0.2,
   axeThrower: 0.15,
   ballista: 0.1,
+  lineInfantry: 0.3,
+  skirmisher: 0.2,
+  cannon: 0.1,
 };
 
 /** The pieces most armies can buy (factions add or swap some). */

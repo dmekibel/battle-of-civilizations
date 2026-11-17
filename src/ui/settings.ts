@@ -7,7 +7,7 @@ import type { Player } from '../engine';
 import { known, setSides, sides, type FactionId } from './factions';
 
 import MAPS from './maps.json';
-export type MapId = 'river' | 'open' | 'forest' | 'fords' | 'pass' | 'island' | 'longwood' | 'noford' | 'ridge' | 'marsh' | 'lake' | 'random';
+export type MapId = 'river' | 'open' | 'forest' | 'fords' | 'pass' | 'island' | 'longwood' | 'noford' | 'ridge' | 'marsh' | 'lake' | 'castles' | 'village' | 'siege' | 'random';
 export type DiceId = '1d6' | '3d6' | '2d6' | 'fixed';
 
 export interface Settings {
@@ -149,7 +149,10 @@ export function enlargeBoard(b: GameConfig['board']): GameConfig['board'] {
   // Forest keeps its clumps: each standard forest hex becomes the large hexes nearest it (rivers win over trees).
   const riverCols = new Set(rivers.map((rv) => rv.col));
   const forests = (area(b.forests) ?? []).filter(([c]) => !riverCols.has(c));
-  return { ...b, cols: C, rows: R, riverCol: null, bridgeRows: [], fordRows: [], rivers, forests, hills: area(b.hills), swamps: area(b.swamps), lakes: area(b.lakes) };
+  // Castles and villages: each standard hex becomes the large hexes nearest it, so walls stay unbroken lines.
+  // A gateway keeps its facing.
+  const gates = b.gates ? b.gates.flatMap((g) => (area([[g.col, g.row]]) ?? []).map(([col, row]) => ({ col, row, facing: g.facing }))) : undefined;
+  return { ...b, cols: C, rows: R, riverCol: null, bridgeRows: [], fordRows: [], rivers, forests, hills: area(b.hills), swamps: area(b.swamps), lakes: area(b.lakes), walls: area(b.walls), towers: area(b.towers), gates, houses: area(b.houses), boulders: b.boulders?.map(([c, r]) => [col(c), row(r)] as [number, number]) };
 }
 
 /** Puts the settings into the game's rules. Call before starting or loading a battle. */
