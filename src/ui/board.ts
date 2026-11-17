@@ -282,8 +282,6 @@ function lookFor(owner: Player, v: View, L: Lens, s: GameState): Look {
 const AIMS_FORWARD: Record<string, ViewId[]> = {
   'comanche/horseArcher': ['front', 'back'],
   'mongols/horseArcher': ['front', 'back'],
-  'teutonic/archer': ['front', 'back'],
-  'frontier/gunslinger': ['back'],
 };
 
 /** Pixels of figure art per map unit at size 1: pictures are exported with a 150 px base; a foot figure stands about 49 units tall. */
