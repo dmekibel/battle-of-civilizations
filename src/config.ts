@@ -186,21 +186,21 @@ export const CONFIG: GameConfig = {
     heavyCavalry: { moveCost: 2, speed: 2, attack: 2, hp: 2, ranged: null, heavy: true, mounted: true },
     lightCavalry: { moveCost: 1, speed: 3, attack: 1, hp: 1, ranged: null, heavy: false, mounted: true },
     // Mongols: fast riders who shoot from the saddle (shorter range than foot archers).
-    horseArcher: { moveCost: 1, speed: 3, attack: 1, hp: 1, ranged: { cost: 2, minRange: 2, maxRange: 4, damage: 1 }, heavy: false, mounted: true },
+    horseArcher: { moveCost: 1, speed: 3, attack: 1, hp: 1, ranged: { cost: 1, minRange: 2, maxRange: 4, damage: 1 }, heavy: false, mounted: true },
     // Japanese: samurai fight hard and move like light infantry; ashigaru are cheap spearmen.
     samurai: { moveCost: 3, attack: 2, hp: 2, ranged: null, heavy: true },
     ashigaru: { moveCost: 3, attack: 1, hp: 1, ranged: null, heavy: false, antiCavalry: true },
     // Old West: guns reach about as far as bows; pistols are short-ranged but on the move.
-    gunslinger: { moveCost: 3, attack: 1, hp: 1, ranged: { cost: 2, minRange: 2, maxRange: 3, damage: 1 }, heavy: false },
-    rifleman: { moveCost: 4, attack: 0, hp: 1, ranged: { cost: 2, minRange: 2, maxRange: 6, damage: 1 }, heavy: false },
-    deputy: { moveCost: 3, attack: 1, hp: 1, ranged: { cost: 2, minRange: 2, maxRange: 2, damage: 1 }, heavy: false },
-    cowboy: { moveCost: 1, speed: 3, attack: 1, hp: 1, ranged: { cost: 2, minRange: 2, maxRange: 3, damage: 1 }, heavy: false, mounted: true },
+    gunslinger: { moveCost: 3, attack: 1, hp: 1, ranged: { cost: 1, minRange: 2, maxRange: 3, damage: 1 }, heavy: false },
+    rifleman: { moveCost: 4, attack: 0, hp: 1, ranged: { cost: 1, minRange: 2, maxRange: 6, damage: 1 }, heavy: false },
+    deputy: { moveCost: 3, attack: 1, hp: 1, ranged: { cost: 1, minRange: 2, maxRange: 2, damage: 1 }, heavy: false },
+    cowboy: { moveCost: 1, speed: 3, attack: 1, hp: 1, ranged: { cost: 1, minRange: 2, maxRange: 3, damage: 1 }, heavy: false, mounted: true },
     // Melee for archers is an open question; 0 = they only shoot.
     archer: {
       moveCost: 4,
       attack: 0,
       hp: 1,
-      ranged: { cost: 2, minRange: 2, maxRange: 6, damage: 1 }, // range 2-6 per David, 2026-11-16
+      ranged: { cost: 1, minRange: 2, maxRange: 6, damage: 1 }, // range 2-6 per David, 2026-11-16
       heavy: false,
     },
   },

@@ -273,11 +273,11 @@ describe('melee', () => {
 });
 
 describe('archers', () => {
-  it('shoot at range 2-6 for 1 damage and 2 points', () => {
+  it('shoot at range 2-6 for 1 damage and 1 point', () => {
     for (const row of [5, 6, 9]) {
       const s = scenario([['red', 'archer', 3, 3], ['blue', 'heavyInfantry', 3, row]]);
       const a = ok(shoot(s, s.units[0].id, s.units[1].id, OPEN));
-      expect(a.points).toBe(16);
+      expect(a.points).toBe(17);
       expect(getUnit(a, s.units[1].id)!.hp).toBe(1);
     }
   });
