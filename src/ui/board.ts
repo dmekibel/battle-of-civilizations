@@ -118,7 +118,7 @@ function lens(v: View): Lens {
 // One picture of the whole board (grass, river, bridges, forest shade, the table around it), made by _art/map_build.py.
 // It covers the flat map plus GROUND_M units all round and is laid under the hexes with the camera's own projection.
 const GROUND_M = 70;
-export const GROUND_URL = `${import.meta.env.BASE_URL}map/ground.webp?v=5`;
+export const GROUND_URL = `${import.meta.env.BASE_URL}map/ground.webp?v=7`;
 /** The picture's size in map units (its CSS size before the camera's transform). */
 export const GROUND_SIZE: Pt = [W + 2 * GROUND_M, H + 2 * GROUND_M];
 /** Carved trees, each drawn from 8 directions (tree-<kind>-<direction>.webp); picture size in pixels, trunk foot at bottom centre. */
@@ -139,7 +139,8 @@ export function loadGround(done: () => void) {
     const im = new Image();
     im.src = src;
     KEEP.push(im);
-    return im.decode ? im.decode() : new Promise<void>((ok, no) => ((im.onload = () => ok()), (im.onerror = no)));
+    // Loaded is enough to draw. Decoding ahead is only a head start, and a tab in the background never finishes it.
+    return new Promise<void>((ok, no) => ((im.onload = () => (ok(), void im.decode?.().catch(() => {}))), (im.onerror = no)));
   });
   Promise.all(all).then(() => ((groundReady = true), done())).catch(() => {});
 }
@@ -156,6 +157,9 @@ export function groundTransform(v: View): string {
 
 /** The point on the ground under a screen pixel, for panning and zooming about the cursor. */
 export const screenToGround = (v: View, X: number, Y: number): Pt => lens(v).ground(X, Y);
+
+/** Where a point on the ground shows on the screen. */
+export const groundToScreen = (v: View, x: number, y: number): Pt => lens(v).pt(x, y);
 
 /** Where a hex's centre is on the flat map, to aim the camera at a piece. */
 export const hexOnMap = (h: Hex, v: Pick<View, 'portrait'>): Pt => flat(h, v as View);
@@ -474,7 +478,8 @@ function slab(v: View, L: Lens): string {
   const sh = low(SLAB * 2.1);
   for (const [grow, op] of [[1.05, 0.2], [1.02, 0.25]] as const) {
     const cx = sh.reduce((a, p) => a + p[0], 0) / 4, cy = sh.reduce((a, p) => a + p[1], 0) / 4;
-    out.push(`<polygon points="${sh.map(([x, y]) => fmt([cx + (x - cx) * grow, cy + (y - cy) * grow])).join(' ')}" fill="#000" opacity="${op}"/>`);
+    // The table top is cut out of the shadow: the ground painting lies under this drawing and must not be dimmed.
+    out.push(`<path fill-rule="evenodd" d="M${sh.map(([x, y]) => fmt([cx + (x - cx) * grow, cy + (y - cy) * grow])).join('L')}ZM${top.map(fmt).join('L')}Z" fill="#000" opacity="${op}"/>`);
   }
   for (let i = 0; i < 4; i++) {
     const [nx, ny] = normals[i];

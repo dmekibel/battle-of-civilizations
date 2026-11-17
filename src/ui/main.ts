@@ -48,10 +48,11 @@ import {
   type Result,
   type Session,
 } from '../engine';
-import { ARROW_S, GROUND_SIZE, GROUND_URL, NO_EFFECTS, STEP_MS, groundTransform, hasGround, hexOnMap, loadGround, mapSize, renderBoard, screenToGround, viewCube, type Camera, type Effects, type Overlay } from './board';
+import { ARROW_S, GROUND_SIZE, GROUND_URL, NO_EFFECTS, STEP_MS, groundTransform, hasGround, hexOnMap, loadGround, mapSize, renderBoard, screenToGround, groundToScreen, viewCube, type Camera, type Effects, type Overlay } from './board';
 import { errorText, logText, playerName, reasonText, t, unitName, type Key, type Lang } from './i18n';
 import { unitIcon } from './symbols';
 import { FACTIONS, FACTION_ORDER, factionOf, rosterOf, sides, type FactionId } from './factions';
+import { morph, morphInto } from './morph';
 import { isMuted, musicOn, setMusic, sound, toggleMusic, toggleMute } from './sound';
 import { DADS_RULES, RECOMMENDED, applySettings, fixedPoints, loadSettings, saveSettings, type DiceId, type MapId, type Settings } from './settings';
 
@@ -878,6 +879,7 @@ function placeGround() {
   if (!clip) {
     clip = document.createElement('div');
     clip.className = 'ground-clip';
+    clip.dataset.keep = '1';
     wrap.prepend(clip);
   }
   if (groundEl.parentElement !== clip) clip.append(groundEl);
@@ -893,7 +895,7 @@ function render() {
   const stage = app.querySelector<HTMLElement>('.stage');
   if (stage && stage.clientWidth > 0 && (stage.clientWidth !== stageSize[0] || stage.clientHeight !== stageSize[1])) {
     stageSize = [stage.clientWidth, stage.clientHeight];
-    stage.innerHTML = renderBoard(sess.state, overlay(sess.state), view(), NO_EFFECTS);
+    morphInto(stage, renderBoard(sess.state, overlay(sess.state), view(), NO_EFFECTS));
     placeGround();
   }
   const sheet = app.querySelector<HTMLElement>('.sheet-scroll');
@@ -1031,7 +1033,7 @@ function draw() {
   // The result stays put while a new battle is being set up on top of the finished one.
   const over = s.phase === 'over' && s.winner && !overHidden && !choosing && !setupOpen ? victory(s, s.winner) : '';
 
-  app.innerHTML = `
+  const html = `
     <div class="screen ${portrait ? 'portrait' : 'landscape'} ${withPanel() ? 'desktop' : desktop ? 'full' : portrait ? '' : 'phone'} ${message ? 'has-msg' : ''} ${s.current} ${upsideDown() ? 'flipped' : ''}">
       <header class="hud">
         <div class="who"><span class="crest">${factionOf(s.current).emblem}</span><span>${playerName(lang, s.current)}<small>${battle ? `${t(lang, 'turn')} ${s.turn}` : t(lang, 'setup')}</small></span></div>
@@ -1062,6 +1064,7 @@ function draw() {
     ${setupOpen ? setupScreen() : ''}
     ${over}
     ${menuOpen && !withPanel() ? menu(s) : ''}`;
+  morphInto(app, html, fx.from.size > 0 || fx.hits.length > 0 || fx.walks.size > 0);
   app.classList.toggle('upside', upsideDown());
   document.documentElement.lang = lang;
   document.title = t(lang, 'title');
@@ -1103,7 +1106,13 @@ function scheduleAi() {
   const next = s.phase === 'act' ? aiNextAction(s) : null;
   const strike = next && (next.kind === 'attack' || next.kind === 'shoot');
   // Let the last blow finish playing before the board is drawn again, or its arrow would be wiped mid-flight.
-  const wait = Math.max(0, fxUntil - Date.now());
+  let wait = Math.max(0, fxUntil - Date.now());
+  // Bring what the computer is about to do into view first.
+  if (next && 'unitId' in next && !drag && !touch) {
+    const u = getUnit(s, next.unitId);
+    const other2 = next.kind === 'move' ? next.to : getUnit(s, next.targetId)?.pos;
+    if (u && other2) wait += showHexes([u.pos, other2], wait);
+  }
   const mark = () => {
     if (!next || !strike || !aiTurn(sess.state)) return;
     aiAim = next.targetId;
@@ -1125,6 +1134,36 @@ function scheduleAi() {
   }, wait + (s.phase === 'roll' ? 1000 : strike ? 1700 : Math.max(1100, 650 + walkTime(s))));
   // The target is marked once the timer is set, so that render doesn't schedule a second move.
   if (strike) wait ? setTimeout(mark, wait) : mark();
+}
+
+/** If any of these hexes is off the screen (or under its edge), glide the camera to them. Returns how long the glide takes, in ms. */
+function showHexes(hexes: Hex[], after = 0): number {
+  const v = view();
+  const pts = hexes.map((h) => hexOnMap(h, { portrait }));
+  const pad = Math.min(90, stageSize[0] * 0.14);
+  const seen = pts.every(([x, y]) => {
+    const [X, Y] = groundToScreen(v, x, y);
+    return X > pad && X < stageSize[0] - pad && Y > pad + 30 && Y < stageSize[1] - pad;
+  });
+  if (seen) return 0;
+  const [fw, fh] = mapSize(portrait);
+  const from: [number, number] = [cam.x ?? fw / 2, cam.y ?? fh / 2];
+  const to: [number, number] = [pts.reduce((a, p) => a + p[0], 0) / pts.length, pts.reduce((a, p) => a + p[1], 0) / pts.length];
+  const ms = 450;
+  setTimeout(() => {
+    const t0 = performance.now();
+    const step = () => {
+      const t = Math.min(1, (performance.now() - t0) / ms);
+      const e = t * t * (3 - 2 * t);
+      cam = { ...cam, x: from[0] + (to[0] - from[0]) * e, y: from[1] + (to[1] - from[1]) * e };
+      if (t < 1) {
+        camFrame();
+        requestAnimationFrame(step);
+      } else camDone();
+    };
+    step();
+  }, after);
+  return ms + 80;
 }
 
 /** How long the last move's walk takes to play, in ms (the computer waits for it). */
@@ -1553,7 +1592,7 @@ function camFrame() {
     const live = tmp.firstElementChild as SVGElement;
     live.classList.add('live');
     const old = st.querySelector('svg.board.live');
-    if (old) old.replaceWith(live);
+    if (old) morph(old, live);
     else st.append(live);
     placeGround();
     const cube = app.querySelector('.viewcube');
