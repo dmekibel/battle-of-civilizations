@@ -326,7 +326,7 @@ export const NO_EFFECTS: Effects = { from: new Map(), hits: [], walks: new Map()
 /** Time for one step of a walk, in ms. */
 export const STEP_MS = 130;
 /** Pieces that fire guns: a quick tracer and smoke instead of an arrow in flight. */
-const GUNS = new Set<UnitTypeId>(['gunslinger', 'rifleman', 'cowboy']);
+const GUNS = new Set<UnitTypeId>(['gunslinger', 'rifleman', 'cowboy', 'deputy']);
 /** When the blow lands after the attack starts (seconds): arrows fly, bullets and blades are quick. */
 /** How long an arrow is in the air (seconds): slow enough to follow with the eye. */
 export const ARROW_S = 0.65;
@@ -384,12 +384,14 @@ let SHADOW: Pt = [0.6, 0.4];
 
 /** Pixels of figure art per map unit at size 1: pictures are exported with a 150 px base; a foot figure stands about 49 units tall. */
 const ART_SCALE = 0.26 * 80 / 150;
-const SPRITE_URL = (fac: string, type: string, view: string) => `${import.meta.env.BASE_URL}pieces/${fac}/${type}-${view}.webp?v=${ART_VERSION}`;
+/** Pieces that share another piece's carved figure. */
+const ART_OF: Record<string, string> = { deputy: 'lightInfantry' };
+const SPRITE_URL = (fac: string, type: string, view: string) => `${import.meta.env.BASE_URL}pieces/${fac}/${ART_OF[type] ?? type}-${view}.webp?v=${ART_VERSION}`;
 
 /** The carved figure for this piece in 2.5D, if its army has one. */
 function figure(type: UnitTypeId, owner: Player, hp: number, k: number, look: Look): string | null {
   const fac = sides[owner];
-  const set = SPRITES[fac]?.[type];
+  const set = SPRITES[fac]?.[ART_OF[type] ?? type];
   if (!set) return null;
   // Pieces that shoot forward can't be drawn aiming straight at (or away from) the camera, so head-on they
   // show their diagonal instead, where the weapon clearly points the way they face.

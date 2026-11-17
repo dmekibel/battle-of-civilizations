@@ -259,7 +259,7 @@ const [ZOOM_MIN, ZOOM_MAX] = [0.7, 10];
 type Buyable = keyof ArmyCounts;
 /** The side to move's faction decides what it can buy and what the pieces list shows. */
 const buyOrder = () => rosterOf(sess.state.current) as Buyable[];
-const TRAY_ORDER: UnitTypeId[] = ['king', 'heavyCavalry', 'lightCavalry', 'horseArcher', 'heavyInfantry', 'samurai', 'lightInfantry', 'ashigaru', 'archer'];
+const TRAY_ORDER: UnitTypeId[] = ['king', 'heavyCavalry', 'lightCavalry', 'horseArcher', 'heavyInfantry', 'samurai', 'lightInfantry', 'deputy', 'ashigaru', 'archer'];
 
 // ---------- view helpers ----------
 
@@ -927,7 +927,7 @@ function setZoom(factor: number) {
 }
 
 /** Pieces that fire guns, and which gunshot they make. */
-const GUN_SOUND: Partial<Record<UnitTypeId, 'pistol' | 'rifle'>> = { gunslinger: 'pistol', cowboy: 'pistol', rifleman: 'rifle' };
+const GUN_SOUND: Partial<Record<UnitTypeId, 'pistol' | 'rifle'>> = { gunslinger: 'pistol', cowboy: 'pistol', rifleman: 'rifle', deputy: 'rifle' };
 
 /** When the animations now on the board are over (ms clock); the computer waits for it before redrawing. */
 let fxUntil = 0;

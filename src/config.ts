@@ -15,7 +15,9 @@ export type UnitTypeId =
   // The Old West: gunslingers, riflemen and mounted cowboys.
   | 'gunslinger'
   | 'rifleman'
-  | 'cowboy';
+  | 'cowboy'
+  // Deputies: the Cowboys' cheap foot soldiers, with a shotgun that reaches only 2 hexes.
+  | 'deputy';
 
 export type TerrainId = 'plain' | 'forest' | 'river' | 'bridge';
 
@@ -191,6 +193,7 @@ export const CONFIG: GameConfig = {
     // Old West: guns reach about as far as bows; pistols are short-ranged but on the move.
     gunslinger: { moveCost: 3, attack: 1, hp: 1, ranged: { cost: 2, minRange: 2, maxRange: 3, damage: 1 }, heavy: false },
     rifleman: { moveCost: 4, attack: 0, hp: 1, ranged: { cost: 2, minRange: 2, maxRange: 6, damage: 1 }, heavy: false },
+    deputy: { moveCost: 3, attack: 1, hp: 1, ranged: { cost: 2, minRange: 2, maxRange: 2, damage: 1 }, heavy: false },
     cowboy: { moveCost: 1, speed: 3, attack: 1, hp: 1, ranged: { cost: 2, minRange: 2, maxRange: 3, damage: 1 }, heavy: false, mounted: true },
     // Melee for archers is an open question; 0 = they only shoot.
     archer: {
@@ -225,7 +228,7 @@ export const CONFIG: GameConfig = {
   },
   army: {
     budget: 50,
-    cost: { lightInfantry: 1, heavyInfantry: 2, archer: 3, lightCavalry: 3, heavyCavalry: 4, horseArcher: 4, samurai: 4, ashigaru: 1, gunslinger: 3, rifleman: 3, cowboy: 4 },
+    cost: { lightInfantry: 1, heavyInfantry: 2, archer: 3, lightCavalry: 3, heavyCavalry: 4, horseArcher: 4, samurai: 4, ashigaru: 1, gunslinger: 3, rifleman: 3, cowboy: 4, deputy: 2 },
   },
   // 5 columns leave room for the largest possible army (50 light infantry and the King).
   deploy: { depth: 5 },

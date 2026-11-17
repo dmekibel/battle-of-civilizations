@@ -40,6 +40,13 @@ describe('faction pieces', () => {
     expect(previewStrike(theirTurn, s.units[5].id, s.units[2].id, 'attack', OPEN)?.damage).toBe(2); // spearmen vs a rider
   });
 
+  it('Old West: deputies fire their shotguns at 2 hexes only, and still fight hand to hand', () => {
+    const s = scenario([['red', 'deputy', 3, 3], ['blue', 'heavyInfantry', 5, 3], ['blue', 'heavyInfantry', 6, 3], ['blue', 'ashigaru', 4, 3]]);
+    expect(previewStrike(s, s.units[0].id, s.units[1].id, 'shoot', OPEN)?.damage).toBe(1);
+    expect(previewStrike(s, s.units[0].id, s.units[2].id, 'shoot', OPEN)).toBeNull();
+    expect(previewStrike(s, s.units[0].id, s.units[3].id, 'attack', OPEN)?.damage).toBe(1);
+  });
+
   it('a suggested army only uses its faction’s pieces', () => {
     const mongols = suggestArmy(Math.random, CONFIG, ['lightInfantry', 'archer', 'lightCavalry', 'heavyCavalry', 'horseArcher']);
     expect(mongols.heavyInfantry ?? 0).toBe(0);

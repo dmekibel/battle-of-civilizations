@@ -402,6 +402,7 @@ const UNITS: Record<Lang, Record<UnitTypeId, string>> = {
     gunslinger: 'Стрелки с револьверами',
     rifleman: 'Стрелки с винтовками',
     cowboy: 'Ковбои',
+    deputy: 'Помощники шерифа',
   },
   en: {
     king: 'King',
@@ -416,6 +417,7 @@ const UNITS: Record<Lang, Record<UnitTypeId, string>> = {
     gunslinger: 'Gunslingers',
     rifleman: 'Riflemen',
     cowboy: 'Cowboys',
+    deputy: 'Deputies',
   },
 };
 

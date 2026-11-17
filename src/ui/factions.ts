@@ -81,15 +81,15 @@ export const FACTIONS: Record<FactionId, Faction> = {
     name: { en: 'Cowboys', ru: 'Ковбои' },
     color: '#8a5a2b',
     text: '#e3b781',
-    roster: ['lightInfantry', 'gunslinger', 'rifleman', 'cowboy', 'heavyCavalry'],
-    blurb: { en: 'The Old West: riflemen, gunslingers and cowboys who shoot from the saddle.', ru: 'Дикий Запад: стрелки, ковбои и всадники, стреляющие на скаку.' },
+    roster: ['deputy', 'gunslinger', 'rifleman', 'cowboy', 'heavyCavalry'],
+    blurb: { en: 'The Old West: riflemen, gunslingers, deputies with shotguns and cowboys who shoot from the saddle.', ru: 'Дикий Запад: стрелки, помощники шерифа с дробовиками и ковбои, стреляющие на скаку.' },
     emblem: shield('#8a5a2b', '#e1b12c', '<path d="M30 14L34 25H45L36 32L39 43L30 36L21 43L24 32L15 25H26Z" fill="#e1b12c" stroke="#6b4410" stroke-width="1.2" stroke-linejoin="round"/>'),
     names: {
       king: { en: 'Sheriff', ru: 'Шериф' },
       lightInfantry: { en: 'Deputies', ru: 'Помощники шерифа' },
       heavyCavalry: { en: 'Cavalry troopers', ru: 'Кавалеристы' },
     },
-    art: { king: 'star', lightInfantry: 'shotgun', heavyCavalry: 'saber' },
+    art: { king: 'star', lightInfantry: 'shotgun', deputy: 'shotgun', heavyCavalry: 'saber' },
   },
   comanche: {
     name: { en: 'Indians', ru: 'Индейцы' },

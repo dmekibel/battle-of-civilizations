@@ -63,6 +63,7 @@ function picture(type: UnitTypeId, ink: string): string {
     case 'heavyInfantry':
       // Shield and sword.
       return `<path d="M-10 -10H10V-1Q10 8 0 12Q-10 8 -10 -1Z" fill="none" stroke="${ink}" stroke-width="2"/>${SWORD(ink)}`;
+    case 'deputy':
     case 'lightInfantry':
       // Spear.
       return `<path d="M-13 11L9 -6" stroke="${ink}" stroke-width="2.2" stroke-linecap="round"/><path d="M15 -11L6 -8L10 -3Z" fill="${ink}"/>`;

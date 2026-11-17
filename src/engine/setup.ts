@@ -75,7 +75,7 @@ export function liftUnit(s: GameState, unitId: string): Result {
 // heavy infantry holds the front centre, light infantry extends the line, archers stand
 // one rank behind the infantry, cavalry guards the wings (light cavalry furthest out),
 // and the King stays at the back in the middle.
-const DEPLOY_ORDER: UnitTypeId[] = ['king', 'heavyInfantry', 'samurai', 'archer', 'rifleman', 'gunslinger', 'lightInfantry', 'ashigaru', 'heavyCavalry', 'lightCavalry', 'horseArcher', 'cowboy'];
+const DEPLOY_ORDER: UnitTypeId[] = ['king', 'heavyInfantry', 'samurai', 'archer', 'rifleman', 'gunslinger', 'deputy', 'lightInfantry', 'ashigaru', 'heavyCavalry', 'lightCavalry', 'horseArcher', 'cowboy'];
 
 function formationScore(type: UnitTypeId, depth: number, front: number, lateral: number, maxLateral: number): number {
   const wing = maxLateral - lateral; // 0 at the very edge of the board
@@ -85,6 +85,7 @@ function formationScore(type: UnitTypeId, depth: number, front: number, lateral:
     case 'heavyInfantry':
     case 'samurai':
     case 'lightInfantry':
+    case 'deputy':
     case 'ashigaru':
       return (front - depth) * 10 + lateral;
     case 'archer':
@@ -146,6 +147,7 @@ const ARMY_MIX: Record<keyof ArmyCounts, number> = {
   gunslinger: 0.2,
   rifleman: 0.2,
   cowboy: 0.25,
+  deputy: 0.15,
 };
 
 /** The pieces most armies can buy (factions add or swap some). */
