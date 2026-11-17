@@ -244,7 +244,7 @@ export const STEP_MS = 130;
 /** Pieces that fire guns: a quick tracer and smoke instead of an arrow in flight. */
 const GUNS = new Set<UnitTypeId>(['gunslinger', 'rifleman', 'cowboy']);
 /** When the blow lands after the attack starts (seconds): arrows fly, bullets and blades are quick. */
-const impact = (h: Effects['hits'][number]) => (h.shotFrom ? (h.by && GUNS.has(h.by) ? 0.12 : 0.42) : 0.14);
+const impact = (h: Effects['hits'][number]) => (h.shotFrom ? (h.by && GUNS.has(h.by) ? 0.22 : 0.42) : 0.14);
 const same = (a: Hex | undefined, b: Hex) => !!a && a.col === b.col && a.row === b.row;
 /** Eight short rays: the flash of a blow landing. */
 const RAYS = Array.from({ length: 8 }, (_, i) => {
@@ -483,8 +483,14 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
       const [sx, sy] = L.pt(fx0, fy0);
       const y0 = sy - lift(L, L.size(fx0, fy0));
       if (h.by && GUNS.has(h.by)) {
+        // Muzzle flash, then a glowing bullet with a short fading trail flies to the target; smoke lingers.
+        const path = `M${sx.toFixed(1)} ${y0.toFixed(1)}L${hx.toFixed(1)} ${ty.toFixed(1)}`;
         top.push(
           `<line class="tracer" x1="${sx.toFixed(1)}" y1="${y0.toFixed(1)}" x2="${hx.toFixed(1)}" y2="${ty.toFixed(1)}"/>`,
+          `<g transform="translate(${sx.toFixed(1)} ${y0.toFixed(1)})"><path class="muzzle" d="M0-9L2-2 9 0 2 2 0 9-2 2-9 0-2-2Z"/></g>`,
+          `<g class="bullet"><ellipse rx="9" ry="2.6"/><ellipse class="core" rx="4.5" ry="1.4"/>
+            <animateMotion dur="${d}s" fill="freeze" rotate="auto" path="${path}"/>
+            <animate attributeName="opacity" values="1;1;0" keyTimes="0;.9;1" dur="${d + 0.05}s" fill="freeze"/></g>`,
           `<g transform="translate(${sx.toFixed(1)} ${(y0 - 4).toFixed(1)})"><circle class="smoke" r="7"/></g>`,
         );
       } else {

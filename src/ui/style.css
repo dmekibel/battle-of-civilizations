@@ -137,8 +137,12 @@ body {
 .board .lunge { animation: lunge .34s cubic-bezier(.5, 0, .3, 1); }
 @keyframes lunge { 40% { transform: translate(var(--lx), var(--ly)); } }
 .board .flight path { fill: none; stroke: #2a1c0c; stroke-width: 2; stroke-linecap: round; }
-.board .tracer { stroke: #fff1b0; stroke-width: 2; stroke-linecap: round; animation: tracer .3s ease-out forwards; }
-@keyframes tracer { from { opacity: 1; } to { opacity: 0; } }
+.board .tracer { stroke: #fff1b0; stroke-width: 1.2; stroke-linecap: round; opacity: 0; animation: tracer .45s ease-out .05s forwards; }
+.board .muzzle { fill: #fff4b0; stroke: #ff9a2a; stroke-width: 1; transform-box: fill-box; transform-origin: center; animation: muzzle .16s ease-out forwards; }
+@keyframes muzzle { from { transform: scale(.4); opacity: 1; } to { transform: scale(1.5); opacity: 0; } }
+.board .bullet ellipse { fill: #ffd36b; filter: drop-shadow(0 0 3px #ffb02e); }
+.board .bullet .core { fill: #fffbe8; }
+@keyframes tracer { 0% { opacity: .55; } 100% { opacity: 0; } }
 .board .smoke { fill: #e8e2d4; transform-box: fill-box; transform-origin: center; animation: smoke .8s ease-out forwards; }
 @keyframes smoke { from { opacity: .8; transform: scale(.4); } to { opacity: 0; transform: scale(2.2) translateY(-4px); } }
 .board .spark { fill: none; stroke: #fff3b8; stroke-width: 2.4; stroke-linecap: round; transform-box: fill-box; transform-origin: center; animation: spark .42s ease-out both; }
