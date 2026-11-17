@@ -278,6 +278,14 @@ function lookFor(owner: Player, v: View, L: Lens, s: GameState): Look {
   return { view: VIEWS[Math.round(turn / (Math.PI / 4))], flip: rx > 0 };
 }
 
+/** Which straight views of an aiming piece show it shooting sideways (see figure()). */
+const AIMS_FORWARD: Record<string, ViewId[]> = {
+  'comanche/horseArcher': ['front', 'back'],
+  'mongols/horseArcher': ['front', 'back'],
+  'teutonic/archer': ['front', 'back'],
+  'frontier/gunslinger': ['back'],
+};
+
 /** Pixels of figure art per map unit at size 1: pictures are exported with a 150 px base; a foot figure stands about 49 units tall. */
 const ART_SCALE = 0.26 * 80 / 150;
 const SPRITE_URL = (fac: string, type: string, view: string) => `${import.meta.env.BASE_URL}pieces/${fac}/${type}-${view}.webp?v=${ART_VERSION}`;
@@ -287,8 +295,11 @@ function figure(type: UnitTypeId, owner: Player, hp: number, k: number, look: Lo
   const fac = sides[owner];
   const set = SPRITES[fac]?.[type];
   if (!set) return null;
+  // Pieces that shoot forward can't be drawn aiming straight at (or away from) the camera, so head-on they
+  // show their diagonal instead, where the weapon clearly points the way they face.
+  const wanted: ViewId = AIMS_FORWARD[`${fac}/${type}`]?.includes(look.view) ? (look.view === 'front' ? 'fdiag' : set.bdiag ? 'bdiag' : 'side') : look.view;
   // A missing diagonal falls back to the straight view on the same side (front or back).
-  const view: ViewId = set[look.view] ? look.view : look.view === 'fdiag' ? 'front' : look.view === 'bdiag' ? 'back' : 'side';
+  const view: ViewId = set[wanted] ? wanted : wanted === 'fdiag' ? 'front' : wanted === 'bdiag' ? 'back' : 'side';
   const size = set[view];
   if (!size) return null;
   const [w, h] = [size[0] * ART_SCALE * k, size[1] * ART_SCALE * k];
