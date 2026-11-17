@@ -144,8 +144,8 @@ describe('movement', () => {
       const s = scenario([['red', t, 8, 5]], 4);
       return Math.max(0, ...[...reachable(s, s.units[0].id, OPEN).values()].map((r) => distance(r.hex, { col: 8, row: 5 })));
     };
-    // Top speed caps a turn's run at 3 hexes on foot, 6 for heavy horse, 9 for light horse.
-    expect([furthest('heavyInfantry'), furthest('heavyCavalry'), furthest('lightCavalry'), furthest('king')]).toEqual([3, 6, 9, 3]);
+    // Top speed caps a turn's run at 4 hexes on foot, 6 for heavy horse, 9 for light horse.
+    expect([furthest('heavyInfantry'), furthest('heavyCavalry'), furthest('lightCavalry'), furthest('king')]).toEqual([4, 6, 9, 4]);
     const free: GameConfig = { ...OPEN, options: { ...OPEN.options, runLimit: null } };
     const far = (t: UnitTypeId) => Math.max(...[...reachable(scenario([['red', t, 8, 5]], 4, free), `red-${t}-0`, free).values()].map((r) => r.steps));
     expect([far('heavyInfantry'), far('heavyCavalry'), far('lightCavalry')]).toEqual([4, 8, 12]);
@@ -155,8 +155,8 @@ describe('movement', () => {
     const s = scenario([['red', 'lightInfantry', 8, 5]], 10);
     const id = s.units[0].id;
     const a = ok(moveUnit(s, id, { col: 8, row: 7 }, OPEN));
-    expect(reachable(a, id, OPEN).has('8,8')).toBe(true);
-    expect(reachable(a, id, OPEN).has('8,9')).toBe(false); // 4th hex this turn
+    expect(reachable(a, id, OPEN).has('8,9')).toBe(true);
+    expect(reachable(a, id, OPEN).has('8,10')).toBe(false); // 5th hex this turn
   });
 
   it('a light rider pays 1 point for up to 3 hexes', () => {

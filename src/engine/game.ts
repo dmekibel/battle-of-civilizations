@@ -121,8 +121,9 @@ function search(s: GameState, unitId: string, cfg: GameConfig): { out: Map<strin
   if (u.attacked && !cfg.combat.moveAfterAttack) return { out, prev };
 
   // Search by hexes walked (every step is one hex); the price in points comes from the walk's length.
-  // Top speed: what's left of this piece's hexes for the turn.
-  const limit = cfg.options.runLimit !== null && !cfg.options.unitSpeeds ? cfg.options.runLimit * hexesPerPoint(u.type, cfg) - (u.ran ?? 0) : null;
+  // Top speed: what's left of this piece's hexes for the turn. Riders get one point's worth less than
+  // foot pieces (4 on foot, 6 heavy horse, 9 light horse by default), so horses don't cross half the board.
+  const limit = cfg.options.runLimit !== null && !cfg.options.unitSpeeds ? (mounted(u, cfg) ? Math.max(1, cfg.options.runLimit - 1) : cfg.options.runLimit) * hexesPerPoint(u.type, cfg) - (u.ran ?? 0) : null;
   // One step at a time: a single move covers at most one point's worth of hexes.
   const stepLimit = cfg.options.stepMoves && !cfg.options.unitSpeeds ? Math.min(limit ?? Infinity, hexesPerPoint(u.type, cfg)) : limit;
   const best = new Map<string, number>([[key(u.pos), 0]]);
@@ -238,7 +239,9 @@ function checkStrike(
     if (!hasLineOfSight(s, a.pos, t.pos, cfg)) return 'noLineOfSight';
     if (cfg.options.volleys !== null && (a.shots ?? 0) >= cfg.options.volleys) return 'outOfArrows';
     cost = r.cost * (cfg.options.longShotFrom !== null && d > cfg.options.longShotFrom ? 2 : 1);
-    raw = r.damage;
+    // Two hits from a bow or gun are always enough: a shot takes at least half the target's full health
+    // (this only matters when pieces are made tougher). David, 2026-11-17.
+    raw = Math.max(r.damage, Math.ceil(maxHp(t.type, cfg) / 2));
   }
   if (s.points < cost) return 'notEnoughPoints';
   const damage = damageOn(s, t, raw, cfg);
