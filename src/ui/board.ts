@@ -497,7 +497,11 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
         // The arrow flies in an arc, turning to follow its path, and lands on the target.
         const mx = (sx + hx) / 2;
         const my = (y0 + ty) / 2 - (Math.hypot(hx - sx, ty - y0) * 0.28 + 10);
-        top.push(`<g class="flight"><path transform="scale(1.4)" d="M-10 0H8M8 0l-5-3.5M8 0l-5 3.5M-10 0l-3.5-3M-10 0l-3.5 3"/>
+        top.push(`<g class="flight"><g transform="scale(1.5)">
+          <line x1="-13" y1="0" x2="8" y2="0" class="shaft"/>
+          <path d="M12.5 0L7.6 -2.5L8.6 0L7.6 2.5Z" class="head"/>
+          <path d="M-8 0L-15.5 -3.8L-13.5 0Z" class="fletch"/><path d="M-8 0L-15.5 3.8L-13.5 0Z" class="fletch b"/>
+        </g>
           <animateMotion dur="${d}s" fill="freeze" rotate="auto" path="M${sx.toFixed(1)} ${y0.toFixed(1)}Q${mx.toFixed(1)} ${my.toFixed(1)} ${hx.toFixed(1)} ${ty.toFixed(1)}"/>
           <animate attributeName="opacity" values="1;1;0" keyTimes="0;.75;1" dur="${d + 0.15}s" fill="freeze"/></g>`);
       }

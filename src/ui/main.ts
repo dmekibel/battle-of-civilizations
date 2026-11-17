@@ -967,7 +967,7 @@ function draw() {
   const over = s.phase === 'over' && s.winner && !overHidden && !choosing && !setupOpen ? victory(s, s.winner) : '';
 
   app.innerHTML = `
-    <div class="screen ${portrait ? 'portrait' : 'landscape'} ${withPanel() ? 'desktop' : desktop ? 'full' : ''} ${s.current} ${upsideDown() ? 'flipped' : ''}">
+    <div class="screen ${portrait ? 'portrait' : 'landscape'} ${withPanel() ? 'desktop' : desktop ? 'full' : portrait ? '' : 'phone'} ${message ? 'has-msg' : ''} ${s.current} ${upsideDown() ? 'flipped' : ''}">
       <header class="hud">
         <div class="who"><span class="crest">${factionOf(s.current).emblem}</span><span>${playerName(lang, s.current)}<small>${battle ? `${t(lang, 'turn')} ${s.turn}` : t(lang, 'setup')}</small></span></div>
         <div class="dice">${battle ? [0, 1, 2].slice(0, CONFIG.dice.count).map((i) => die(faces?.[i] ?? null, rolling)).join('') : ''}</div>

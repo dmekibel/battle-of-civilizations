@@ -136,7 +136,11 @@ body {
 @keyframes hop { 50% { transform: translateY(-5px); } }
 .board .lunge { animation: lunge .34s cubic-bezier(.5, 0, .3, 1); }
 @keyframes lunge { 40% { transform: translate(var(--lx), var(--ly)); } }
-.board .flight path { fill: none; stroke: #2a1c0c; stroke-width: 2; stroke-linecap: round; }
+.board .flight { filter: drop-shadow(0 2px 1.5px rgba(0,0,0,.35)); }
+.board .flight .shaft { stroke: #8a5a2b; stroke-width: 1.6; stroke-linecap: round; }
+.board .flight .head { fill: #dfe3e8; stroke: #3a3f45; stroke-width: .6; stroke-linejoin: round; }
+.board .flight .fletch { fill: #f4f1e8; stroke: #6b5a40; stroke-width: .4; }
+.board .flight .fletch.b { fill: #c2453a; }
 .board .tracer { stroke: #fff1b0; stroke-width: 1.2; stroke-linecap: round; opacity: 0; animation: tracer .45s ease-out .05s forwards; }
 .board .muzzle { fill: #fff4b0; stroke: #ff9a2a; stroke-width: 1; transform-box: fill-box; transform-origin: center; animation: muzzle .16s ease-out forwards; }
 @keyframes muzzle { from { transform: scale(.4); opacity: 1; } to { transform: scale(1.5); opacity: 0; } }
@@ -425,3 +429,42 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 .blurb { margin: 6px 2px 0; font-size: 12.5px; color: var(--muted); }
 .board .route { fill: none; stroke: #fff6c8; stroke-width: 4; stroke-dasharray: 2 9; stroke-linecap: round; opacity: .95; }
 .board .route-end { fill: #fff6c8; fill-opacity: .35; stroke: #fff6c8; stroke-width: 3; }
+
+/* Phone held sideways: the board fills the screen; a slim status pill, the turn buttons and a hint
+   only when something needs saying float over it. */
+.screen.phone {
+  grid-template-areas: 'stage';
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  padding: 0; gap: 0;
+}
+.phone .stage-wrap { grid-area: 1 / 1; }
+.phone .hud {
+  grid-area: 1 / 1; align-self: start; justify-self: center; z-index: 3;
+  margin-top: max(6px, env(safe-area-inset-top, 0px));
+  padding: 4px 6px 4px 10px; gap: 8px; flex-wrap: nowrap; border-left-width: 4px;
+  background: color-mix(in srgb, var(--paper) 88%, transparent); backdrop-filter: blur(6px);
+}
+.phone .hud .who small, .phone .points span { display: none; }
+.phone .who { font-size: 14px; }
+.phone .crest svg { width: 22px; height: 26px; }
+.phone .points b { font-size: 20px; }
+.phone .die { transform: scale(.8); margin: -3px; }
+.phone .info {
+  grid-area: 1 / 1; align-self: start; justify-self: center; z-index: 3; display: none;
+  margin-top: calc(max(6px, env(safe-area-inset-top, 0px)) + 52px); max-width: min(70vw, 520px);
+  font-size: 12px; min-height: 0; padding: 5px 10px; text-align: center;
+  background: color-mix(in srgb, var(--paper) 90%, transparent);
+}
+.phone.has-msg .info { display: block; }
+.phone .bar {
+  grid-area: 1 / 1; align-self: end; justify-self: end; z-index: 3; width: auto;
+  margin: 0 max(8px, env(safe-area-inset-right, 0px)) max(8px, env(safe-area-inset-bottom, 0px)) 0;
+}
+.phone .bar .row { gap: 6px; }
+.phone .bar button { padding: 8px 12px; font-size: 14px; white-space: nowrap; }
+.phone .bar .withicon span { display: none; }
+.phone .tray { max-width: 60vw; flex-wrap: nowrap; overflow-x: auto; }
+.phone .zoom { bottom: 64px; right: max(8px, env(safe-area-inset-right, 0px)); }
+.phone .viewcube { left: max(8px, env(safe-area-inset-left, 0px)); top: max(8px, env(safe-area-inset-top, 0px)); width: 52px; height: 52px; }
+.phone .cam { left: max(8px, env(safe-area-inset-left, 0px)); bottom: max(8px, env(safe-area-inset-bottom, 0px)); }
