@@ -45,13 +45,15 @@ export function loadSettings(): Settings {
   try {
     const s = JSON.parse(localStorage.getItem(KEY) ?? 'null');
     // Version 3 (2026-11-17): back to three dice by default, now that pieces have a top speed.
-    if (s && typeof s.budget === 'number' && s.v !== 3 && s.v !== 4) s.dice = '3d6';
+    if (s && typeof s.budget === 'number' && s.v !== 3 && s.v !== 4 && s.v !== 5) s.dice = '3d6';
     // Version 4 (2026-11-17): looser limits: foot pieces walk 4 hexes, long shots start past 4, quivers hold 8.
-    if (s && typeof s.budget === 'number' && s.v !== 4 && s.options) {
+    if (s && typeof s.budget === 'number' && s.v !== 4 && s.v !== 5 && s.options) {
       if (s.options.runLimit === 3) s.options.runLimit = 4;
       if (s.options.longShotFrom === 3) s.options.longShotFrom = 4;
       if (s.options.volleys === 6) s.options.volleys = 8;
     }
+    // Version 5 (2026-11-17): foot pieces walk 6 hexes a turn.
+    if (s && typeof s.budget === 'number' && s.v !== 5 && s.options && (s.options.runLimit === 3 || s.options.runLimit === 4)) s.options.runLimit = 6;
     if (s && typeof s.budget === 'number') return { ...DEFAULT_SETTINGS, ...s, options: { ...DADS_RULES, ...s.options }, sides: { red: known(s.sides?.red, 'novgorod'), blue: known(s.sides?.blue, 'teutonic') } };
   } catch {
     /* fall through to the defaults */
@@ -64,7 +66,7 @@ export const fixedPoints = (_s: Settings) => 10;
 
 export function saveSettings(s: Settings) {
   try {
-    localStorage.setItem(KEY, JSON.stringify({ ...s, v: 4 }));
+    localStorage.setItem(KEY, JSON.stringify({ ...s, v: 5 }));
   } catch {
     /* keep them for this visit only */
   }

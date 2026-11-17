@@ -128,7 +128,7 @@ body {
 .board *:not(.hex) { pointer-events: none; }
 .board .tap, .board .tap * { pointer-events: auto; cursor: pointer; }
 /* Pieces that can't do anything with the points left fade a little (opacity works on SVG in every browser; filters don't). */
-.board .spent { opacity: .75; }
+.board .spent { opacity: .88; }
 .board .trail { stroke: #fff6c8; stroke-width: 3; stroke-dasharray: 7 6; stroke-linecap: round; opacity: .7; }
 .board .trail-head { fill: #fff6c8; opacity: .8; }
 .board .trail-side { stroke-width: 7; stroke-linecap: round; opacity: .6; }

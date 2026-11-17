@@ -131,6 +131,41 @@ const PROPS: [Pt, number][] = [[[100, 135], 9], [[160, 117], 8], [[116, 128], 9]
 /** Which prop a hex gets: mostly grass, now and then flowers, a bush, stones or mushrooms. */
 const PROP_MIX = [0, 1, 0, 1, 0, 2, 1, 3, 0, 4, 1, 6, 0, 5, 2, 7];
 const PROP_URL = (i: number) => `${import.meta.env.BASE_URL}map/prop-${i + 1}.webp?v=1`;
+// ---------- pictures ----------
+// Every picture on the board (pieces, trees, scenery) is loaded once into a hidden sheet that stays in the page,
+// and the board only points at it. Turning a piece to another view is then instant: nothing is loaded, so nothing blinks.
+const SHEET = new Map<string, string>();
+let sheetEl: SVGSVGElement | null = null;
+function sheetId(url: string, w: number, h: number): string | null {
+  if (typeof document === 'undefined') return null;
+  let id = SHEET.get(url);
+  if (id) return id;
+  if (!sheetEl) {
+    sheetEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    sheetEl.setAttribute('width', '0');
+    sheetEl.setAttribute('height', '0');
+    sheetEl.setAttribute('aria-hidden', 'true');
+    sheetEl.style.cssText = 'position:absolute;left:0;top:0;overflow:hidden;pointer-events:none';
+    sheetEl.append(document.createElementNS('http://www.w3.org/2000/svg', 'defs'));
+    document.body.append(sheetEl);
+  }
+  id = `pic${SHEET.size}`;
+  SHEET.set(url, id);
+  const im = document.createElementNS('http://www.w3.org/2000/svg', 'image');
+  im.setAttribute('id', id);
+  im.setAttribute('href', url);
+  im.setAttribute('width', String(w));
+  im.setAttribute('height', String(h));
+  im.setAttribute('decoding', 'sync');
+  sheetEl.firstChild!.appendChild(im);
+  return id;
+}
+/** A picture `nat` pixels big, drawn w x h with its top left at (x, y); `flip` mirrors it left to right about x = 0. */
+function pic(url: string, nat: Pt, x: number, y: number, w: number, h: number, flip = false): string {
+  const id = sheetId(url, nat[0], nat[1]);
+  if (!id) return `<image decoding="sync" href="${url}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"${flip ? ' transform="scale(-1 1)"' : ''}/>`;
+  return `<use href="#${id}" transform="${flip ? 'scale(-1 1) ' : ''}translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${(w / nat[0]).toFixed(4)} ${(h / nat[1]).toFixed(4)})"/>`;
+}
 let groundReady = false;
 /** Starts loading the painted ground and trees; `done` runs once they can be drawn. Until then the plain board shows. */
 export function loadGround(done: () => void) {
@@ -247,7 +282,7 @@ function scenery(h: Hex, v: View, L: Lens): Standing[] {
   const k = L.size(px, py);
   const [sx, sy] = L.pt(px, py);
   const [w, hh] = [(pw / ph) * tall * k, tall * k];
-  return [{ depth: L.depth(px, py), svg: `<image decoding="sync" href="${PROP_URL(pi)}" x="${(sx - w / 2).toFixed(1)}" y="${(sy - hh + 0.8 * k).toFixed(1)}" width="${w.toFixed(1)}" height="${hh.toFixed(1)}"/>` }];
+  return [{ depth: L.depth(px, py), svg: pic(PROP_URL(pi), [pw, ph], sx - w / 2, sy - hh + 0.8 * k, w, hh) }];
 }
 
 function trees(h: Hex, v: View, L: Lens): Standing[] {
@@ -268,7 +303,7 @@ function trees(h: Hex, v: View, L: Lens): Standing[] {
       const dir = L.tilt ? DIRS8[(seenFrom(v, L) + (seed % 8)) % 8] : 'front';
       const f = (L.tilt ? 0.27 : 0.12) * k; // the tallest tree stands about one and a half soldiers high
       const [w, hh] = [size[0] * f, size[1] * f];
-      return { depth: L.depth(x + dx, y + dy), svg: `${shadow}<image decoding="sync" href="${TREE_URL(kind, dir)}" x="${(tx - w / 2).toFixed(1)}" y="${(ty - hh + 2 * k).toFixed(1)}" width="${w.toFixed(1)}" height="${hh.toFixed(1)}"/>` };
+      return { depth: L.depth(x + dx, y + dy), svg: shadow + pic(TREE_URL(kind, dir), size, tx - w / 2, ty - hh + 2 * k, w, hh) };
     }
     return { depth: L.depth(x + dx, y + dy), svg: shadow + (leafy ? oak(tx, ty, k, L.tilt) : pine(tx, ty, k, L.tilt)) };
   });
@@ -410,7 +445,7 @@ function figure(type: UnitTypeId, owner: Player, hp: number, k: number, look: Lo
     const bar8 = hp > 0 && hp < full8 ? `<g transform="translate(0 ${(7 * k).toFixed(1)}) scale(${(0.7 * k).toFixed(3)}) translate(0 -16)">${healthBar(hp, full8)}</g>` : '';
     return `<ellipse cx="${(SHADOW[0] * 11 * k).toFixed(1)}" cy="${(k + SHADOW[1] * 5 * k).toFixed(1)}" rx="${(21 * k).toFixed(1)}" ry="${(6.5 * k).toFixed(1)}" fill="#1b2410" opacity=".32" class="cast"/><ellipse cx="0" cy="${k.toFixed(1)}" rx="${(13 * k).toFixed(1)}" ry="${(4 * k).toFixed(1)}" fill="#000" opacity=".35"/>
     <ellipse cx="0" cy="${k.toFixed(1)}" rx="${(17 * k).toFixed(1)}" ry="${(5.6 * k).toFixed(1)}" fill="none" stroke="${armyColor(owner)}" stroke-width="${(2 * k).toFixed(1)}" opacity=".9"/>
-    <image decoding="sync" href="${SPRITE_URL(fac, type, look.dir)}" x="${(-w8 / 2).toFixed(1)}" y="${(-h8 + 4 * k).toFixed(1)}" width="${w8.toFixed(1)}" height="${h8.toFixed(1)}"/>${bar8}`;
+    ${pic(SPRITE_URL(fac, type, look.dir), true8, -w8 / 2, -h8 + 4 * k, w8, h8)}${bar8}`;
   }
   const wanted: ViewId = AIMS_FORWARD[`${fac}/${type}`]?.includes(look.view) ? (look.view === 'front' ? 'fdiag' : set.bdiag ? 'bdiag' : 'side') : look.view;
   // A missing diagonal falls back to the straight view on the same side (front or back).
@@ -423,7 +458,7 @@ function figure(type: UnitTypeId, owner: Player, hp: number, k: number, look: Lo
   const flip = view !== 'front' && view !== 'back' && look.flip ? ' transform="scale(-1 1)"' : '';
   return `<ellipse cx="${(SHADOW[0] * 11 * k).toFixed(1)}" cy="${(k + SHADOW[1] * 5 * k).toFixed(1)}" rx="${(21 * k).toFixed(1)}" ry="${(6.5 * k).toFixed(1)}" fill="#1b2410" opacity=".32" class="cast"/><ellipse cx="0" cy="${k.toFixed(1)}" rx="${(13 * k).toFixed(1)}" ry="${(4 * k).toFixed(1)}" fill="#000" opacity=".35"/>
     <ellipse cx="0" cy="${k.toFixed(1)}" rx="${(17 * k).toFixed(1)}" ry="${(5.6 * k).toFixed(1)}" fill="none" stroke="${armyColor(owner)}" stroke-width="${(2 * k).toFixed(1)}" opacity=".9"/>
-    <image decoding="sync" href="${SPRITE_URL(fac, type, view)}" x="${(-w / 2).toFixed(1)}" y="${(-h + 4 * k).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"${flip}/>${bar}`;
+    ${pic(SPRITE_URL(fac, type, view), size, -w / 2, -h + 4 * k, w, h, flip !== '')}${bar}`;
 }
 
 /** Loaded pictures are held here for good: a picture nothing points at is dropped by the browser and
@@ -439,7 +474,7 @@ export function preloadFigures() {
   for (const av of ARROW_VIEWS) hold(`${import.meta.env.BASE_URL}pieces/arrow-${av}.webp?v=${ART_VERSION}`);
   for (const fac of [sides.red, sides.blue]) {
     for (const [type, set] of Object.entries(SPRITES[fac] ?? {})) {
-      for (const view of Object.keys(set)) hold(SPRITE_URL(fac, type, view));
+      for (const [view, nat] of Object.entries(set)) if (nat) sheetId(SPRITE_URL(fac, type, view), nat[0], nat[1]);
     }
   }
 }

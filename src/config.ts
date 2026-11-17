@@ -224,7 +224,7 @@ export const CONFIG: GameConfig = {
     stepMoves: true,
     toughness: 1,
     unitSpeeds: false,
-    runLimit: 4, // 4 per David, 2026-11-17 (3 felt too strict)
+    runLimit: 6, // 6 per David, 2026-11-17 (3, then 4, felt too strict)
   },
   army: {
     budget: 50,

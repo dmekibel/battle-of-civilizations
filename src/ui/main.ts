@@ -434,7 +434,8 @@ function overlay(s: GameState): Overlay {
     zone: s.phase === 'deploy' ? { owner: s.current, hexes: zoneHexes(s, s.current) } : null,
     // During setup the other side's army stays secret.
     hide: setupPhase(s) ? other(mode === 'online' && net ? net.me : s.current) : null,
-    spent: s.phase === 'act' ? spentUnits(s) : new Set(),
+    // Only your own finished pieces dim; the other side's turn shows every piece at full strength.
+    spent: s.phase === 'act' && !notMine(s) ? spentUnits(s) : new Set(),
     trail: battle ? lastEnemyTurn(s) : { moves: [], kills: [] },
     rings: own && CONFIG.units[own.type].ranged && !setupPhase(s) ? shotZone(s, own) : [],
     danger: dangerOn && battle ? threatZone(s) : [],
