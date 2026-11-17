@@ -27,7 +27,7 @@ const sixes = () => 5.5 / 6;
 
 describe('optional rules', () => {
   it('all are off by default', () => {
-    expect(CONFIG.options).toEqual({ firstTurnBonus: 0, carryMax: 0, routAt: null, shieldWall: false, spears: false, longShotFrom: null, volleys: null, charge: false, kingAura: false, zoneOfControl: false, rerolls: 0, kingsGuard: false, flanking: false, toughness: 1, unitSpeeds: false, runLimit: 3 });
+    expect(CONFIG.options).toEqual({ firstTurnBonus: 0, carryMax: 0, routAt: null, shieldWall: false, spears: false, longShotFrom: null, volleys: null, charge: false, kingAura: false, zoneOfControl: false, rerolls: 0, kingsGuard: false, flanking: false, stepMoves: true, toughness: 1, unitSpeeds: false, runLimit: 3 });
   });
 
   it('first-turn bonus: the second player gets extra points on turn 1 only', () => {
@@ -84,7 +84,7 @@ describe('optional rules', () => {
   });
 
   it('charge: cavalry that moved 3+ hexes this turn hits for +1', () => {
-    const cfg = withRule({ charge: true });
+    const cfg = withRule({ charge: true, stepMoves: false });
     let s = scenario(cfg, [['red', 'lightCavalry', 3, 0], ['blue', 'heavyInfantry', 3, 5]]);
     expect(previewStrike(ok(moveUnit(s, s.units[0].id, { col: 3, row: 4 }, cfg)), s.units[0].id, s.units[1].id, 'attack', cfg)!.damage).toBe(2);
     s = scenario(cfg, [['red', 'lightCavalry', 3, 3], ['blue', 'heavyInfantry', 3, 5]]);
@@ -157,5 +157,18 @@ describe('optional rules', () => {
     const alone = scenario(cfg, [['red', 'lightInfantry', 3, 3], ['blue', 'heavyInfantry', 3, 4]]);
     expect(previewStrike(alone, alone.units[0].id, alone.units[1].id, 'attack', cfg)!.damage).toBe(1);
     expect(previewStrike(s, s.units[0].id, s.units[1].id, 'attack', withRule({}))!.damage).toBe(1);
+  });
+
+  it('one step at a time: a move goes one point of hexes, and the piece can move again', () => {
+    const cfg = withRule({});
+    let s = scenario(cfg, [['red', 'lightInfantry', 3, 3], ['red', 'lightCavalry', 6, 3], ['blue', 'king', 20, 0]]);
+    const foot = [...reachable(s, s.units[0].id, cfg).values()];
+    expect(Math.max(...foot.map((r) => r.steps))).toBe(1);
+    const horse = [...reachable(s, s.units[1].id, cfg).values()];
+    expect(Math.max(...horse.map((r) => r.steps))).toBe(3);
+    s = ok(moveUnit(s, s.units[0].id, foot[0].hex, cfg));
+    expect(reachable(s, s.units[0].id, cfg).size).toBeGreaterThan(0);
+    const free = [...reachable(scenario(cfg, [['red', 'lightInfantry', 3, 3], ['blue', 'king', 20, 0]]), 'red-lightInfantry-0', withRule({ stepMoves: false })).values()];
+    expect(Math.max(...free.map((r) => r.steps))).toBe(3);
   });
 });

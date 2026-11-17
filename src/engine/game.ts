@@ -123,6 +123,8 @@ function search(s: GameState, unitId: string, cfg: GameConfig): { out: Map<strin
   // Search by hexes walked (every step is one hex); the price in points comes from the walk's length.
   // Top speed: what's left of this piece's hexes for the turn.
   const limit = cfg.options.runLimit !== null && !cfg.options.unitSpeeds ? cfg.options.runLimit * hexesPerPoint(u.type, cfg) - (u.ran ?? 0) : null;
+  // One step at a time: a single move covers at most one point's worth of hexes.
+  const stepLimit = cfg.options.stepMoves && !cfg.options.unitSpeeds ? Math.min(limit ?? Infinity, hexesPerPoint(u.type, cfg)) : limit;
   const best = new Map<string, number>([[key(u.pos), 0]]);
   // Small boards: a simple priority list is plenty.
   const open: Reach[] = [{ hex: u.pos, cost: 0, steps: 0 }];
@@ -139,7 +141,7 @@ function search(s: GameState, unitId: string, cfg: GameConfig): { out: Map<strin
       const occ = unitAt(s, n);
       if (occ && (occ.owner !== u.owner || !cfg.movement.passThroughFriendly)) continue;
       const steps = cur.steps + t.moveCostMultiplier;
-      if (limit !== null && steps > limit) continue;
+      if (stepLimit !== null && steps > stepLimit) continue;
       const cost = walkCost(u.type, steps, cfg);
       if (cost > s.points || steps >= (best.get(key(n)) ?? Infinity)) continue;
       best.set(key(n), steps);

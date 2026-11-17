@@ -107,7 +107,8 @@ function saveGame() {
 
 const saved = loadGame();
 /** The battle's settings; a saved game brings its own, a new one starts from the last used. */
-let settings: Settings = saved?.settings ?? loadSettings();
+// A game saved before a rule existed gets that rule's default.
+let settings: Settings = saved?.settings ? { ...saved.settings, options: { ...DADS_RULES, ...saved.settings.options } } : loadSettings();
 applySettings(settings);
 let sess: Session = startSession(saved?.state ?? newGame());
 /** The "New battle" screen, shown after picking how to play. */
@@ -530,6 +531,7 @@ const RULES: { key: keyof Settings['options']; on: Settings['options'][keyof Set
   { key: 'charge', on: true },
   { key: 'kingAura', on: true },
   { key: 'zoneOfControl', on: true },
+  { key: 'stepMoves', on: true },
   { key: 'kingsGuard', on: true },
   { key: 'flanking', on: true },
   { key: 'longShotFrom', on: 3 },
@@ -559,6 +561,7 @@ const RULE_ICON: Record<keyof Settings['options'], string> = {
   firstTurnBonus: '<path d="M12 5v14M5 12h14" fill="none"/>',
   routAt: '<path d="M6 21V3M6 4h11l-3 4 3 4H6" />',
   flanking: '<path d="M3 7l6 5-6 5M21 7l-6 5 6 5" fill="none"/><circle cx="12" cy="12" r="2.5"/>',
+  stepMoves: '<path d="M5 19h4v-4h4v-4h4V7h3" fill="none"/>',
   rerolls: '<path d="M19 8a8 8 0 1 0 1 6" fill="none"/><path d="M20 3v5h-5"/>',
   kingsGuard: '<path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z" fill="none"/><path d="M8.5 13.5V10l2 1.5L12 9l1.5 2.5 2-1.5v3.5z"/>',
 };
@@ -566,7 +569,7 @@ const RULE_ICON: Record<keyof Settings['options'], string> = {
 const RULE_GROUPS: { title: Key; color: string; keys: (keyof Settings['options'])[] }[] = [
   { title: 'groupCombat', color: '#c2453a', keys: ['toughness', 'flanking', 'shieldWall', 'spears', 'charge', 'kingAura', 'kingsGuard'] },
   { title: 'groupRanged', color: '#3f8f5a', keys: ['longShotFrom', 'volleys'] },
-  { title: 'groupMove', color: '#3a6fb0', keys: ['unitSpeeds', 'zoneOfControl'] },
+  { title: 'groupMove', color: '#3a6fb0', keys: ['stepMoves', 'unitSpeeds', 'zoneOfControl'] },
   { title: 'groupTurn', color: '#a8811a', keys: ['routAt', 'carryMax', 'rerolls', 'firstTurnBonus'] },
 ];
 

@@ -92,6 +92,15 @@ function fieldFor(s: GameState, u: Unit, goal: Hex, cfg: GameConfig, fields: Fie
   return f;
 }
 
+/** The turn of the last attack or shot (0 if none yet). */
+function lastFight(s: GameState): number {
+  for (let i = s.log.length - 1; i >= 0; i--) {
+    const e = s.log[i];
+    if (e.kind === 'attack' || e.kind === 'shoot') return e.turn;
+  }
+  return 0;
+}
+
 function moveScore(s: GameState, u: Unit, to: Hex, cost: number, cfg: GameConfig, fields: Fields): number {
   const left = s.points - cost;
   const rules = cfg.units[u.type];
@@ -110,10 +119,13 @@ function moveScore(s: GameState, u: Unit, to: Hex, cost: number, cfg: GameConfig
   const gain = (dist.get(key(u.pos)) ?? Infinity) - after;
   if (!(gain > 0)) return -1;
   // March as an army: pieces running far ahead of the middle of their own line are held back.
-  const ahead = Math.max(0, line - after - 3);
+  const quiet = s.turn - lastFight(s);
+  const caution = Math.max(0, 1 - Math.max(0, quiet - 3) / 4);
+  const ahead = Math.max(0, line - after - 3) * caution;
   // Archers stop at shooting range rather than walking into the enemy line.
   if (rules.ranged && distance(to, goal) < rules.ranged.minRange) return -1;
-  const risk = danger(s, u, to, cfg) >= u.hp ? worth(u.type, cfg) * 2 : 0;
+  // Caution fades as a quiet battle drags on, so two careful armies never just stare at each other.
+  const risk = danger(s, u, to, cfg) >= u.hp ? worth(u.type, cfg) * 2 * caution : 0;
   return gain * 2 - cost * 0.15 - risk - ahead * 2.5;
 }
 

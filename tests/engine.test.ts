@@ -27,7 +27,9 @@ import {
 } from '../src/engine';
 
 /** Same rules, but an empty field: no river, no forest. */
-const OPEN: GameConfig = { ...CONFIG, board: { ...CONFIG.board, riverCol: null, bridgeRows: [], forests: [] } };
+// Movement tests move pieces several hexes in one go, so the one-step-at-a-time rule is off here (tested in options.test.ts).
+const WHOLE: GameConfig = { ...CONFIG, options: { ...CONFIG.options, stepMoves: false } };
+const OPEN: GameConfig = { ...WHOLE, board: { ...CONFIG.board, riverCol: null, bridgeRows: [], forests: [] } };
 
 type Spec = [Player, UnitTypeId, number, number];
 
@@ -217,13 +219,13 @@ describe('movement', () => {
 
   it('crosses the river only at a bridge', () => {
     const R = CONFIG.board.riverCol!;
-    const s = scenario([['red', 'lightCavalry', R - 1, 7]], 18, CONFIG);
-    const reach = reachable(s, s.units[0].id, CONFIG);
+    const s = scenario([['red', 'lightCavalry', R - 1, 7]], 18, WHOLE);
+    const reach = reachable(s, s.units[0].id, WHOLE);
     expect(reach.has(`${R},7`)).toBe(false); // river
     expect(reach.has(`${R},${CONFIG.board.bridgeRows[0]}`)).toBe(true); // bridge
     // Straight across is 2 hexes, but the detour via a bridge costs more.
     expect(reach.get(`${R + 1},7`)!.cost).toBeGreaterThan(2);
-    const noBridges = { ...CONFIG, board: { ...CONFIG.board, bridgeRows: [] } };
+    const noBridges = { ...WHOLE, board: { ...CONFIG.board, bridgeRows: [] } };
     const s2 = scenario([['red', 'lightCavalry', R - 1, 7]], 18, noBridges);
     expect([...reachable(s2, s2.units[0].id, noBridges).values()].every((r) => r.hex.col < R)).toBe(true);
   });

@@ -129,6 +129,9 @@ export interface GameConfig {
     zoneOfControl: boolean;
     /** Rerolls: each side may roll its dice again this many times per battle, before doing anything that turn. */
     rerolls: number;
+    /** One step at a time: a move goes at most one point's worth of hexes (foot 1, heavy horse 2, light horse 3);
+     *  a piece can move again in the same turn, up to its top speed. Same cost per hex as moving in one go. */
+    stepMoves: boolean;
     /** Flanking: a melee attack hits for +1 when another of your pieces also touches the target from a different side. */
     flanking: boolean;
     /** King's guard: the King can't be attacked or shot while one of his own pieces stands next to him. */
@@ -215,6 +218,7 @@ export const CONFIG: GameConfig = {
     rerolls: 0,
     kingsGuard: false,
     flanking: false,
+    stepMoves: true,
     toughness: 1,
     unitSpeeds: false,
     runLimit: 3,
