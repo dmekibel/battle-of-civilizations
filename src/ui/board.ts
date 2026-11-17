@@ -328,7 +328,9 @@ export const STEP_MS = 130;
 /** Pieces that fire guns: a quick tracer and smoke instead of an arrow in flight. */
 const GUNS = new Set<UnitTypeId>(['gunslinger', 'rifleman', 'cowboy']);
 /** When the blow lands after the attack starts (seconds): arrows fly, bullets and blades are quick. */
-const impact = (h: Effects['hits'][number]) => (h.shotFrom ? (h.by && GUNS.has(h.by) ? 0.22 : 0.42) : 0.14);
+/** How long an arrow is in the air (seconds): slow enough to follow with the eye. */
+export const ARROW_S = 0.65;
+const impact = (h: Effects['hits'][number]) => (h.shotFrom ? (h.by && GUNS.has(h.by) ? 0.22 : ARROW_S) : 0.14);
 const same = (a: Hex | undefined, b: Hex) => !!a && a.col === b.col && a.row === b.row;
 /** Eight short rays: the flash of a blow landing. */
 const RAYS = Array.from({ length: 8 }, (_, i) => {
@@ -596,11 +598,11 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
         // or away; side and diagonal views are mirrored when it flies to the left (an arrow has no left or right hand).
         const rx = hx - sx, ry = (ty - y0) / Math.max(0.2, Math.cos(tiltAngle(v)));
         const av = ARROW_VIEWS[Math.round(Math.atan2(Math.abs(rx), ry) / (Math.PI / 4))];
-        const [aw, ah] = ARROWS[av].map((n) => n * (36 / ARROWS.side[0]));
+        const [aw, ah] = ARROWS[av].map((n) => n * (46 / ARROWS.side[0]));
         const amirror = rx < 0 && av !== 'toward' && av !== 'away' ? ' transform="scale(-1 1)"' : '';
         top.push(`<g class="flight"><image href="${import.meta.env.BASE_URL}pieces/arrow-${av}.webp?v=${ART_VERSION}" x="${(-aw / 2).toFixed(1)}" y="${(-ah / 2).toFixed(1)}" width="${aw.toFixed(1)}" height="${ah.toFixed(1)}"${amirror}/>
           <animateMotion dur="${d}s" fill="freeze" path="M${sx.toFixed(1)} ${y0.toFixed(1)}Q${mx.toFixed(1)} ${my.toFixed(1)} ${hx.toFixed(1)} ${ty.toFixed(1)}"/>
-          <animate attributeName="opacity" values="1;1;0" keyTimes="0;.75;1" dur="${d + 0.15}s" fill="freeze"/></g>`);
+          <animate attributeName="opacity" values="1;1;0" keyTimes="0;.8;1" dur="${d + 0.25}s" fill="freeze"/></g>`);
       }
     }
     top.push(`<g transform="translate(${hx.toFixed(1)} ${ty.toFixed(1)})"><path class="spark" style="animation-delay:${d}s" d="${RAYS}"/></g>`);

@@ -48,7 +48,7 @@ import {
   type Result,
   type Session,
 } from '../engine';
-import { GROUND_SIZE, GROUND_URL, NO_EFFECTS, STEP_MS, groundTransform, hasGround, hexOnMap, loadGround, mapSize, renderBoard, screenToGround, viewCube, type Camera, type Effects, type Overlay } from './board';
+import { ARROW_S, GROUND_SIZE, GROUND_URL, NO_EFFECTS, STEP_MS, groundTransform, hasGround, hexOnMap, loadGround, mapSize, renderBoard, screenToGround, viewCube, type Camera, type Effects, type Overlay } from './board';
 import { errorText, logText, playerName, reasonText, t, unitName, type Key, type Lang } from './i18n';
 import { unitIcon } from './symbols';
 import { FACTIONS, FACTION_ORDER, factionOf, rosterOf, sides, type FactionId } from './factions';
@@ -929,6 +929,9 @@ function setZoom(factor: number) {
 /** Pieces that fire guns, and which gunshot they make. */
 const GUN_SOUND: Partial<Record<UnitTypeId, 'pistol' | 'rifle'>> = { gunslinger: 'pistol', cowboy: 'pistol', rifleman: 'rifle' };
 
+/** When the animations now on the board are over (ms clock); the computer waits for it before redrawing. */
+let fxUntil = 0;
+
 /** Effects and sounds for log entries added since the last render. */
 function effects(s: GameState): Effects {
   const fresh: LogEntry[] = s.log.length > prevLog ? s.log.slice(prevLog) : [];
@@ -945,9 +948,10 @@ function effects(s: GameState): Effects {
       const gun = e.kind === 'shoot' && GUN_SOUND[e.unit];
       let lands = 0.14;
       if (gun) (sound(gun), (lands = 0.22));
-      else if (e.kind === 'shoot') (sound('bow'), sound('thunk', 0.42), (lands = 0.42));
+      else if (e.kind === 'shoot') (sound('bow'), sound('thunk', ARROW_S), (lands = ARROW_S));
       else sound('clash', 0.1);
       if (e.killed) sound('death', lands + 0.15);
+      fxUntil = Math.max(fxUntil, Date.now() + lands * 1000 + 900);
     } else if (e.kind === 'move') {
       // A footstep (or hoofbeat) for every hex walked, in time with the piece.
       const hoof = !!CONFIG.units[e.unit]?.mounted;
@@ -1086,11 +1090,15 @@ function scheduleAi() {
   // so a volley never looks like one click doing several attacks at once.
   const next = s.phase === 'act' ? aiNextAction(s) : null;
   const strike = next && (next.kind === 'attack' || next.kind === 'shoot');
-  if (strike) {
+  // Let the last blow finish playing before the board is drawn again, or its arrow would be wiped mid-flight.
+  const wait = Math.max(0, fxUntil - Date.now());
+  const mark = () => {
+    if (!next || !strike || !aiTurn(sess.state)) return;
     aiAim = next.targetId;
     selected = next.unitId;
     message = `${playerName(lang, s.current)}: ${unitName(lang, getUnit(s, next.unitId)!.type, s.current)} → ${unitName(lang, getUnit(s, next.targetId)!.type, other(s.current)).toLowerCase()}`;
-  }
+    render();
+  };
   aiTimer = window.setTimeout(() => {
     aiTimer = null;
     aiAim = null;
@@ -1102,9 +1110,9 @@ function scheduleAi() {
       run((x) => applyAi(x, a));
       if (a.kind === 'attack' || a.kind === 'shoot') selected = null;
     } else run((x) => endTurn(x), true);
-  }, s.phase === 'roll' ? 700 : strike ? 1300 : Math.max(650, 350 + walkTime(s)));
-  // Drawn after the timer is set, so this render doesn't schedule a second move.
-  if (strike) render();
+  }, wait + (s.phase === 'roll' ? 1000 : strike ? 1700 : Math.max(1100, 650 + walkTime(s))));
+  // The target is marked once the timer is set, so that render doesn't schedule a second move.
+  if (strike) wait ? setTimeout(mark, wait) : mark();
 }
 
 /** How long the last move's walk takes to play, in ms (the computer waits for it). */
