@@ -811,7 +811,7 @@ function setupScreen(): string {
   // Armies grouped by the age they fought in.
   const tiles = ERAS.filter((era) => READY().some((id) => ERA_OF[id] === era)).map((era) => `<h4 class="era">${t(lang, `era${era[0].toUpperCase()}${era.slice(1)}` as Key)}</h4><div class="ftiles">${READY().filter((id) => ERA_OF[id] === era).map(tile).join('')}</div>`).join('');
 
-  const mapTiles = (['river', 'fords', 'noford', 'island', 'pass', 'longwood', 'lake', 'open', 'forest', 'castles', 'siege', 'village', 'random'] as MapId[]) // High ground and Marsh road are shelved until they look right (David, 2026-11-17)
+  const mapTiles = (['river', 'fords', 'noford', 'island', 'pass', 'longwood', 'lake', 'ridge', 'open', 'forest', 'castles', 'siege', 'village', 'random'] as MapId[]) // Marsh road is shelved until it looks right; High ground back with raised terraces (David, 2026-11-17)
     .map((m) => {
       const label = t(lang, `map${m[0].toUpperCase()}${m.slice(1)}` as Key);
       return `<button data-act="set" data-field="map" data-value="${m}" class="mtile ${settings.map === m ? 'on' : ''}" aria-pressed="${settings.map === m}">${mapThumb(m)}<span>${label}</span></button>`;
