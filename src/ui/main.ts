@@ -633,7 +633,7 @@ function setupScreen(): string {
         .join('')}</div></div>`).join('');
 
   return `<div class="sheet"><div class="sheet-body setup">
-    <h2>${t(lang, 'newBattle')}</h2>
+    <h2><button data-act="setup-back" class="ghost back" aria-label="${t(lang, 'back')}">${icon('back')}</button>${t(lang, 'newBattle')}</h2>
     <div class="sheet-scroll">
       <div class="vs">
         ${side('red', mode === 'ai' ? t(lang, 'sideYou') : t(lang, 'sideFirst'))}
@@ -798,6 +798,7 @@ function menu(s: GameState): string {
 
 /** One icon family for the game's buttons: 24-point grid, 2.2 stroke, round ends. */
 const ICON = {
+  back: '<path d="M15 5l-7 7 7 7"/>',
   undo: '<path d="M9 7L4 12l5 5"/><path d="M4 12h10a5 5 0 0 1 0 10h-3"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
   flip: '<path d="M7 4v16M7 4L3.5 7.5M7 4l3.5 3.5M17 20V4M17 20l-3.5-3.5M17 20l3.5-3.5"/>',
@@ -1258,6 +1259,11 @@ app.addEventListener('click', (e) => {
       }
       return;
     }
+    case 'setup-back':
+      // Picked the wrong mode: back to "how do you want to play?".
+      setupOpen = false;
+      choosing = true;
+      return render();
     case 'mode':
       mode = btn!.getAttribute('data-mode') === 'ai' ? 'ai' : 'pvp';
       choosing = false;

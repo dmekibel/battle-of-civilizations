@@ -355,6 +355,7 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 
 /* New battle screen */
 .setup h2 { margin-bottom: 8px; }
+.setup h2 .back { padding: 4px; margin: 0 2px 0 -8px; color: var(--muted); display: grid; place-items: center; }
 .setup h3 { margin: 22px 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); font-weight: 700; }
 .setup .blurb { margin: 10px 2px 0; font-size: 13px; line-height: 1.4; color: var(--muted); }
 
