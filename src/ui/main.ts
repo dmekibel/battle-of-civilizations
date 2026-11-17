@@ -1610,7 +1610,7 @@ for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
 
 // ---------- trackpad and mouse wheel ----------
 // Two-finger swipe slides the camera over the board; pinch (ctrl + wheel) zooms about the
-// pointer; Option + swipe tilts (up / down) and orbits (left / right). A mouse wheel's
+// pointer; Option + swipe up / down zooms (Option + click-drag orbits, as in Maya). A mouse wheel's
 // big, whole-line steps zoom instead, as in most 3D programs.
 app.addEventListener(
   'wheel',
@@ -1621,13 +1621,8 @@ app.addEventListener(
     const unit = e.deltaMode === 1 ? 16 : 1;
     const mouseWheel = e.deltaMode === 1 || (e.deltaX === 0 && Math.abs(e.deltaY) >= 50 && Number.isInteger(e.deltaY));
     if (e.ctrlKey) zoomAt(Math.exp(-e.deltaY / 100), px, py);
-    else if (e.altKey) {
-      cam = {
-        ...cam,
-        yaw: cam.yaw + e.deltaX * flipSign() * unit * 0.004,
-        pitch: tilt ? clampPitch(cam.pitch + e.deltaY * flipSign() * unit * 0.0025) : cam.pitch,
-      };
-    } else if (mouseWheel) zoomAt(Math.exp((-e.deltaY * unit) / 500), px, py);
+    else if (e.altKey) zoomAt(Math.exp((-e.deltaY * unit) / 300), px, py); // Option + swipe up/down zooms, as in Maya
+    else if (mouseWheel) zoomAt(Math.exp((-e.deltaY * unit) / 500), px, py);
     else panBy(-e.deltaX * flipSign(), -e.deltaY * flipSign());
     camFrame();
     clearTimeout(wheelEnd);
