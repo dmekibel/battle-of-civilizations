@@ -897,6 +897,9 @@ function setZoom(factor: number) {
   render();
 }
 
+/** Pieces that fire guns, and which gunshot they make. */
+const GUN_SOUND: Partial<Record<UnitTypeId, 'pistol' | 'rifle'>> = { gunslinger: 'pistol', cowboy: 'pistol', rifleman: 'rifle' };
+
 /** Effects and sounds for log entries added since the last render. */
 function effects(s: GameState): Effects {
   const fresh: LogEntry[] = s.log.length > prevLog ? s.log.slice(prevLog) : [];
@@ -909,10 +912,19 @@ function effects(s: GameState): Effects {
     }
     if (e.kind === 'attack' || e.kind === 'shoot') {
       fx.hits.push({ at: e.at, damage: e.damage, killed: e.killed, type: e.target, owner: other(e.player), shotFrom: e.kind === 'shoot' ? e.from : null, by: e.unit, from: e.from, advanced: !!e.advanced });
-      sound(e.kind === 'shoot' ? 'arrow' : 'clash');
-      if (e.killed) setTimeout(() => sound('death'), 180);
-    } else if (e.kind === 'move') sound('step');
-    else if (e.kind === 'win') setTimeout(() => sound('win'), 400);
+      // Timed to the board's animation: the blow lands at the same moment the hit flashes.
+      const gun = e.kind === 'shoot' && GUN_SOUND[e.unit];
+      let lands = 0.14;
+      if (gun) (sound(gun), (lands = 0.22));
+      else if (e.kind === 'shoot') (sound('bow'), sound('thunk', 0.42), (lands = 0.42));
+      else sound('clash', 0.1);
+      if (e.killed) sound('death', lands + 0.15);
+    } else if (e.kind === 'move') {
+      // A footstep (or hoofbeat) for every hex walked, in time with the piece.
+      const hoof = !!CONFIG.units[e.unit]?.mounted;
+      const steps = Math.max(1, e.path?.length ?? 1);
+      for (let i = 0; i < steps; i++) sound(hoof ? 'hoof' : 'step', (i * STEP_MS) / 1000);
+    } else if (e.kind === 'win') setTimeout(() => sound(mode === 'ai' && e.player === AI_SIDE ? 'lose' : 'win'), 400);
   }
   prevLog = s.log.length;
   prevPos = new Map(s.units.map((u) => [u.id, u.pos]));
