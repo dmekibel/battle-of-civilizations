@@ -287,6 +287,12 @@ const AIMS_FORWARD: Record<string, ViewId[]> = {
   'mongols/horseArcher': ['front', 'back'],
 };
 
+/** The carved arrow picture's size in pixels. */
+const [ARROW_W, ARROW_H] = [240, 29];
+
+/** Screen direction shadows fall in (away from the sun), set per render. */
+let SHADOW: Pt = [0.6, 0.4];
+
 /** Pixels of figure art per map unit at size 1: pictures are exported with a 150 px base; a foot figure stands about 49 units tall. */
 const ART_SCALE = 0.26 * 80 / 150;
 const SPRITE_URL = (fac: string, type: string, view: string) => `${import.meta.env.BASE_URL}pieces/${fac}/${type}-${view}.webp?v=${ART_VERSION}`;
@@ -304,7 +310,7 @@ function figure(type: UnitTypeId, owner: Player, hp: number, k: number, look: Lo
     const [w8, h8] = [true8[0] * ART_SCALE * k, true8[1] * ART_SCALE * k];
     const full8 = maxHp(type);
     const bar8 = hp > 0 && hp < full8 ? `<g transform="translate(0 ${(7 * k).toFixed(1)}) scale(${(0.7 * k).toFixed(3)}) translate(0 -16)">${healthBar(hp, full8)}</g>` : '';
-    return `<ellipse cx="0" cy="${k.toFixed(1)}" rx="${(16 * k).toFixed(1)}" ry="${(5 * k).toFixed(1)}" fill="#000" opacity=".3"/>
+    return `<ellipse cx="${(SHADOW[0] * 11 * k).toFixed(1)}" cy="${(k + SHADOW[1] * 5 * k).toFixed(1)}" rx="${(21 * k).toFixed(1)}" ry="${(6.5 * k).toFixed(1)}" fill="#1b2410" opacity=".32" class="cast"/><ellipse cx="0" cy="${k.toFixed(1)}" rx="${(13 * k).toFixed(1)}" ry="${(4 * k).toFixed(1)}" fill="#000" opacity=".35"/>
     <ellipse cx="0" cy="${k.toFixed(1)}" rx="${(17 * k).toFixed(1)}" ry="${(5.6 * k).toFixed(1)}" fill="none" stroke="${armyColor(owner)}" stroke-width="${(2 * k).toFixed(1)}" opacity=".9"/>
     <image decoding="sync" href="${SPRITE_URL(fac, type, look.dir)}" x="${(-w8 / 2).toFixed(1)}" y="${(-h8 + 4 * k).toFixed(1)}" width="${w8.toFixed(1)}" height="${h8.toFixed(1)}"/>${bar8}`;
   }
@@ -317,7 +323,7 @@ function figure(type: UnitTypeId, owner: Player, hp: number, k: number, look: Lo
   const full = maxHp(type);
   const bar = hp > 0 && hp < full ? `<g transform="translate(0 ${(7 * k).toFixed(1)}) scale(${(0.7 * k).toFixed(3)}) translate(0 -16)">${healthBar(hp, full)}</g>` : '';
   const flip = view !== 'front' && view !== 'back' && look.flip ? ' transform="scale(-1 1)"' : '';
-  return `<ellipse cx="0" cy="${k.toFixed(1)}" rx="${(16 * k).toFixed(1)}" ry="${(5 * k).toFixed(1)}" fill="#000" opacity=".3"/>
+  return `<ellipse cx="${(SHADOW[0] * 11 * k).toFixed(1)}" cy="${(k + SHADOW[1] * 5 * k).toFixed(1)}" rx="${(21 * k).toFixed(1)}" ry="${(6.5 * k).toFixed(1)}" fill="#1b2410" opacity=".32" class="cast"/><ellipse cx="0" cy="${k.toFixed(1)}" rx="${(13 * k).toFixed(1)}" ry="${(4 * k).toFixed(1)}" fill="#000" opacity=".35"/>
     <ellipse cx="0" cy="${k.toFixed(1)}" rx="${(17 * k).toFixed(1)}" ry="${(5.6 * k).toFixed(1)}" fill="none" stroke="${armyColor(owner)}" stroke-width="${(2 * k).toFixed(1)}" opacity=".9"/>
     <image decoding="sync" href="${SPRITE_URL(fac, type, view)}" x="${(-w / 2).toFixed(1)}" y="${(-h + 4 * k).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"${flip}/>${bar}`;
 }
@@ -328,6 +334,7 @@ export function preloadFigures() {
   const key = `${sides.red}/${sides.blue}`;
   if (key === preloaded || typeof Image === 'undefined') return;
   preloaded = key;
+  new Image().src = `${import.meta.env.BASE_URL}pieces/arrow.webp?v=${ART_VERSION}`;
   for (const fac of [sides.red, sides.blue]) {
     for (const [type, set] of Object.entries(SPRITES[fac] ?? {})) {
       for (const view of Object.keys(set)) new Image().src = SPRITE_URL(fac, type, view);
@@ -421,7 +428,7 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
     const [cx, cy] = L.pt(x, y);
     ground.push(
       `<polygon points="${corners(hex, v, L, S - 3)}" fill="#fffbe0" fill-opacity=".28" stroke="#fff3a6" stroke-width="2.5"/>`,
-      `<text x="${cx.toFixed(1)}" y="${(cy + 5).toFixed(1)}" class="cost">−${cost}</text>`,
+      `<text x="${cx.toFixed(1)}" y="${(cy + 5).toFixed(1)}" class="cost">${cost}</text>`,
     );
   }
 
@@ -497,11 +504,7 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
         // The arrow flies in an arc, turning to follow its path, and lands on the target.
         const mx = (sx + hx) / 2;
         const my = (y0 + ty) / 2 - (Math.hypot(hx - sx, ty - y0) * 0.28 + 10);
-        top.push(`<g class="flight"><g transform="scale(1.5)">
-          <line x1="-13" y1="0" x2="8" y2="0" class="shaft"/>
-          <path d="M12.5 0L7.6 -2.5L8.6 0L7.6 2.5Z" class="head"/>
-          <path d="M-8 0L-15.5 -3.8L-13.5 0Z" class="fletch"/><path d="M-8 0L-15.5 3.8L-13.5 0Z" class="fletch b"/>
-        </g>
+        top.push(`<g class="flight"><image href="${import.meta.env.BASE_URL}pieces/arrow.webp?v=${ART_VERSION}" x="-24" y="-2.2" width="36" height="${(36 * ARROW_H / ARROW_W).toFixed(1)}"/>
           <animateMotion dur="${d}s" fill="freeze" rotate="auto" path="M${sx.toFixed(1)} ${y0.toFixed(1)}Q${mx.toFixed(1)} ${my.toFixed(1)} ${hx.toFixed(1)} ${ty.toFixed(1)}"/>
           <animate attributeName="opacity" values="1;1;0" keyTimes="0;.75;1" dur="${d + 0.15}s" fill="freeze"/></g>`);
       }
@@ -516,7 +519,29 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
 
   // Paint from the back of the board to the front so nearer things overlap farther ones.
   standing.sort((a, b) => a.depth - b.depth);
-  const body = ground.join('') + standing.map((x) => x.svg).join('') + top.join('');
+  // Atmosphere: warm sun from the board's far-left corner and cool shade opposite (turns with the board),
+  // slow cloud shadows, and haze over the far edge when the board is tilted.
+  const [fw, fh] = mapSize(v.portrait);
+  const [sunX, sunY] = L.pt(-0.25 * fw, -0.35 * fh);
+  const [mx, my] = L.pt(fw / 2, fh / 2);
+  const [fx2, fy2] = L.pt(fw / 2 + 40, fh / 2 + 40);
+  const sl = Math.hypot(fx2 - mx, fy2 - my) || 1;
+  SHADOW = [(fx2 - mx) / sl, (fy2 - my) / sl];
+  const reach = Math.hypot(...L.pt(1.2 * fw, 1.3 * fh).map((c, i) => c - [sunX, sunY][i]) as [number, number]);
+  const W = L.width.toFixed(0), H = L.height.toFixed(0);
+  const light = `<defs>
+      <radialGradient id="sun" gradientUnits="userSpaceOnUse" cx="${sunX.toFixed(0)}" cy="${sunY.toFixed(0)}" r="${reach.toFixed(0)}">
+        <stop offset="0" stop-color="#ffd27a" stop-opacity=".30"/><stop offset=".45" stop-color="#ffd27a" stop-opacity=".06"/>
+        <stop offset=".75" stop-color="#1e2c4a" stop-opacity=".10"/><stop offset="1" stop-color="#14203a" stop-opacity=".30"/>
+      </radialGradient>
+      <linearGradient id="haze" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#dfe8f0" stop-opacity=".34"/><stop offset=".42" stop-color="#dfe8f0" stop-opacity="0"/></linearGradient>
+      <clipPath id="boardclip"><polygon points="${[[-20, -20], [fw + 20, -20], [fw + 20, fh + 20], [-20, fh + 20]].map(([x, y]) => L.pt(x, y).map((c) => c.toFixed(0)).join(',')).join(' ')}"/></clipPath>
+      <filter id="cloudblur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="38"/></filter>
+    </defs>
+    <rect class="light" width="${W}" height="${H}" fill="url(#sun)" clip-path="url(#boardclip)"/>
+    <g clip-path="url(#boardclip)"><g class="clouds" filter="url(#cloudblur)"><ellipse cx="${(+W * 0.2).toFixed(0)}" cy="${(+H * 0.35).toFixed(0)}" rx="${(+W * 0.16).toFixed(0)}" ry="${(+H * 0.09).toFixed(0)}"/><ellipse cx="${(+W * 0.75).toFixed(0)}" cy="${(+H * 0.7).toFixed(0)}" rx="${(+W * 0.2).toFixed(0)}" ry="${(+H * 0.1).toFixed(0)}"/></g></g>`;
+  const haze = L.tilt ? `<rect class="light" width="${W}" height="${H}" fill="url(#haze)" clip-path="url(#boardclip)"/>` : '';
+  const body = ground.join('') + light + standing.map((x) => x.svg).join('') + haze + top.join('');
   return `<svg class="board ${L.tilt ? 'tilted' : ''}" viewBox="0 0 ${L.width.toFixed(0)} ${L.height.toFixed(0)}" role="img">${body}</svg>`;
 }
 

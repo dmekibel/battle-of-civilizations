@@ -468,3 +468,12 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 .phone .zoom { bottom: 64px; right: max(8px, env(safe-area-inset-right, 0px)); }
 .phone .viewcube { left: max(8px, env(safe-area-inset-left, 0px)); top: max(8px, env(safe-area-inset-top, 0px)); width: 52px; height: 52px; }
 .phone .cam { left: max(8px, env(safe-area-inset-left, 0px)); bottom: max(8px, env(safe-area-inset-bottom, 0px)); }
+
+/* Atmosphere layers never catch taps; clouds drift slowly; the screen edges fall softly into shade. */
+.board .light, .board .clouds { pointer-events: none; }
+.board .clouds ellipse { fill: #0c1408; opacity: .16; }
+.board .clouds { animation: clouds 90s linear infinite alternate; }
+@keyframes clouds { from { transform: translate(-6%, -2%); } to { transform: translate(8%, 3%); } }
+.stage-wrap::after { content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+  background: radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(8, 12, 6, .38) 100%); z-index: 1; }
+@media (prefers-reduced-motion: reduce) { .board .clouds { animation: none; } }
