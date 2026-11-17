@@ -1020,6 +1020,7 @@ function zoomAt(factor: number, X: number, Y: number) {
 
 /** Slide what the camera looks at across the map, keeping it over the board. */
 function moveTarget(dx: number, dy: number) {
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) return; // a screen with no size yet gives no sensible answer
   const [fw, fh] = mapSize(portrait);
   cam = {
     ...cam,
