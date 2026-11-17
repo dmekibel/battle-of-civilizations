@@ -603,8 +603,9 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
     const [x, y] = flat(hex, v);
     const [cx, cy] = L.pt(x, y);
     ground.push(
-      `<polygon points="${corners(hex, v, L, S - 3)}" fill="#fffbe0" fill-opacity=".28" stroke="#fff3a6" stroke-width="2.5"/>`,
-      `<text x="${cx.toFixed(1)}" y="${(cy + 5).toFixed(1)}" class="cost">${cost}</text>`,
+      // A light wash, so the board still looks like a board; the cost numbers come with the hex labels switch.
+      `<polygon points="${corners(hex, v, L, S - 3)}" fill="#fffbe0" fill-opacity=".13" stroke="#fff3a6" stroke-opacity=".5" stroke-width="1.2"/>`,
+      v.labels ? `<text x="${cx.toFixed(1)}" y="${(cy + 5).toFixed(1)}" class="cost">${cost}</text>` : '',
     );
   }
 
