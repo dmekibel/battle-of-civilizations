@@ -127,8 +127,12 @@ function stopLine() {
   now = null;
 }
 
+const SPOKEN = new Set<Moment>(['select', 'move', 'victory', 'entrance']);
+
 function playLine(army: string, type: UnitTypeId, moment: Moment, near: boolean): boolean {
   if (!voicesOn || isMuted()) return false;
+  // Words are off for now (David, 2026-11-18): only wordless war cries, grunts and death cries play.
+  if (SPOKEN.has(moment)) return false;
   const c = audio();
   if (!c) return false;
   const takes = takesFor(army, type, moment);

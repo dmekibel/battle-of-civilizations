@@ -252,8 +252,10 @@ export function placeWeather(wrap: HTMLElement, clip: HTMLElement, groundTransfo
     const corner = Math.max(...[[0, 0], [clip.clientWidth, 0], [0, clip.clientHeight], [clip.clientWidth, clip.clientHeight]].map(([x, y]) => Math.hypot(x - sx, y - sy)));
     const r = Math.max(200, Math.hypot(ex - sx, ey - sy), corner / 2);
     for (const e of clip.querySelectorAll<HTMLElement>('.wx-light, .wx-warm')) {
-      e.style.width = e.style.height = `${(4 * r).toFixed(0)}px`;
-      e.style.transform = `translate(${(sx - 2 * r).toFixed(1)}px, ${(sy - 2 * r).toFixed(1)}px)`;
+      // iPhones refuse to draw a layer of many thousand pixels (a blank board on the large map), so cap it.
+      const half = Math.min(2 * r, 1400);
+      e.style.width = e.style.height = `${(2 * half).toFixed(0)}px`;
+      e.style.transform = `translate(${(sx - half).toFixed(1)}px, ${(sy - half).toFixed(1)}px)`;
     }
   }
 
