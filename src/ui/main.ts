@@ -22,6 +22,8 @@ import {
   quickStart,
   reachable,
   rollDice,
+  reroll,
+  canReroll,
   shoot,
   routeTo,
   startSession,
@@ -528,9 +530,11 @@ const RULES: { key: keyof Settings['options']; on: Settings['options'][keyof Set
   { key: 'charge', on: true },
   { key: 'kingAura', on: true },
   { key: 'zoneOfControl', on: true },
+  { key: 'kingsGuard', on: true },
   { key: 'longShotFrom', on: 3 },
   { key: 'volleys', on: 6 },
   { key: 'carryMax', on: 3 },
+  { key: 'rerolls', on: 1 },
   { key: 'firstTurnBonus', on: 2 },
 ];
 
@@ -553,13 +557,15 @@ const RULE_ICON: Record<keyof Settings['options'], string> = {
   carryMax: '<ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5" fill="none"/>',
   firstTurnBonus: '<path d="M12 5v14M5 12h14" fill="none"/>',
   routAt: '<path d="M6 21V3M6 4h11l-3 4 3 4H6" />',
+  rerolls: '<path d="M19 8a8 8 0 1 0 1 6" fill="none"/><path d="M20 3v5h-5"/>',
+  kingsGuard: '<path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z" fill="none"/><path d="M8.5 13.5V10l2 1.5L12 9l1.5 2.5 2-1.5v3.5z"/>',
 };
 
 const RULE_GROUPS: { title: Key; color: string; keys: (keyof Settings['options'])[] }[] = [
-  { title: 'groupCombat', color: '#c2453a', keys: ['toughness', 'shieldWall', 'spears', 'charge', 'kingAura'] },
+  { title: 'groupCombat', color: '#c2453a', keys: ['toughness', 'shieldWall', 'spears', 'charge', 'kingAura', 'kingsGuard'] },
   { title: 'groupRanged', color: '#3f8f5a', keys: ['longShotFrom', 'volleys'] },
   { title: 'groupMove', color: '#3a6fb0', keys: ['unitSpeeds', 'zoneOfControl'] },
-  { title: 'groupTurn', color: '#a8811a', keys: ['routAt', 'carryMax', 'firstTurnBonus'] },
+  { title: 'groupTurn', color: '#a8811a', keys: ['routAt', 'carryMax', 'rerolls', 'firstTurnBonus'] },
 ];
 
 /** A tiny picture of each map type for the map tiles. */
@@ -759,6 +765,7 @@ const ICON = {
   plus: '<path d="M12 5v14M5 12h14"/>',
   minus: '<path d="M5 12h14"/>',
   expand: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
+  reroll: '<path d="M19 8a8 8 0 1 0 1 6"/><path d="M20 3v5h-5"/>',
   panel: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M14.5 4.5v15"/>',
 };
 const icon = (name: keyof typeof ICON) =>
@@ -784,6 +791,7 @@ function bar(s: GameState): string {
       ? `<div class="row"><button data-act="take" class="primary">${t(lang, 'takeHex')}</button></div>`
       : '';
     return `${take}<div class="row">
+      ${canReroll(s) ? `<button data-act="reroll" class="withicon" ${rolling ? 'disabled' : ''}>${icon('reroll')}<span>${t(lang, 'reroll')}</span></button>` : ''}
       <button data-act="undo" class="withicon" ${canUndo(sess) ? '' : 'disabled'}>${icon('undo')}<span>${t(lang, 'undo')}</span></button>
       <button data-act="end" class="${s.advance ? '' : 'primary'} ${confirmEnd ? 'warn' : ''}">${confirmEnd ? t(lang, 'endAnyway') : t(lang, 'endTurn')}</button>
     </div>`;
@@ -1066,7 +1074,33 @@ function roll(keep: string | null = null) {
   setTimeout(() => {
     clearInterval(timer);
     rolling = false;
+    rolledAt = Date.now();
     run((s) => rollDice(s), true);
+  }, 700);
+}
+
+let rolledAt = 0;
+
+/** Throws the dice again (optional rule): the same spin as a roll, and it can't be undone. */
+function rerollDice() {
+  // A double tap on Roll dice must not spend the reroll: ignore it for a moment after the roll lands.
+  if (rolling || !canReroll(sess.state) || Date.now() - rolledAt < 600) return;
+  rolling = true;
+  sound('dice');
+  selected = null;
+  message = null;
+  const spin = () => (rollFaces = Array.from({ length: CONFIG.dice.count }, () => 1 + Math.floor(Math.random() * CONFIG.dice.sides)));
+  spin();
+  render();
+  const timer = setInterval(() => {
+    spin();
+    const dice = app.querySelector('.dice');
+    if (dice) dice.innerHTML = rollFaces.map((f) => die(f, true)).join('');
+  }, 80);
+  setTimeout(() => {
+    clearInterval(timer);
+    rolling = false;
+    run((s) => reroll(s), true);
   }, 700);
 }
 
@@ -1229,6 +1263,8 @@ app.addEventListener('click', (e) => {
       return void run((s) => takeHex(s));
     case 'roll':
       return aiTurn(sess.state) ? undefined : roll();
+    case 'reroll':
+      return aiTurn(sess.state) ? undefined : rerollDice();
     case 'undo':
       sess = undo(sess);
       message = null;

@@ -25,7 +25,7 @@ export type Phase = 'draft' | 'deploy' | 'roll' | 'act' | 'over';
 export type WinReason = 'kingKilled' | 'kingCaptured' | 'routed';
 
 export type LogEntry =
-  | { kind: 'roll'; turn: number; player: Player; dice: number[]; total: number }
+  | { kind: 'roll'; turn: number; player: Player; dice: number[]; total: number; reroll?: boolean }
   | { kind: 'move'; turn: number; player: Player; unit: UnitTypeId; from: Hex; to: Hex; cost: number }
   | {
       kind: 'attack' | 'shoot';
@@ -65,6 +65,8 @@ export interface GameState {
   winReason: WinReason | null;
   /** Points each side carries into its next turn (optional rule). */
   carry?: Record<Player, number>;
+  /** Rerolls each side has used this battle (optional rule). */
+  rerolled?: Record<Player, number>;
   /** Each army's points value when the battle began, for the morale rule. */
   startValue?: Record<Player, number>;
   /** Set right after a melee kill when advancing is optional: who may step where. */
@@ -95,6 +97,8 @@ export type ErrorCode =
   | 'occupied'
   | 'reserveNotEmpty'
   | 'nothingToTake'
-  | 'outOfArrows';
+  | 'outOfArrows'
+  | 'kingGuarded'
+  | 'noReroll';
 
 export type Result = { ok: true; state: GameState } | { ok: false; error: ErrorCode };

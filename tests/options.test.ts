@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG, type GameConfig, type UnitTypeId } from '../src/config';
-import { attack, buildBoard, makeUnit, endTurn, getUnit, moveUnit, newGame, previewStrike, reachable, rollDice, shoot, type GameState, type Player, type Result } from '../src/engine';
+import { attack, buildBoard, canReroll, reroll, makeUnit, endTurn, getUnit, moveUnit, newGame, previewStrike, reachable, rollDice, shoot, type GameState, type Player, type Result } from '../src/engine';
 
 /** An open field (no river, no forest) with one optional rule switched on. */
 const withRule = (o: Partial<GameConfig['options']>): GameConfig => ({
@@ -27,7 +27,7 @@ const sixes = () => 5.5 / 6;
 
 describe('optional rules', () => {
   it('all are off by default', () => {
-    expect(CONFIG.options).toEqual({ firstTurnBonus: 0, carryMax: 0, routAt: null, shieldWall: false, spears: false, longShotFrom: null, volleys: null, charge: false, kingAura: false, zoneOfControl: false, toughness: 1, unitSpeeds: false, runLimit: 3 });
+    expect(CONFIG.options).toEqual({ firstTurnBonus: 0, carryMax: 0, routAt: null, shieldWall: false, spears: false, longShotFrom: null, volleys: null, charge: false, kingAura: false, zoneOfControl: false, rerolls: 0, kingsGuard: false, toughness: 1, unitSpeeds: false, runLimit: 3 });
   });
 
   it('first-turn bonus: the second player gets extra points on turn 1 only', () => {
@@ -119,5 +119,33 @@ describe('optional rules', () => {
     expect(getUnit(s, 'blue-lightInfantry-3')?.hp).toBe(1);
     s = ok(shoot(s, 'red-archer-1', 'blue-lightInfantry-3', cfg));
     expect(getUnit(s, 'blue-lightInfantry-3')).toBeUndefined();
+  });
+
+  it('reroll: once per battle, straight after rolling, keeping saved points', () => {
+    const cfg = withRule({ rerolls: 1, carryMax: 3 });
+    let s = scenario(cfg, [['red', 'king', 0, 0], ['red', 'lightInfantry', 1, 0], ['blue', 'king', 20, 0]]);
+    s = { ...s, phase: 'roll', carry: { red: 3, blue: 0 } };
+    s = ok(rollDice(s, () => 0, cfg)); // 1+1+1 + 3 saved
+    expect(s.points).toBe(6);
+    expect(canReroll(s, cfg)).toBe(true);
+    s = ok(reroll(s, sixes, cfg)); // 6+6+6 + 3 saved
+    expect(s.points).toBe(21);
+    expect(reroll(s, sixes, cfg)).toEqual({ ok: false, error: 'noReroll' }); // used up
+    // Not after the turn has started.
+    let t = scenario(cfg, [['red', 'king', 0, 0], ['red', 'lightInfantry', 1, 0], ['blue', 'king', 20, 0]]);
+    t = ok(rollDice({ ...t, phase: 'roll' }, () => 0, cfg));
+    t = ok(moveUnit(t, 'red-lightInfantry-1', { col: 2, row: 0 }, cfg));
+    expect(canReroll(t, cfg)).toBe(false);
+    // Off by default.
+    const off = ok(rollDice({ ...scenario(withRule({}), [['red', 'king', 0, 0], ['blue', 'king', 20, 0]]), phase: 'roll' }, () => 0, withRule({})));
+    expect(canReroll(off, withRule({}))).toBe(false);
+  });
+
+  it("King's guard: the King can't be hit while his own piece stands beside him", () => {
+    const cfg = withRule({ kingsGuard: true });
+    const s = scenario(cfg, [['red', 'heavyCavalry', 3, 3], ['blue', 'king', 3, 4], ['blue', 'lightInfantry', 3, 5]]);
+    expect(attack(s, s.units[0].id, s.units[1].id, cfg)).toEqual({ ok: false, error: 'kingGuarded' });
+    const alone = scenario(cfg, [['red', 'heavyCavalry', 3, 3], ['blue', 'king', 3, 4], ['blue', 'lightInfantry', 9, 9]]);
+    expect(attack(alone, alone.units[0].id, alone.units[1].id, cfg).ok).toBe(true);
   });
 });

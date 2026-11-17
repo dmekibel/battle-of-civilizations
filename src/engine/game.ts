@@ -209,6 +209,8 @@ function checkStrike(
   if (a.owner !== s.current) return 'notYourUnit';
   if (t.owner === a.owner) return 'notEnemy';
   if (a.attacked && !cfg.combat.multipleAttacksPerUnit) return 'alreadyAttacked';
+  // King's guard: while one of his own pieces stands beside him, the King can't be hit.
+  if (cfg.options.kingsGuard && t.type === 'king' && s.units.some((f) => f.id !== t.id && f.owner === t.owner && distance(f.pos, t.pos) === 1)) return 'kingGuarded';
   const rules = cfg.units[a.type];
   let cost: number;
   let raw: number;
@@ -284,6 +286,27 @@ export function rollDice(s: GameState, rng: Rng = Math.random, cfg: GameConfig =
   const startValue = s.startValue ?? { red: armyValue(s, 'red', cfg), blue: armyValue(s, 'blue', cfg) };
   const next: GameState = { ...s, dice, points: total, phase: 'act', startValue, carry: { red: 0, blue: 0, ...s.carry, [s.current]: 0 } };
   return { ok: true, state: withLog(next, { kind: 'roll', turn: s.turn, player: s.current, dice, total }) };
+}
+
+/** Rerolls the side has left this battle (optional rule). */
+export const rerollsLeft = (s: GameState, p: Player, cfg: GameConfig = CONFIG) =>
+  Math.max(0, cfg.options.rerolls - (s.rerolled?.[p] ?? 0));
+
+/** A reroll is allowed straight after rolling, before the turn's first move or strike. */
+export function canReroll(s: GameState, cfg: GameConfig = CONFIG): boolean {
+  const last = s.log[s.log.length - 1];
+  return s.phase === 'act' && !cfg.dice.fixed && last?.kind === 'roll' && last.player === s.current && rerollsLeft(s, s.current, cfg) > 0;
+}
+
+/** Throws the dice again, keeping saved points and any bonus. Uses one of the side's rerolls. */
+export function reroll(s: GameState, rng: Rng = Math.random, cfg: GameConfig = CONFIG): Result {
+  if (!canReroll(s, cfg)) return fail('noReroll');
+  const last = s.log[s.log.length - 1] as Extract<LogEntry, { kind: 'roll' }>;
+  const extra = last.total - last.dice.reduce((a, b) => a + b, 0);
+  const dice = Array.from({ length: cfg.dice.count }, () => 1 + Math.floor(rng() * cfg.dice.sides));
+  const total = dice.reduce((a, b) => a + b, 0) + extra;
+  const next: GameState = { ...s, dice, points: total, rerolled: { red: 0, blue: 0, ...s.rerolled, [s.current]: (s.rerolled?.[s.current] ?? 0) + 1 } };
+  return { ok: true, state: withLog(next, { kind: 'roll', turn: s.turn, player: s.current, dice, total, reroll: true }) };
 }
 
 export function moveUnit(s: GameState, unitId: string, to: Hex, cfg: GameConfig = CONFIG): Result {

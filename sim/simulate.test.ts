@@ -27,7 +27,7 @@ function play(cfg: GameConfig, seed: number) {
     for (let i = 0; i < 120 && s.phase === 'act'; i++) {
       const a = aiNextAction(s, cfg);
       if (!a) break;
-      const r = applyAi(s, a, cfg);
+      const r = applyAi(s, a, cfg, rng);
       if (!r.ok) break;
       s = r.state;
       st.actions++;
@@ -104,6 +104,10 @@ it('simulate', () => {
     ['one die, recommended', { ...recommended, dice: { count: 1, sides: 6 } }],
     ['fixed 4 points, recommended', { ...recommended, dice: { count: 0, sides: 6, fixed: 4 } }],
     ['old speeds (infantry 3-6, cavalry 1-2)', { ...base, options: { ...base.options, unitSpeeds: true } }],
+    ['fair: save points', { ...base, options: { ...base.options, carryMax: 3 } }],
+    ['fair: reroll', { ...base, options: { ...base.options, rerolls: 1 } }],
+    ["fair: king's guard", { ...base, options: { ...base.options, kingsGuard: true } }],
+    ['fair: all three', { ...base, options: { ...base.options, carryMax: 3, rerolls: 1, kingsGuard: true } }],
     ['recommended rules, no dice (always 10)', { ...recommended, dice: { count: 0, sides: 6, fixed: 10 } }],
   ];
   // VARIANT=recommended npm run sim runs only the setups whose name contains that word.

@@ -26,6 +26,8 @@ export const RECOMMENDED: GameConfig['options'] = {
   ...CONFIG.options,
   firstTurnBonus: 2,
   carryMax: 3,
+  rerolls: 1,
+  kingsGuard: true,
   routAt: 0.5,
   shieldWall: true,
   spears: true,

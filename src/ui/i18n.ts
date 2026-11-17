@@ -12,6 +12,7 @@ const STR = {
     red: 'Русь',
     blue: 'Немецкие рыцари',
     roll: 'Бросить кубики',
+    reroll: 'Перебросить',
     points: 'очки хода',
     undo: 'Отменить',
     endTurn: 'Завершить ход',
@@ -137,6 +138,10 @@ const STR = {
     ruleHelp_toughness: 'Каждая фигура выдерживает вдвое больше ударов: лёгкая 2, тяжёлая 4.',
     rule_zoneOfControl: 'Зона контроля',
     ruleHelp_zoneOfControl: 'Шагнув рядом с врагом, фигура останавливается.',
+    rule_rerolls: 'Переброс',
+    ruleHelp_rerolls: 'Раз за битву можно перебросить плохой бросок, пока вы ещё не ходили.',
+    rule_kingsGuard: 'Стража короля',
+    ruleHelp_kingsGuard: 'Короля нельзя атаковать, пока рядом с ним стоит его фигура.',
     rule_longShotFrom: 'Дальний выстрел',
     ruleHelp_longShotFrom: 'Выстрел дальше 3 клеток стоит вдвое больше очков.',
     rule_volleys: 'Колчаны',
@@ -180,6 +185,7 @@ const STR = {
     red: 'Russians',
     blue: 'German Knights',
     roll: 'Roll dice',
+    reroll: 'Reroll',
     points: 'move points',
     undo: 'Undo',
     endTurn: 'End turn',
@@ -305,6 +311,10 @@ const STR = {
     ruleHelp_toughness: 'Every piece takes twice as many hits: light pieces 2, heavy pieces 4.',
     rule_zoneOfControl: 'Zone of control',
     ruleHelp_zoneOfControl: 'A piece that steps next to an enemy must stop.',
+    rule_rerolls: 'Reroll',
+    ruleHelp_rerolls: 'Once per battle, throw a bad roll again before you move.',
+    rule_kingsGuard: "King's guard",
+    ruleHelp_kingsGuard: "The King can't be hit while one of his own pieces stands next to him.",
     rule_longShotFrom: 'Long shots',
     ruleHelp_longShotFrom: 'Shooting further than 3 hexes costs double points.',
     rule_volleys: 'Quivers',
@@ -402,6 +412,8 @@ const ERRORS: Record<Lang, Record<ErrorCode, string>> = {
     reserveNotEmpty: 'Сначала расставьте все фигуры.',
     nothingToTake: 'Занять нечего.',
     outOfArrows: 'У этих лучников кончились стрелы.',
+    kingGuarded: 'Короля охраняет стража: сначала уберите её.',
+    noReroll: 'Перебросить сейчас нельзя.',
   },
   en: {
     wrongPhase: 'You can’t do that right now.',
@@ -427,6 +439,8 @@ const ERRORS: Record<Lang, Record<ErrorCode, string>> = {
     reserveNotEmpty: 'Place all your pieces first.',
     nothingToTake: 'There’s no hex to take.',
     outOfArrows: 'These archers are out of arrows.',
+    kingGuarded: 'His guards stand next to him. Clear them first.',
+    noReroll: 'You can’t reroll now.',
   },
 };
 
@@ -450,7 +464,7 @@ export function logText(l: Lang, e: LogEntry): string {
   const ru = l === 'ru';
   switch (e.kind) {
     case 'roll':
-      return ru ? `бросок ${e.dice.join('+')} = ${e.total}` : `rolled ${e.dice.join('+')} = ${e.total}`;
+      return ru ? `${e.reroll ? 'переброс' : 'бросок'} ${e.dice.join('+')} = ${e.total}` : `${e.reroll ? 'rerolled' : 'rolled'} ${e.dice.join('+')} = ${e.total}`;
     case 'move':
       return `${unitName(l, e.unit, e.player)} ${hexName(e.from)} → ${hexName(e.to)} (−${e.cost})`;
     case 'attack':

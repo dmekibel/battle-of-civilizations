@@ -4,13 +4,14 @@
 
 import { CONFIG, type GameConfig, type UnitTypeId } from '../config';
 import { distance, key, neighbors, type Hex } from './hex';
-import { attack, endTurn, hasLineOfSight, kingOf, moveUnit, onBoard, other, reachable, rollDice, shoot, strikeTargets, takeHex, terrainAt, type Rng } from './game';
+import { attack, canReroll, endTurn, hasLineOfSight, kingOf, moveUnit, onBoard, other, reachable, reroll, rollDice, shoot, strikeTargets, takeHex, terrainAt, type Rng } from './game';
 import type { GameState, Result, Unit } from './types';
 
 export type AiAction =
   | { kind: 'move'; unitId: string; to: Hex }
   | { kind: 'attack' | 'shoot'; unitId: string; targetId: string }
-  | { kind: 'take' };
+  | { kind: 'take' }
+  | { kind: 'reroll' };
 
 /** How much a piece is worth: its price, and the King above everything. */
 function worth(type: UnitTypeId, cfg: GameConfig): number {
@@ -120,6 +121,8 @@ function moveScore(s: GameState, u: Unit, to: Hex, cost: number, cfg: GameConfig
 export function aiNextAction(s: GameState, cfg: GameConfig = CONFIG): AiAction | null {
   if (s.phase !== 'act') return null;
   if (s.advance) return { kind: 'take' };
+  // A poor roll (below 9) is worth throwing again when a reroll is left.
+  if (canReroll(s, cfg) && (s.dice ?? []).reduce((a, b) => a + b, 0) < 3 * cfg.dice.count) return { kind: 'reroll' };
   let best: AiAction | null = null;
   let bestScore = 0.5; // anything below this is not worth the points
 
@@ -142,8 +145,10 @@ export function aiNextAction(s: GameState, cfg: GameConfig = CONFIG): AiAction |
 }
 
 /** Applies an action chosen by aiNextAction. */
-export function applyAi(s: GameState, a: AiAction, cfg: GameConfig = CONFIG): Result {
+export function applyAi(s: GameState, a: AiAction, cfg: GameConfig = CONFIG, rng: Rng = Math.random): Result {
   switch (a.kind) {
+    case 'reroll':
+      return reroll(s, rng, cfg);
     case 'move':
       return moveUnit(s, a.unitId, a.to, cfg);
     case 'attack':
@@ -163,7 +168,7 @@ export function playAiTurn(s: GameState, rng: Rng = Math.random, cfg: GameConfig
   for (let i = 0; i < 100 && state.phase === 'act'; i++) {
     const a = aiNextAction(state, cfg);
     if (!a) break;
-    r = applyAi(state, a, cfg);
+    r = applyAi(state, a, cfg, rng);
     if (!r.ok) break;
     state = r.state;
   }
