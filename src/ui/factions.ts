@@ -125,8 +125,8 @@ export const FACTIONS: Record<FactionId, Faction> = {
   },
   romans: {
     name: { en: 'Romans', ru: 'Римляне' },
-    color: '#c08a14',
-    text: '#f0c95a',
+    color: '#7e1830',
+    text: '#ef8aa0',
     roster: ['lightInfantry', 'heavyInfantry', 'archer', 'heavyCavalry', 'ballista'],
     blurb: { en: 'The legion: solid heavy infantry, a few riders, and a ballista that hits hard from far away but crawls.', ru: 'Легион: крепкая тяжёлая пехота, немного конницы и баллиста, которая бьёт издалека, но еле ползёт.' },
     emblem: shield('#8e1b2e', '#e8b923', '<path d="M30 14L33 26H46L35.5 33.5L39.5 46L30 38.5L20.5 46L24.5 33.5L14 26H27Z" fill="#e8b923"/>'),
