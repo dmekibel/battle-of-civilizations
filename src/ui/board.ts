@@ -585,15 +585,13 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
     }
   }
 
-  // Last turn's enemy moves: a faint dashed arrow per move, a cross where a piece fell.
+  // Moves just made: the hex a piece left and the one it reached glow yellow, as on a chess site
+  // (this turn's clearly, the other side's last turn fainter).
   for (const m of o.trail.moves) {
-    const [ax, ay] = L.pt(...flat(m.from, v));
-    const [bx, by] = L.pt(...flat(m.to, v));
-    const ang = Math.atan2(by - ay, bx - ax);
-    const head = (d: number) => `${(bx - 9 * Math.cos(ang + d)).toFixed(1)},${(by - 9 * Math.sin(ang + d)).toFixed(1)}`;
+    const f = m.old ? 0.55 : 1;
     ground.push(
-      `<g class="trail-g${m.old ? ' old' : ''}">${m.owner ? `<line x1="${ax.toFixed(1)}" y1="${ay.toFixed(1)}" x2="${bx.toFixed(1)}" y2="${by.toFixed(1)}" class="trail-side" stroke="${armyColor(m.owner)}"/>` : ''}<line x1="${ax.toFixed(1)}" y1="${ay.toFixed(1)}" x2="${bx.toFixed(1)}" y2="${by.toFixed(1)}" class="trail"/>`,
-      `<polygon points="${bx.toFixed(1)},${by.toFixed(1)} ${head(0.45)} ${head(-0.45)}" class="trail-head"/></g>`,
+      `<polygon points="${corners(m.from, v, L, S - 2.5)}" fill="#f2d24a" fill-opacity="${(0.2 * f).toFixed(2)}" pointer-events="none"/>`,
+      `<polygon points="${corners(m.to, v, L, S - 2.5)}" fill="#f2d24a" fill-opacity="${(0.36 * f).toFixed(2)}" pointer-events="none"/>`,
     );
   }
   for (const h of o.trail.kills) {

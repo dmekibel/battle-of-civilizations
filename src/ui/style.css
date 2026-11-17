@@ -485,3 +485,25 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 
 .invite-url { width: 100%; box-sizing: border-box; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--track); color: var(--ink); font: 14px/1.2 ui-monospace, Menlo, monospace; text-align: center; }
 .ftile:disabled { opacity: .35; }
+
+/* ---------- army builder: one card per piece, with its carved figure ---------- */
+.buy { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.buy li.ucard { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 8px 10px; border: 2px solid transparent; border-top: 2px solid transparent; border-radius: 16px;
+  background: radial-gradient(ellipse at 50% 38%, color-mix(in srgb, var(--gold) 14%, var(--panel-2)), var(--panel-2) 70%); }
+.buy li.ucard.has { border-color: color-mix(in srgb, var(--gold) 70%, transparent); }
+.ucard .price { position: absolute; top: 8px; right: 8px; width: 36px; height: 36px; font-size: 15px; z-index: 1; }
+.ucard .ufig { display: grid; place-items: end center; width: 100%; height: 104px; padding: 0; border: 0; background: transparent; border-radius: 12px; }
+.ucard .ufig:disabled { opacity: 1; }
+.ucard .figpic { max-height: 104px; max-width: 92%; object-fit: contain; filter: drop-shadow(0 6px 5px rgba(0, 0, 0, .45)); transition: transform .12s; }
+.ucard button.ufig:active .figpic { transform: scale(.94); }
+.ucard .ufig svg { width: 64px; height: 48px; }
+.ucard .name { font: 400 16px/1.15 var(--title); text-align: center; }
+.ucard .stats { margin: 0; justify-content: center; flex-wrap: wrap; }
+.ucard .step { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 4px; min-height: 40px; }
+.ucard .step button { width: 40px; height: 40px; padding: 0; font-size: 20px; border-radius: 50%; }
+.ucard .count { min-width: 30px; text-align: center; font: 700 26px/1 'PT Serif', Georgia, serif; font-variant-numeric: tabular-nums; }
+.ucard:not(.has) .count { color: var(--muted); }
+.ucard .free { margin: 0; text-align: center; }
+/* faction tiles: the army's leader */
+.ftile .figpic { height: 72px; object-fit: contain; filter: drop-shadow(0 4px 4px rgba(0, 0, 0, .45)); }
+.vs-card .figpic { height: 110px; object-fit: contain; filter: drop-shadow(0 5px 6px rgba(0, 0, 0, .5)); }

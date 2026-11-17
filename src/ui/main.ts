@@ -53,6 +53,7 @@ import { errorText, logText, playerName, reasonText, t, unitName, type Key, type
 import { unitIcon } from './symbols';
 import { FACTIONS, FACTION_ORDER, factionOf, rosterOf, sides, type FactionId } from './factions';
 import { morph, morphInto } from './morph';
+import { ART_VERSION, SPRITES } from './sprites';
 import { fetchGame, newId, pushGame } from './online';
 import { isMuted, musicOn, setMusic, sound, toggleMusic, toggleMute } from './sound';
 import { DADS_RULES, RECOMMENDED, applySettings, fixedPoints, loadSettings, saveSettings, type DiceId, type MapId, type Settings } from './settings';
@@ -632,22 +633,31 @@ function onSlide(input: HTMLInputElement) {
   sound('tick');
 }
 
+/** A piece's carved figure as a picture for menus ('' if this army has none for it). */
+function figurePic(fac: string, type: UnitTypeId, view = 'front-left'): string {
+  const art = type === 'deputy' ? 'lightInfantry' : type;
+  const set = SPRITES[fac]?.[art];
+  const v = set?.[view] ? view : set?.front ? 'front' : null;
+  return v ? `<img class="figpic" src="${import.meta.env.BASE_URL}pieces/${fac}/${art}-${v}.webp?v=${ART_VERSION}" alt="" draggable="false">` : '';
+}
+
 function draftSheet(s: GameState): string {
   const spent = armyCost(draft);
   const left = CONFIG.army.budget - spent;
+  const fac = settings.sides[s.current];
   const rows = buyOrder().map((type) => {
     const n = draft[type] ?? 0;
     const price = CONFIG.army.cost[type];
-    return `<li data-row="${type}">
-      ${unitIcon(type, s.current)}
-      <b class="name">${unitName(lang, type, s.current)}</b>
+    const can = price <= left;
+    return `<li class="ucard ${n ? 'has' : ''}" data-row="${type}">
       <span class="price" title="${t(lang, 'power')}">${price}<small>${t(lang, 'pts')}</small></span>
-      <output class="count">${n}</output>
+      <button class="ufig" data-act="more" data-type="${type}" ${can ? '' : 'disabled'} aria-label="${unitName(lang, type, s.current)} +">${figurePic(fac, type) || unitIcon(type, s.current)}</button>
+      <b class="name">${unitName(lang, type, s.current)}</b>
       ${stats(type)}
-      <div class="slide">
+      <div class="step">
         <button data-act="less" data-type="${type}" ${n ? '' : 'disabled'} aria-label="−">−</button>
-        <input type="range" id="sl-${type}" data-type="${type}" min="0" max="${Math.floor(CONFIG.army.budget / price)}" step="1" value="${n}" aria-label="${unitName(lang, type, s.current)}" style="${sliderFill(type)}">
-        <button data-act="more" data-type="${type}" ${price <= left ? '' : 'disabled'} aria-label="+">+</button>
+        <output class="count">${n}</output>
+        <button data-act="more" data-type="${type}" ${can ? '' : 'disabled'} aria-label="+">+</button>
       </div>
     </li>`;
   }).join('');
@@ -658,7 +668,13 @@ function draftSheet(s: GameState): string {
         <div class="meter"><i id="meter" style="width:${(spent / CONFIG.army.budget) * 100}%"></i></div></div>
       <div class="sheet-scroll">
       <ul class="buy">
-        <li class="king">${unitIcon('king', s.current)}<b class="name">${unitName(lang, 'king', s.current)}<span class="free">${t(lang, 'kingFree')}</span></b><span class="price free-badge">0<small>${t(lang, 'pts')}</small></span><output class="count">1</output>${stats('king')}</li>
+        <li class="ucard king has">
+          <span class="price free-badge">0<small>${t(lang, 'pts')}</small></span>
+          <span class="ufig">${figurePic(fac, 'king') || unitIcon('king', s.current)}</span>
+          <b class="name">${unitName(lang, 'king', s.current)}</b>
+          ${stats('king')}
+          <div class="step"><span class="free">${t(lang, 'kingFree')}</span></div>
+        </li>
         ${rows}
       </ul>
       ${statKey()}
@@ -756,14 +772,14 @@ function setupScreen(): string {
     const f = FACTIONS[settings.sides[p]];
     const on = pickSide === p;
     return `<button data-act="pick-side" data-side="${p}" class="vs-card ${on ? 'on' : ''}" aria-pressed="${on}" style="--fc:${f.color}">
-      <span class="vs-who">${who}</span>${f.emblem}<b>${f.name[lang]}</b></button>`;
+      <span class="vs-who">${who}</span>${figurePic(settings.sides[p], 'king', 'front') || f.emblem}<b>${f.name[lang]}</b></button>`;
   };
   const tiles = FACTION_ORDER.map((id) => {
     const f = FACTIONS[id];
     const mine = settings.sides[pickSide] === id;
     const theirs = settings.sides[other(pickSide)] === id;
     return `<button data-act="faction" data-side="${pickSide}" data-value="${id}" class="ftile ${mine ? 'on' : ''} ${theirs ? 'taken' : ''}" aria-pressed="${mine}" style="--fc:${f.color}">
-      ${f.emblem}<span>${f.name[lang]}</span></button>`;
+      ${figurePic(id, 'king', 'front') || f.emblem}<span>${f.name[lang]}</span></button>`;
   }).join('');
 
   const mapTiles = (['river', 'open', 'forest', 'random'] as MapId[])
@@ -868,7 +884,7 @@ function armyPickScreen(): string {
   const tiles = FACTION_ORDER.map((id) => {
     const f = FACTIONS[id];
     const taken = settings.sides.red === id;
-    return `<button data-act="net-army" data-value="${id}" class="ftile ${taken ? 'taken' : ''}" ${taken ? 'disabled' : ''} style="--fc:${f.color}">${f.emblem}<span>${f.name[lang]}</span></button>`;
+    return `<button data-act="net-army" data-value="${id}" class="ftile ${taken ? 'taken' : ''}" ${taken ? 'disabled' : ''} style="--fc:${f.color}">${figurePic(id, 'king', 'front') || f.emblem}<span>${f.name[lang]}</span></button>`;
   }).join('');
   return `<div class="cover"><div class="card start">
     <div class="hero"><h2>${t(lang, 'pickArmyTitle')}</h2><p>${t(lang, 'pickArmyText')} <b>${FACTIONS[settings.sides.red].name[lang]}</b>.</p></div>
@@ -1264,6 +1280,19 @@ function scheduleRoll() {
 // ---------- computer opponent ----------
 
 /** The computer builds and places its army at once (the player never sees it happen). */
+/** Quick battle: both sides get a balanced army of their own pieces, already in formation, and the dice are next. */
+function quickBattle(): GameState {
+  let s = newGame();
+  for (let i = 0; i < 2; i++) {
+    for (const step of [(x: GameState) => draftArmy(x, suggestArmy(Math.random, CONFIG, rosterOf(x.current) as Buyable[])), (x: GameState) => autoDeploy(x), (x: GameState) => finishDeploy(x)]) {
+      const r = step(s);
+      if (!r.ok) return quickStart(); // never expected; the plain line-up still plays
+      s = r.state;
+    }
+  }
+  return s;
+}
+
 function aiSetup() {
   const steps: ((s: GameState) => Result)[] = [(s) => draftArmy(s, suggestArmy(Math.random, CONFIG, rosterOf(s.current) as Buyable[])), (s) => autoDeploy(s), (s) => finishDeploy(s)];
   for (const step of steps) {
@@ -1756,7 +1785,7 @@ app.addEventListener('click', (e) => {
       sound('tick');
       return render();
     case 'quick':
-      return restart(quickStart());
+      return restart(quickBattle());
     case 'new':
       if (!confirmNew && sess.state.log.length + sess.state.units.length > 0) {
         confirmNew = true;
