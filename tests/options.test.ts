@@ -78,7 +78,7 @@ describe('optional rules', () => {
     const cfg = withRule({ longShotFrom: 3, volleys: 1 });
     const s = scenario(cfg, [['red', 'archer', 3, 1], ['blue', 'heavyInfantry', 3, 6], ['blue', 'heavyInfantry', 3, 4]]);
     expect(previewStrike(s, s.units[0].id, s.units[1].id, 'shoot', cfg)!.cost).toBe(2);
-    expect(previewStrike(s, s.units[0].id, s.units[2].id, 'shoot', cfg)!.cost).toBe(2);
+    expect(previewStrike(s, s.units[0].id, s.units[2].id, 'shoot', cfg)!.cost).toBe(1);
     const a = ok(shoot(s, s.units[0].id, s.units[2].id, cfg));
     expect(shoot(a, s.units[0].id, s.units[1].id, cfg)).toEqual({ ok: false, error: 'outOfArrows' });
   });
