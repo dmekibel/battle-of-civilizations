@@ -259,12 +259,21 @@ type ViewId = 'front' | 'fdiag' | 'side' | 'bdiag' | 'back';
 interface Look { view: ViewId; flip: boolean }
 const VIEWS: ViewId[] = ['front', 'fdiag', 'side', 'bdiag', 'back'];
 
-function lookFor(owner: Player, v: View): Look {
-  // Red stands at the left (landscape) or bottom (portrait) of the flat map and faces the other way.
-  const f: Pt = v.portrait ? (owner === 'red' ? [0, -1] : [0, 1]) : owner === 'red' ? [1, 0] : [-1, 0];
-  const [cos, sin] = [Math.cos(v.cam.yaw), Math.sin(v.cam.yaw)];
-  const rx = f[0] * cos - f[1] * sin;
-  const ry = f[0] * sin + f[1] * cos; // positive = towards the viewer
+function lookFor(owner: Player, v: View, L: Lens, s: GameState): Look {
+  // Measured on screen, not worked out: from the middle of the board, step towards the enemy's
+  // side (red starts in the first columns, blue in the last) and see which way that step points.
+  const mid = Math.floor(s.board.length / 2);
+  const cols = s.board[0].length;
+  const redSide = flat({ col: 0, row: mid }, v);
+  const blueSide = flat({ col: cols - 1, row: mid }, v);
+  const [from, to] = owner === 'red' ? [redSide, blueSide] : [blueSide, redSide];
+  const c: Pt = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2];
+  const d = Math.hypot(to[0] - from[0], to[1] - from[1]) || 1;
+  const step: Pt = [c[0] + ((to[0] - from[0]) / d) * 20, c[1] + ((to[1] - from[1]) / d) * 20];
+  const [ax, ay] = L.pt(...c);
+  const [bx, by] = L.pt(...step);
+  const rx = bx - ax;
+  const ry = (by - ay) / Math.max(0.2, Math.cos(tiltAngle(v))); // down the screen = towards the viewer
   const turn = Math.atan2(Math.abs(rx), ry); // 0 = facing us, π = facing away
   return { view: VIEWS[Math.round(turn / (Math.PI / 4))], flip: rx > 0 };
 }
@@ -288,7 +297,7 @@ function figure(type: UnitTypeId, owner: Player, hp: number, k: number, look: Lo
   const flip = view !== 'front' && view !== 'back' && look.flip ? ' transform="scale(-1 1)"' : '';
   return `<ellipse cx="0" cy="${k.toFixed(1)}" rx="${(16 * k).toFixed(1)}" ry="${(5 * k).toFixed(1)}" fill="#000" opacity=".3"/>
     <ellipse cx="0" cy="${k.toFixed(1)}" rx="${(17 * k).toFixed(1)}" ry="${(5.6 * k).toFixed(1)}" fill="none" stroke="${armyColor(owner)}" stroke-width="${(2 * k).toFixed(1)}" opacity=".9"/>
-    <image href="${SPRITE_URL(fac, type, view)}" x="${(-w / 2).toFixed(1)}" y="${(-h + 4 * k).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"${flip}/>${bar}`;
+    <image decoding="sync" href="${SPRITE_URL(fac, type, view)}" x="${(-w / 2).toFixed(1)}" y="${(-h + 4 * k).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"${flip}/>${bar}`;
 }
 
 let preloaded = '';
@@ -324,7 +333,7 @@ const lift = (L: Lens, k: number) => (L.tilt ? 20 * k : 3 * k);
 export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_EFFECTS): string {
   const L = lens(v);
   if (v.tilt) preloadFigures();
-  const looks: Record<Player, Look> = { red: lookFor('red', v), blue: lookFor('blue', v) };
+  const looks: Record<Player, Look> = { red: lookFor('red', v, L, s), blue: lookFor('blue', v, L, s) };
   const ground: string[] = [];
   const standing: Standing[] = [];
   const top: string[] = [];
