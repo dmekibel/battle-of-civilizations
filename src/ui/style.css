@@ -131,6 +131,8 @@ body {
 .board .spent { opacity: .75; }
 .board .trail { stroke: #fff6c8; stroke-width: 3; stroke-dasharray: 7 6; stroke-linecap: round; opacity: .7; }
 .board .trail-head { fill: #fff6c8; opacity: .8; }
+.board .trail-side { stroke-width: 7; stroke-linecap: round; opacity: .6; }
+.board .trail-g.old { opacity: .5; }
 .board .trail-kill { font: 700 20px 'PT Sans', sans-serif; fill: #ff6b5b; stroke: #3a0d08; stroke-width: 3px; paint-order: stroke; text-anchor: middle; opacity: .85; }
 .board .coord { font: 7px 'PT Sans', sans-serif; fill: #2b4220; opacity: .4; text-anchor: middle; }
 .board .cost { font: 700 12px 'PT Sans', sans-serif; fill: #fffbe0; stroke: #2b4220; stroke-width: 2.5px; paint-order: stroke; text-anchor: middle; }

@@ -398,13 +398,18 @@ function spentUnits(s: GameState): Set<string> {
 /** Moves and kills from the other side's most recent turn, read from the log. */
 function lastEnemyTurn(s: GameState) {
   const them = other(s.current);
-  const moves: { from: Hex; to: Hex }[] = [];
+  const moves: { from: Hex; to: Hex; owner: Player; old: boolean }[] = [];
   const kills: Hex[] = [];
   let i = s.log.length - 1;
-  while (i >= 0 && s.log[i].player === s.current) i--; // skip what this side has done so far
+  // This turn's own moves show at once, so it is clear what has just moved...
+  for (; i >= 0 && s.log[i].player === s.current; i--) {
+    const e = s.log[i];
+    if (e.kind === 'move') moves.push({ from: e.from, to: e.to, owner: e.player, old: false });
+  }
+  // ...and the other side's last turn stays, fainter, until this turn ends.
   for (; i >= 0 && s.log[i].player === them; i--) {
     const e = s.log[i];
-    if (e.kind === 'move') moves.push({ from: e.from, to: e.to });
+    if (e.kind === 'move') moves.push({ from: e.from, to: e.to, owner: e.player, old: true });
     if ((e.kind === 'attack' || e.kind === 'shoot') && e.killed) kills.push(e.at);
   }
   return { moves, kills };

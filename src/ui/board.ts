@@ -116,7 +116,7 @@ function lens(v: View): Lens {
 // One picture of the whole board (grass, river, bridges, forest shade, the table around it), made by _art/map_build.py.
 // It covers the flat map plus GROUND_M units all round and is laid under the hexes with the camera's own projection.
 const GROUND_M = 70;
-export const GROUND_URL = `${import.meta.env.BASE_URL}map/ground.webp?v=4`;
+export const GROUND_URL = `${import.meta.env.BASE_URL}map/ground.webp?v=5`;
 /** The picture's size in map units (its CSS size before the camera's transform). */
 export const GROUND_SIZE: Pt = [W + 2 * GROUND_M, H + 2 * GROUND_M];
 /** Carved trees, each drawn from 8 directions (tree-<kind>-<direction>.webp); picture size in pixels, trunk foot at bottom centre. */
@@ -136,6 +136,7 @@ export function loadGround(done: () => void) {
   const all = [GROUND_URL, ...TREE_KINDS.flatMap(([k]) => DIRS8.map((d) => TREE_URL(k, d))), ...PROPS.map((_, i) => PROP_URL(i))].map((src) => {
     const im = new Image();
     im.src = src;
+    KEEP.push(im);
     return im.decode ? im.decode() : new Promise<void>((ok, no) => ((im.onload = () => ok()), (im.onerror = no)));
   });
   Promise.all(all).then(() => ((groundReady = true), done())).catch(() => {});
@@ -240,7 +241,7 @@ function scenery(h: Hex, v: View, L: Lens): Standing[] {
   const k = L.size(px, py);
   const [sx, sy] = L.pt(px, py);
   const [w, hh] = [(pw / ph) * tall * k, tall * k];
-  return [{ depth: L.depth(px, py), svg: `<image href="${PROP_URL(pi)}" x="${(sx - w / 2).toFixed(1)}" y="${(sy - hh + 0.8 * k).toFixed(1)}" width="${w.toFixed(1)}" height="${hh.toFixed(1)}"/>` }];
+  return [{ depth: L.depth(px, py), svg: `<image decoding="sync" href="${PROP_URL(pi)}" x="${(sx - w / 2).toFixed(1)}" y="${(sy - hh + 0.8 * k).toFixed(1)}" width="${w.toFixed(1)}" height="${hh.toFixed(1)}"/>` }];
 }
 
 function trees(h: Hex, v: View, L: Lens): Standing[] {
@@ -261,7 +262,7 @@ function trees(h: Hex, v: View, L: Lens): Standing[] {
       const dir = L.tilt ? DIRS8[(seenFrom(v, L) + (seed % 8)) % 8] : 'front';
       const f = (L.tilt ? 0.27 : 0.12) * k; // the tallest tree stands about one and a half soldiers high
       const [w, hh] = [size[0] * f, size[1] * f];
-      return { depth: L.depth(x + dx, y + dy), svg: `${shadow}<image href="${TREE_URL(kind, dir)}" x="${(tx - w / 2).toFixed(1)}" y="${(ty - hh + 2 * k).toFixed(1)}" width="${w.toFixed(1)}" height="${hh.toFixed(1)}"/>` };
+      return { depth: L.depth(x + dx, y + dy), svg: `${shadow}<image decoding="sync" href="${TREE_URL(kind, dir)}" x="${(tx - w / 2).toFixed(1)}" y="${(ty - hh + 2 * k).toFixed(1)}" width="${w.toFixed(1)}" height="${hh.toFixed(1)}"/>` };
     }
     return { depth: L.depth(x + dx, y + dy), svg: shadow + (leafy ? oak(tx, ty, k, L.tilt) : pine(tx, ty, k, L.tilt)) };
   });
@@ -299,7 +300,7 @@ export interface Overlay {
   /** The side to move's pieces that can't do anything more this turn: drawn dimmed. */
   spent: Set<string>;
   /** What the other side did on its last turn: moves as arrows, kills as crosses. */
-  trail: { moves: { from: Hex; to: Hex }[]; kills: Hex[] };
+  trail: { moves: { from: Hex; to: Hex; owner?: Player; old?: boolean }[]; kills: Hex[] };
   /** Hexes the selected archer can shoot at (in range and in sight). */
   rings: Hex[];
   /** Threat view: hexes the enemy could hit on its next turn. */
@@ -403,7 +404,7 @@ function figure(type: UnitTypeId, owner: Player, hp: number, k: number, look: Lo
     const bar8 = hp > 0 && hp < full8 ? `<g transform="translate(0 ${(7 * k).toFixed(1)}) scale(${(0.7 * k).toFixed(3)}) translate(0 -16)">${healthBar(hp, full8)}</g>` : '';
     return `<ellipse cx="${(SHADOW[0] * 11 * k).toFixed(1)}" cy="${(k + SHADOW[1] * 5 * k).toFixed(1)}" rx="${(21 * k).toFixed(1)}" ry="${(6.5 * k).toFixed(1)}" fill="#1b2410" opacity=".32" class="cast"/><ellipse cx="0" cy="${k.toFixed(1)}" rx="${(13 * k).toFixed(1)}" ry="${(4 * k).toFixed(1)}" fill="#000" opacity=".35"/>
     <ellipse cx="0" cy="${k.toFixed(1)}" rx="${(17 * k).toFixed(1)}" ry="${(5.6 * k).toFixed(1)}" fill="none" stroke="${armyColor(owner)}" stroke-width="${(2 * k).toFixed(1)}" opacity=".9"/>
-    <image href="${SPRITE_URL(fac, type, look.dir)}" x="${(-w8 / 2).toFixed(1)}" y="${(-h8 + 4 * k).toFixed(1)}" width="${w8.toFixed(1)}" height="${h8.toFixed(1)}"/>${bar8}`;
+    <image decoding="sync" href="${SPRITE_URL(fac, type, look.dir)}" x="${(-w8 / 2).toFixed(1)}" y="${(-h8 + 4 * k).toFixed(1)}" width="${w8.toFixed(1)}" height="${h8.toFixed(1)}"/>${bar8}`;
   }
   const wanted: ViewId = AIMS_FORWARD[`${fac}/${type}`]?.includes(look.view) ? (look.view === 'front' ? 'fdiag' : set.bdiag ? 'bdiag' : 'side') : look.view;
   // A missing diagonal falls back to the straight view on the same side (front or back).
@@ -416,19 +417,23 @@ function figure(type: UnitTypeId, owner: Player, hp: number, k: number, look: Lo
   const flip = view !== 'front' && view !== 'back' && look.flip ? ' transform="scale(-1 1)"' : '';
   return `<ellipse cx="${(SHADOW[0] * 11 * k).toFixed(1)}" cy="${(k + SHADOW[1] * 5 * k).toFixed(1)}" rx="${(21 * k).toFixed(1)}" ry="${(6.5 * k).toFixed(1)}" fill="#1b2410" opacity=".32" class="cast"/><ellipse cx="0" cy="${k.toFixed(1)}" rx="${(13 * k).toFixed(1)}" ry="${(4 * k).toFixed(1)}" fill="#000" opacity=".35"/>
     <ellipse cx="0" cy="${k.toFixed(1)}" rx="${(17 * k).toFixed(1)}" ry="${(5.6 * k).toFixed(1)}" fill="none" stroke="${armyColor(owner)}" stroke-width="${(2 * k).toFixed(1)}" opacity=".9"/>
-    <image href="${SPRITE_URL(fac, type, view)}" x="${(-w / 2).toFixed(1)}" y="${(-h + 4 * k).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"${flip}/>${bar}`;
+    <image decoding="sync" href="${SPRITE_URL(fac, type, view)}" x="${(-w / 2).toFixed(1)}" y="${(-h + 4 * k).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"${flip}/>${bar}`;
 }
 
+/** Loaded pictures are held here for good: a picture nothing points at is dropped by the browser and
+ *  must be read again the next time the camera turns to it, which showed as pieces blinking. */
+const KEEP: HTMLImageElement[] = [];
 let preloaded = '';
 /** Starts loading both armies' figures, once per pair of armies, so pieces don't pop in. */
 export function preloadFigures() {
   const key = `${sides.red}/${sides.blue}`;
   if (key === preloaded || typeof Image === 'undefined') return;
   preloaded = key;
-  for (const av of ARROW_VIEWS) new Image().src = `${import.meta.env.BASE_URL}pieces/arrow-${av}.webp?v=${ART_VERSION}`;
+  const hold = (src: string) => { const im = new Image(); im.src = src; im.decode?.().catch(() => {}); KEEP.push(im); };
+  for (const av of ARROW_VIEWS) hold(`${import.meta.env.BASE_URL}pieces/arrow-${av}.webp?v=${ART_VERSION}`);
   for (const fac of [sides.red, sides.blue]) {
     for (const [type, set] of Object.entries(SPRITES[fac] ?? {})) {
-      for (const view of Object.keys(set)) { const im = new Image(); im.src = SPRITE_URL(fac, type, view); im.decode?.().catch(() => {}); }
+      for (const view of Object.keys(set)) hold(SPRITE_URL(fac, type, view));
     }
   }
 }
@@ -450,6 +455,44 @@ function piece(type: UnitTypeId, owner: Player, hp: number, L: Lens, [sx, sy]: P
 /** Height of a piece's middle above its hex, for badges, numbers and arrows. */
 const lift = (L: Lens, k: number) => (L.tilt ? 20 * k : 3 * k);
 
+/** The table is a thick slab of wood, not a sheet: its sides towards the camera, and the shadow it throws below. */
+const SLAB = 26;
+function slab(v: View, L: Lens): string {
+  const [fw, fh] = mapSize(v.portrait);
+  const m = GROUND_M - 0.6; // tucked just under the picture's edge so no gap shows
+  const c: Pt[] = [[-m, -m], [fw + m, -m], [fw + m, fh + m], [-m, fh + m]];
+  const sinA = Math.sin(tiltAngle(v));
+  const [cos, sin] = [Math.cos(v.cam.yaw), Math.sin(v.cam.yaw)];
+  const top = c.map(([x, y]) => L.pt(x, y));
+  const low = (d: number) => c.map(([x, y], i) => [top[i][0], top[i][1] + d * sinA * L.size(x, y)] as Pt);
+  const foot = low(SLAB);
+  const normals: Pt[] = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+  const out: string[] = [];
+  // Shadow on whatever the table stands on: the slab's footprint, dropped a little further and spread.
+  const sh = low(SLAB * 2.1);
+  for (const [grow, op] of [[1.05, 0.2], [1.02, 0.25]] as const) {
+    const cx = sh.reduce((a, p) => a + p[0], 0) / 4, cy = sh.reduce((a, p) => a + p[1], 0) / 4;
+    out.push(`<polygon points="${sh.map(([x, y]) => fmt([cx + (x - cx) * grow, cy + (y - cy) * grow])).join(' ')}" fill="#000" opacity="${op}"/>`);
+  }
+  for (let i = 0; i < 4; i++) {
+    const [nx, ny] = normals[i];
+    const facing = nx * sin + ny * cos; // > 0: this side faces the camera
+    if (facing <= 0.01) continue;
+    const j = (i + 1) % 4;
+    const side = nx * cos - ny * sin; // which way it faces across the screen: lit from the left
+    const lum = 0.62 - 0.22 * side;
+    const col = (r: number, g: number, b: number) => `rgb(${[r, g, b].map((n) => Math.round(n * lum)).join(',')})`;
+    const lip = low(SLAB * 0.16), mid = low(SLAB * 0.62);
+    const quad = (a: Pt[], b: Pt[]) => `${fmt(a[i])} ${fmt(a[j])} ${fmt(b[j])} ${fmt(b[i])}`;
+    out.push(
+      `<polygon points="${quad(top, foot)}" fill="${col(92, 58, 36)}"/>`,
+      `<polygon points="${quad(mid, foot)}" fill="${col(62, 38, 24)}"/>`,
+      `<polygon points="${quad(top, lip)}" fill="${col(150, 104, 66)}"/>`,
+    );
+  }
+  return out.join('');
+}
+
 export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_EFFECTS): string {
   const L = lens(v);
   if (v.tilt) preloadFigures();
@@ -457,6 +500,7 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
   const ground: string[] = [];
   const standing: Standing[] = [];
   const top: string[] = [];
+  if (groundReady && L.tilt) ground.push(slab(v, L));
 
   for (let r = 0; r < s.board.length; r++) {
     for (let c = 0; c < s.board[r].length; c++) {
@@ -506,8 +550,8 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
     const ang = Math.atan2(by - ay, bx - ax);
     const head = (d: number) => `${(bx - 9 * Math.cos(ang + d)).toFixed(1)},${(by - 9 * Math.sin(ang + d)).toFixed(1)}`;
     ground.push(
-      `<line x1="${ax.toFixed(1)}" y1="${ay.toFixed(1)}" x2="${bx.toFixed(1)}" y2="${by.toFixed(1)}" class="trail"/>`,
-      `<polygon points="${bx.toFixed(1)},${by.toFixed(1)} ${head(0.45)} ${head(-0.45)}" class="trail-head"/>`,
+      `<g class="trail-g${m.old ? ' old' : ''}">${m.owner ? `<line x1="${ax.toFixed(1)}" y1="${ay.toFixed(1)}" x2="${bx.toFixed(1)}" y2="${by.toFixed(1)}" class="trail-side" stroke="${armyColor(m.owner)}"/>` : ''}<line x1="${ax.toFixed(1)}" y1="${ay.toFixed(1)}" x2="${bx.toFixed(1)}" y2="${by.toFixed(1)}" class="trail"/>`,
+      `<polygon points="${bx.toFixed(1)},${by.toFixed(1)} ${head(0.45)} ${head(-0.45)}" class="trail-head"/></g>`,
     );
   }
   for (const h of o.trail.kills) {
@@ -602,7 +646,7 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
         const av = ARROW_VIEWS[Math.round(Math.atan2(Math.abs(rx), ry) / (Math.PI / 4))];
         const [aw, ah] = ARROWS[av].map((n) => n * (46 / ARROWS.side[0]));
         const amirror = rx < 0 && av !== 'toward' && av !== 'away' ? ' transform="scale(-1 1)"' : '';
-        top.push(`<g class="flight"><image href="${import.meta.env.BASE_URL}pieces/arrow-${av}.webp?v=${ART_VERSION}" x="${(-aw / 2).toFixed(1)}" y="${(-ah / 2).toFixed(1)}" width="${aw.toFixed(1)}" height="${ah.toFixed(1)}"${amirror}/>
+        top.push(`<g class="flight"><image decoding="sync" href="${import.meta.env.BASE_URL}pieces/arrow-${av}.webp?v=${ART_VERSION}" x="${(-aw / 2).toFixed(1)}" y="${(-ah / 2).toFixed(1)}" width="${aw.toFixed(1)}" height="${ah.toFixed(1)}"${amirror}/>
           <animateMotion dur="${d}s" fill="freeze" path="M${sx.toFixed(1)} ${y0.toFixed(1)}Q${mx.toFixed(1)} ${my.toFixed(1)} ${hx.toFixed(1)} ${ty.toFixed(1)}"/>
           <animate attributeName="opacity" values="1;1;0" keyTimes="0;.8;1" dur="${d + 0.25}s" fill="freeze"/></g>`);
       }
