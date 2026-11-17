@@ -44,7 +44,7 @@ export const RECOMMENDED: GameConfig['options'] = {
   toughness: 2,
 };
 
-export const DEFAULT_SETTINGS: Settings = { budget: 50, map: 'river', dice: '3d6', options: { ...DADS_RULES }, sides: { red: 'novgorod', blue: 'teutonic' } };
+export const DEFAULT_SETTINGS: Settings = { budget: 50, map: 'river', dice: '3d6', options: { ...RECOMMENDED }, sides: { red: 'novgorod', blue: 'teutonic' } };
 
 const KEY = 'boc-settings';
 
@@ -60,7 +60,9 @@ export function loadSettings(): Settings {
       if (s.options.volleys === 6) s.options.volleys = 8;
     }
     // Version 5 (2026-11-17): foot pieces walk 6 hexes a turn.
-    if (s && typeof s.budget === 'number' && s.v !== 5 && s.options && (s.options.runLimit === 3 || s.options.runLimit === 4)) s.options.runLimit = 6;
+    if (s && typeof s.budget === 'number' && s.v !== 5 && s.v !== 6 && s.options && (s.options.runLimit === 3 || s.options.runLimit === 4)) s.options.runLimit = 6;
+    // Version 6 (2026-11-18): Recommended rules are the default; anyone still on untouched Dad's rules moves to them.
+    if (s && typeof s.budget === 'number' && s.v !== 6 && s.options && (Object.keys(DADS_RULES) as (keyof typeof DADS_RULES)[]).every((k) => s.options[k] === undefined || s.options[k] === DADS_RULES[k])) s.options = { ...RECOMMENDED };
     if (s && typeof s.budget === 'number') return { ...DEFAULT_SETTINGS, ...s, options: { ...DADS_RULES, ...s.options }, sides: { red: known(s.sides?.red, 'novgorod'), blue: known(s.sides?.blue, 'teutonic') } };
   } catch {
     /* fall through to the defaults */
@@ -73,7 +75,7 @@ export const fixedPoints = (_s: Settings) => 10;
 
 export function saveSettings(s: Settings) {
   try {
-    localStorage.setItem(KEY, JSON.stringify({ ...s, v: 5 }));
+    localStorage.setItem(KEY, JSON.stringify({ ...s, v: 6 }));
   } catch {
     /* keep them for this visit only */
   }

@@ -57,6 +57,7 @@ import { morph, morphInto } from './morph';
 import { ART_VERSION, SPRITES } from './sprites';
 import { fetchGame, newId, pushGame } from './online';
 import { isMuted, musicOn, setMusic, sound, toggleMusic, toggleMute } from './sound';
+import { boardThumb } from './thumb';
 import { DADS_RULES, RECOMMENDED, applySettings, boardFor, fixedPoints, loadSettings, newSeed, saveSettings, type DiceId, type MapId, type Settings } from './settings';
 import { MAP_STYLES, type MapStyle } from '../engine/mapgen';
 
@@ -758,18 +759,9 @@ const RULE_GROUPS: { title: Key; color: string; keys: (keyof Settings['options']
 function mapThumb(m: MapId): string {
   // Random: the map this seed and style grow into (a question mark until one is chosen).
   if (m === 'random' && settings.map !== 'random') return `<svg viewBox="0 0 72 44" width="72" height="44" aria-hidden="true"><rect width="72" height="44" rx="6" fill="#6f9a4a"/><text x="36" y="30" text-anchor="middle" font-size="22" font-weight="700" fill="#f1e8d2">?</text></svg>`;
-  // A little picture of the real map: every special hex as a dot in its place.
+  // A little board: every hex drawn as a real hex, coloured by its ground, on a wooden frame.
   const b = m === 'random' ? boardFor('random', { seed: settings.mapSeed, style: settings.mapStyle, size: settings.size === 'large' ? 'large' : 'standard' }) : boardFor(m);
-  const big = b.cols > 25 ? 25 / b.cols : 1;
-  const at = (c: number, r: number) => [(c + 0.5) * (72 / b.cols), (r + 0.5 + (c & 1) * 0.5) * (44 / (b.rows + 0.5))];
-  const dots = (list: [number, number][] | undefined, fill: string, rad: number) => (list ?? []).map(([c, r]) => { const [x, y] = at(c, r); return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(rad * big).toFixed(2)}" fill="${fill}"/>`; }).join('');
-  const rivers = [...(b.riverCol === null ? [] : [{ col: b.riverCol, bridges: b.bridgeRows, fords: b.fordRows ?? [] }]), ...(b.rivers ?? [])];
-  const water = rivers.map((rv) => {
-    const x = at(rv.col, 0)[0];
-    const mark = (rows: number[], fill: string) => rows.map((r) => `<rect x="${(x - 4.5).toFixed(1)}" y="${(at(rv.col, r)[1] - 2).toFixed(1)}" width="9" height="4" rx="1" fill="${fill}"/>`).join('');
-    return `<rect x="${(x - 2.5).toFixed(1)}" y="0" width="5" height="44" fill="#4f8fc4"/>${mark(rv.fords, '#d8cfa0')}${mark(rv.bridges, '#8a6038')}`;
-  }).join('');
-  return `<svg viewBox="0 0 72 44" width="72" height="44" aria-hidden="true"><rect width="72" height="44" rx="6" fill="#6f9a4a"/>${dots(b.swamps, '#55663c', 1.9)}${dots(b.hills, '#c9cf86', 1.9)}${dots(b.lakes, '#4f8fc4', 2)}${water}${dots(b.forests, '#2f5a22', 1.7)}${dots(b.boulders, '#9b968c', 1.2)}${dots(b.walls, '#d4d0c6', 1.7)}${dots(b.towers, '#ece8de', 2.2)}${dots(b.gates?.map((g) => [g.col, g.row] as [number, number]), '#7a5432', 1.7)}${dots(b.houses, '#a5633a', 2.1)}</svg>`;
+  return boardThumb(b);
 }
 
 /** Random map: the kind of land to grow, a bigger look at the map, and a button for a different one. */
@@ -779,7 +771,7 @@ function randomMapPanel(): string {
   return `<div class="mgen" style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
     <div class="seg" role="radiogroup" aria-label="${t(lang, 'mapStyle')}">${chips}</div>
     <div style="display:flex;gap:10px;align-items:center">
-      <div style="flex:1;min-width:0;border-radius:10px;overflow:hidden;line-height:0">${mapThumb('random').replace('width="72" height="44"', 'width="100%" style="display:block;width:100%;height:auto"')}</div>
+      <div style="flex:1;min-width:0;border-radius:10px;overflow:hidden;line-height:0">${mapThumb('random').replace(/width="72" height="\d+"/, 'width="100%" style="display:block;width:100%;height:auto"')}</div>
       <button data-act="map-reroll" style="flex:none;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 12px"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></svg>${t(lang, 'rerollMap')}</button>
     </div>
   </div>`;
@@ -853,15 +845,16 @@ function setupScreen(): string {
       <h3>${t(lang, 'armyPoints')}</h3>
       ${seg('budget', [['20', `20 <small>${t(lang, 'skirmish')}</small>`], ['30', '30'], ['50', '50'], ['80', `80 <small>${t(lang, 'epic')}</small>`]], String(settings.budget))}
 
-      <h3>${t(lang, 'pointsEachTurn')}</h3>
       <h3>${t(lang, 'boardSize')}</h3>
       ${seg('size', [['standard', t(lang, 'sizeStandard')], ['large', t(lang, 'sizeLarge')]], settings.size ?? 'standard')}
+
+      <h3>${t(lang, 'pointsEachTurn')}</h3>
       ${seg('dice', [['1d6', t(lang, 'dice1')], ['2d6', t(lang, 'dice2')], ['3d6', t(lang, 'dice3')], ['fixed', `${t(lang, 'always')} ${fixedPoints(settings)}`]], settings.dice)}
 
       <h3>${t(lang, 'rules')}</h3>
       <div class="presets">
-        ${preset('dad', isDad, t(lang, 'presetDad'), t(lang, 'presetSimpleSub'), '<rect x="4" y="4" width="16" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="2" fill="currentColor"/>')}
         ${preset('recommended', isRec, t(lang, 'presetRecommended'), t(lang, 'presetRecSub'), '<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z" fill="currentColor"/>')}
+        ${preset('dad', isDad, t(lang, 'presetDad'), t(lang, 'presetSimpleSub'), '<rect x="4" y="4" width="16" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="2" fill="currentColor"/>')}
       </div>
       <button data-act="rules-open" class="disclose ${rulesOpen ? 'open' : ''}" aria-expanded="${rulesOpen}">
         <span>${t(lang, 'customize')}</span><small>${!isDad && !isRec ? `${t(lang, 'presetCustom')} · ` : ''}${onCount} ${t(lang, 'rulesOnCount')}</small><i aria-hidden="true">›</i>
