@@ -57,7 +57,8 @@ import { morph, morphInto } from './morph';
 import { ART_VERSION, SPRITES } from './sprites';
 import { fetchGame, newId, pushGame } from './online';
 import { isMuted, musicOn, setMusic, sound, toggleMusic, toggleMute } from './sound';
-import { DADS_RULES, RECOMMENDED, applySettings, boardFor, fixedPoints, loadSettings, saveSettings, type DiceId, type MapId, type Settings } from './settings';
+import { DADS_RULES, RECOMMENDED, applySettings, boardFor, fixedPoints, loadSettings, newSeed, saveSettings, type DiceId, type MapId, type Settings } from './settings';
+import { MAP_STYLES, type MapStyle } from '../engine/mapgen';
 
 const app = document.getElementById('app')!;
 
@@ -411,7 +412,7 @@ const [ZOOM_MIN, ZOOM_MAX] = [0.7, 18]; // close enough to see the carving on a 
 type Buyable = keyof ArmyCounts;
 /** The side to move's faction decides what it can buy and what the pieces list shows. */
 const buyOrder = () => rosterOf(sess.state.current) as Buyable[];
-const TRAY_ORDER: UnitTypeId[] = ['king', 'heavyCavalry', 'lightCavalry', 'horseArcher', 'heavyInfantry', 'lineInfantry', 'samurai', 'lightInfantry', 'berserker', 'deputy', 'ashigaru', 'axeThrower', 'skirmisher', 'archer', 'ballista', 'cannon'];
+const TRAY_ORDER: UnitTypeId[] = ['king', 'heavyCavalry', 'lightCavalry', 'horseArcher', 'chariot', 'heavyInfantry', 'lineInfantry', 'samurai', 'lightInfantry', 'berserker', 'boarder', 'deputy', 'ashigaru', 'axeThrower', 'bomber', 'skirmisher', 'archer', 'ballista', 'cannon'];
 
 // ---------- view helpers ----------
 
@@ -755,11 +756,13 @@ const RULE_GROUPS: { title: Key; color: string; keys: (keyof Settings['options']
 
 /** A tiny picture of each map type for the map tiles. */
 function mapThumb(m: MapId): string {
-  if (m === 'random') return `<svg viewBox="0 0 72 44" width="72" height="44" aria-hidden="true"><rect width="72" height="44" rx="6" fill="#6f9a4a"/><text x="36" y="30" text-anchor="middle" font-size="22" font-weight="700" fill="#f1e8d2">?</text></svg>`;
+  // Random: the map this seed and style grow into (a question mark until one is chosen).
+  if (m === 'random' && settings.map !== 'random') return `<svg viewBox="0 0 72 44" width="72" height="44" aria-hidden="true"><rect width="72" height="44" rx="6" fill="#6f9a4a"/><text x="36" y="30" text-anchor="middle" font-size="22" font-weight="700" fill="#f1e8d2">?</text></svg>`;
   // A little picture of the real map: every special hex as a dot in its place.
-  const b = boardFor(m);
+  const b = m === 'random' ? boardFor('random', { seed: settings.mapSeed, style: settings.mapStyle, size: settings.size === 'large' ? 'large' : 'standard' }) : boardFor(m);
+  const big = b.cols > 25 ? 25 / b.cols : 1;
   const at = (c: number, r: number) => [(c + 0.5) * (72 / b.cols), (r + 0.5 + (c & 1) * 0.5) * (44 / (b.rows + 0.5))];
-  const dots = (list: [number, number][] | undefined, fill: string, rad: number) => (list ?? []).map(([c, r]) => { const [x, y] = at(c, r); return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${rad}" fill="${fill}"/>`; }).join('');
+  const dots = (list: [number, number][] | undefined, fill: string, rad: number) => (list ?? []).map(([c, r]) => { const [x, y] = at(c, r); return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(rad * big).toFixed(2)}" fill="${fill}"/>`; }).join('');
   const rivers = [...(b.riverCol === null ? [] : [{ col: b.riverCol, bridges: b.bridgeRows, fords: b.fordRows ?? [] }]), ...(b.rivers ?? [])];
   const water = rivers.map((rv) => {
     const x = at(rv.col, 0)[0];
@@ -767,6 +770,19 @@ function mapThumb(m: MapId): string {
     return `<rect x="${(x - 2.5).toFixed(1)}" y="0" width="5" height="44" fill="#4f8fc4"/>${mark(rv.fords, '#d8cfa0')}${mark(rv.bridges, '#8a6038')}`;
   }).join('');
   return `<svg viewBox="0 0 72 44" width="72" height="44" aria-hidden="true"><rect width="72" height="44" rx="6" fill="#6f9a4a"/>${dots(b.swamps, '#55663c', 1.9)}${dots(b.hills, '#c9cf86', 1.9)}${dots(b.lakes, '#4f8fc4', 2)}${water}${dots(b.forests, '#2f5a22', 1.7)}${dots(b.boulders, '#9b968c', 1.2)}${dots(b.walls, '#d4d0c6', 1.7)}${dots(b.towers, '#ece8de', 2.2)}${dots(b.gates?.map((g) => [g.col, g.row] as [number, number]), '#7a5432', 1.7)}${dots(b.houses, '#a5633a', 2.1)}</svg>`;
+}
+
+/** Random map: the kind of land to grow, a bigger look at the map, and a button for a different one. */
+function randomMapPanel(): string {
+  const style = settings.mapStyle ?? 'valley';
+  const chips = MAP_STYLES.map((st) => `<button role="radio" data-act="map-style" data-value="${st}" class="${st === style ? 'on' : ''}" aria-checked="${st === style}" style="font-size:12.5px;padding:8px 2px">${t(lang, `style${st[0].toUpperCase()}${st.slice(1)}` as Key)}</button>`).join('');
+  return `<div class="mgen" style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
+    <div class="seg" role="radiogroup" aria-label="${t(lang, 'mapStyle')}">${chips}</div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <div style="flex:1;min-width:0;border-radius:10px;overflow:hidden;line-height:0">${mapThumb('random').replace('width="72" height="44"', 'width="100%" style="display:block;width:100%;height:auto"')}</div>
+      <button data-act="map-reroll" style="flex:none;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 12px"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></svg>${t(lang, 'rerollMap')}</button>
+    </div>
+  </div>`;
 }
 
 function setupScreen(): string {
@@ -832,6 +848,7 @@ function setupScreen(): string {
 
       <h3>${t(lang, 'map')}</h3>
       <div class="mtiles">${mapTiles}</div>
+      ${settings.map === 'random' ? randomMapPanel() : ''}
 
       <h3>${t(lang, 'armyPoints')}</h3>
       ${seg('budget', [['20', `20 <small>${t(lang, 'skirmish')}</small>`], ['30', '30'], ['50', '50'], ['80', `80 <small>${t(lang, 'epic')}</small>`]], String(settings.budget))}
@@ -1180,7 +1197,7 @@ function setZoom(factor: number) {
 }
 
 /** Pieces that fire guns, and which gunshot they make. */
-const GUN_SOUND: Partial<Record<UnitTypeId, 'pistol' | 'rifle'>> = { gunslinger: 'pistol', cowboy: 'pistol', rifleman: 'rifle', deputy: 'rifle', lineInfantry: 'rifle', skirmisher: 'rifle', cannon: 'rifle' };
+const GUN_SOUND: Partial<Record<UnitTypeId, 'pistol' | 'rifle' | 'cannon' | 'boom'>> = { gunslinger: 'pistol', cowboy: 'pistol', rifleman: 'rifle', deputy: 'rifle', lineInfantry: 'rifle', skirmisher: 'rifle', cannon: 'cannon', bomber: 'boom' };
 
 /** When the animations now on the board are over (ms clock); the computer waits for it before redrawing. */
 let fxUntil = 0;
@@ -1694,8 +1711,11 @@ app.addEventListener('click', (e) => {
       // One choice on the New battle screen: army points, map or points per turn.
       const field = btn!.getAttribute('data-field');
       const value = btn!.getAttribute('data-value')!;
+      const wasRandom = settings.map === 'random';
       if (field === 'budget') settings = { ...settings, budget: Number(value) };
       if (field === 'map') settings = { ...settings, map: value as MapId };
+      // Choosing Random grows a map straight away (tapping it again rolls a new one).
+      if (field === 'map' && value === 'random') settings = { ...settings, mapSeed: settings.mapSeed && !wasRandom ? settings.mapSeed : newSeed(), mapStyle: settings.mapStyle ?? 'valley' };
       if (field === 'size') settings = { ...settings, size: value === 'large' ? 'large' : 'standard' };
       if (field === 'dice') settings = { ...settings, dice: value as DiceId };
       return render();
@@ -1712,6 +1732,12 @@ app.addEventListener('click', (e) => {
       if (side === 'red' && mode !== 'online') pickSide = 'blue';
       return render();
     }
+    case 'map-style':
+      settings = { ...settings, mapStyle: btn!.getAttribute('data-value') as MapStyle, mapSeed: settings.mapSeed ?? newSeed() };
+      return render();
+    case 'map-reroll':
+      settings = { ...settings, mapSeed: newSeed() };
+      return render();
     case 'swap-sides':
       settings = { ...settings, sides: { red: settings.sides.blue, blue: settings.sides.red } };
       return render();

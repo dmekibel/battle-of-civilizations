@@ -19,7 +19,7 @@ const HORSE = (ink: string, dx = 0) =>
   `<path transform="translate(${dx} 0)" d="M-7 12L-7 3C-7 -5 -2 -10 4 -10L6 -13L7.5 -9C11 -7 13 -3 13 1L13 3L9 4L5 1L3 3L3 12Z" fill="${ink}"/>`;
 
 /** Pictures some armies use in place of the standard ones (no spears for the Cowboys). */
-export type ArtId = 'star' | 'tsar' | 'cross' | 'khan' | 'shogun' | 'bonnet' | 'shotgun' | 'saber' | 'tomahawk' | 'lancer';
+export type ArtId = 'star' | 'tsar' | 'cross' | 'khan' | 'shogun' | 'bonnet' | 'shotgun' | 'saber' | 'tomahawk' | 'lancer' | 'pharaoh' | 'tricorn';
 
 function art(id: ArtId, ink: string, bg: string): string {
   switch (id) {
@@ -50,6 +50,12 @@ function art(id: ArtId, ink: string, bg: string): string {
     case 'lancer':
       // A rider with a long lance (Comanche mounted warriors).
       return picture('heavyCavalry', ink);
+    case 'pharaoh':
+      // The Pharaoh's striped nemes headdress with the cobra on the brow.
+      return `<path d="M-6 -11Q0 -14 6 -11L9 -3L12 11H5L4 1H-4L-5 11H-12L-9 -3Z" fill="${ink}"/><path d="M-9.5 -1H9.5M-10.5 3.5H-4.5M4.5 3.5H10.5M-11.3 7.5H-5M5 7.5H11.3" stroke="${bg}" stroke-width="1.1"/><path d="M0 -12V-7" stroke="${bg}" stroke-width="1.6" stroke-linecap="round"/>`;
+    case 'tricorn':
+      // The pirate Captain's tricorn hat with a little skull.
+      return `<path d="M-13 4Q-9 -9 0 -9Q9 -9 13 4Q6 0 0 3Q-6 0 -13 4Z" fill="${ink}"/><circle cx="0" cy="-3.5" r="2.4" fill="${bg}"/><path d="M-1 -1.5V0M1 -1.5V0" stroke="${bg}" stroke-width="0.9"/><path d="M-4 9L4 13M4 9L-4 13" stroke="${ink}" stroke-width="1.8" stroke-linecap="round"/>`;
     case 'tomahawk':
       // A war hatchet: a handle with a stone head.
       return `<path d="M-9 12L6 -9" stroke="${ink}" stroke-width="2.4" stroke-linecap="round"/><path d="M1 -14L10 -11L9 -4L4 -8Z" fill="${ink}"/>`;
@@ -102,6 +108,15 @@ function picture(type: UnitTypeId, ink: string): string {
     case 'cannon':
       // A field gun: barrel on a two-wheeled carriage.
       return `<path d="M-10 -1L13 -8" stroke="${ink}" stroke-width="4.2" stroke-linecap="round"/><path d="M-6 1L-14 10" stroke="${ink}" stroke-width="2.4" stroke-linecap="round"/><circle cx="-2" cy="5" r="6" fill="none" stroke="${ink}" stroke-width="2"/><circle cx="-2" cy="5" r="1.4" fill="${ink}"/>`;
+    case 'chariot':
+      // A horse pulling a two-wheeled chariot.
+      return `${HORSE(ink, 3)}<path d="M-9 1H1" stroke="${ink}" stroke-width="2" stroke-linecap="round"/><path d="M-15 -6H-6V1H-15Z" fill="${ink}"/><circle cx="-10" cy="6" r="5.5" fill="none" stroke="${ink}" stroke-width="2"/><path d="M-10 0.5V11.5M-15.5 6H-4.5" stroke="${ink}" stroke-width="1.2"/>`;
+    case 'boarder':
+      // A cutlass: a short curved blade with a cup guard.
+      return `<path d="M-6 7Q6 3 12 -11" fill="none" stroke="${ink}" stroke-width="3" stroke-linecap="round"/><path d="M-11 4Q-9 12 -2 10" fill="none" stroke="${ink}" stroke-width="2"/><path d="M-9 9L-13 12" stroke="${ink}" stroke-width="2.4" stroke-linecap="round"/>`;
+    case 'bomber':
+      // A round bomb with a lit fuse.
+      return `<circle cx="-2" cy="3" r="8" fill="${ink}"/><path d="M3 -3L6 -7Q8 -10 11 -9" fill="none" stroke="${ink}" stroke-width="1.8" stroke-linecap="round"/><path d="M13 -13V-10M15.5 -9H12.5M13 -8L14.5 -6.5M11 -11L9.5 -12.5" stroke="${ink}" stroke-width="1.3" stroke-linecap="round"/>`;
     case 'samurai':
       // A katana: a long, slightly curved blade with a round guard.
       return `<path d="M-11 10Q1 4 12 -11" fill="none" stroke="${ink}" stroke-width="2.4" stroke-linecap="round"/><circle cx="-5" cy="6.3" r="2.6" fill="none" stroke="${ink}" stroke-width="1.8"/>`;

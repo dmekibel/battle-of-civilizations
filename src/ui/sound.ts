@@ -4,14 +4,14 @@
 // Browsers only allow sound after the first tap, so the context starts lazily.
 
 export type Cue =
-  | 'tick' | 'dice' | 'step' | 'hoof' | 'clash' | 'bow' | 'thunk' | 'pistol' | 'rifle' | 'death' | 'horn' | 'win' | 'lose'
+  | 'tick' | 'dice' | 'step' | 'hoof' | 'clash' | 'bow' | 'thunk' | 'pistol' | 'rifle' | 'cannon' | 'boom' | 'death' | 'horn' | 'win' | 'lose'
   /** Older name for a bow shot. */
   | 'arrow';
 
 /** How many takes each cue has, and how loud it plays (the files are all peaked to -1 dB). */
 const TAKES: Record<Exclude<Cue, 'arrow'>, [number, number]> = {
   tick: [1, 0.35], dice: [2, 0.8], step: [3, 0.32], hoof: [3, 0.38], clash: [3, 0.7], bow: [2, 0.55], thunk: [2, 0.6],
-  pistol: [2, 0.6], rifle: [2, 0.65], death: [2, 0.7], horn: [1, 0.45], win: [1, 0.8], lose: [1, 0.75],
+  pistol: [2, 0.6], rifle: [2, 0.65], cannon: [2, 0.75], boom: [2, 0.7], death: [2, 0.7], horn: [1, 0.45], win: [1, 0.8], lose: [1, 0.75],
 };
 /** Cues that keep their pitch: music and the horn. */
 const STEADY = new Set<Cue>(['win', 'lose', 'horn']);
@@ -152,6 +152,10 @@ export function sound(cue: Cue, delay = 0) {
     case 'pistol':
     case 'rifle':
       return noise(c, t, 0.2, 0.6, 1200, 0.7);
+    case 'cannon':
+    case 'boom':
+      // A deep boom: low noise with a long tail.
+      return noise(c, t, cue === 'cannon' ? 0.9 : 0.5, 0.8, 300, 0.7);
     case 'death':
       return tone(c, t, 'sawtooth', 220, 70, 0.45, 0.08);
     case 'horn':

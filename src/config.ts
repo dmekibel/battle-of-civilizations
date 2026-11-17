@@ -26,7 +26,12 @@ export type UnitTypeId =
   // Napoleonic wars (British, French): line infantry and skirmishers shoot; a cannon hits hard from far away.
   | 'lineInfantry'
   | 'skirmisher'
-  | 'cannon';
+  | 'cannon'
+  // Egypt: a two-horse war chariot with an archer aboard.
+  | 'chariot'
+  // Pirates: cutlass boarders hit hard and fall fast; bombers throw powder kegs and grenades a short way.
+  | 'boarder'
+  | 'bomber';
 
 export type TerrainId = 'plain' | 'forest' | 'river' | 'bridge' | 'ford' | 'hill' | 'swamp' | 'lake' | 'wall' | 'tower' | 'gate' | 'house';
 
@@ -248,6 +253,11 @@ export const CONFIG: GameConfig = {
     lineInfantry: { moveCost: 6, attack: 1, hp: 2, ranged: { cost: 1, minRange: 2, maxRange: 3, damage: 1 }, heavy: true },
     skirmisher: { moveCost: 3, attack: 1, hp: 1, ranged: { cost: 1, minRange: 2, maxRange: 5, damage: 1 }, heavy: false },
     cannon: { moveCost: 6, attack: 0, hp: 1, ranged: { cost: 2, minRange: 3, maxRange: 8, damage: 2 }, heavy: true },
+    // Egypt: a war chariot rides like light cavalry and its archer shoots from it.
+    chariot: { moveCost: 1, speed: 3, attack: 1, hp: 2, ranged: { cost: 1, minRange: 2, maxRange: 4, damage: 1 }, heavy: false, mounted: true },
+    // Pirates: boarders fight like berserkers; bombers throw a grenade a short way that hits for 2.
+    boarder: { moveCost: 3, attack: 2, hp: 1, ranged: null, heavy: false },
+    bomber: { moveCost: 3, attack: 0, hp: 1, ranged: { cost: 1, minRange: 2, maxRange: 3, damage: 2 }, heavy: false },
     cowboy: { moveCost: 1, speed: 3, attack: 1, hp: 1, ranged: { cost: 1, minRange: 2, maxRange: 3, damage: 1 }, heavy: false, mounted: true },
     // Melee for archers is an open question; 0 = they only shoot.
     archer: {
@@ -282,7 +292,7 @@ export const CONFIG: GameConfig = {
   },
   army: {
     budget: 50,
-    cost: { lightInfantry: 1, heavyInfantry: 2, archer: 3, lightCavalry: 3, heavyCavalry: 4, horseArcher: 4, samurai: 4, ashigaru: 1, gunslinger: 3, rifleman: 3, cowboy: 4, deputy: 2, berserker: 3, axeThrower: 3, ballista: 5, lineInfantry: 3, skirmisher: 3, cannon: 5 },
+    cost: { lightInfantry: 1, heavyInfantry: 2, archer: 3, lightCavalry: 3, heavyCavalry: 4, horseArcher: 4, samurai: 4, ashigaru: 1, gunslinger: 3, rifleman: 3, cowboy: 4, deputy: 2, berserker: 3, axeThrower: 3, ballista: 5, lineInfantry: 3, skirmisher: 3, cannon: 5, chariot: 5, boarder: 3, bomber: 4 },
   },
   // 5 columns leave room for the largest possible army (50 light infantry and the King).
   deploy: { depth: 5 },

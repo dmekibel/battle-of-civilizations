@@ -6,11 +6,11 @@ import type { ArmyCounts, Player } from '../engine';
 import type { Lang } from './i18n';
 import type { ArtId } from './symbols';
 
-export type FactionId = 'novgorod' | 'teutonic' | 'mongols' | 'japanese' | 'frontier' | 'comanche' | 'vikings' | 'romans' | 'british' | 'french';
+export type FactionId = 'novgorod' | 'teutonic' | 'mongols' | 'japanese' | 'frontier' | 'comanche' | 'vikings' | 'romans' | 'british' | 'french' | 'egypt' | 'pirates';
 /** Armies are grouped by the age they fought in. */
 export type Era = 'ancient' | 'medieval' | 'gunpowder';
 export const ERAS: Era[] = ['ancient', 'medieval', 'gunpowder'];
-export const ERA_OF: Record<FactionId, Era> = { romans: 'ancient', vikings: 'medieval', novgorod: 'medieval', teutonic: 'medieval', mongols: 'medieval', japanese: 'medieval', frontier: 'gunpowder', comanche: 'gunpowder', british: 'gunpowder', french: 'gunpowder' };
+export const ERA_OF: Record<FactionId, Era> = { romans: 'ancient', egypt: 'ancient', vikings: 'medieval', novgorod: 'medieval', teutonic: 'medieval', mongols: 'medieval', japanese: 'medieval', frontier: 'gunpowder', comanche: 'gunpowder', british: 'gunpowder', french: 'gunpowder', pirates: 'gunpowder' };
 
 export interface Faction {
   name: Record<Lang, string>;
@@ -169,9 +169,40 @@ export const FACTIONS: Record<FactionId, Faction> = {
       cannon: { en: 'Cannon', ru: 'Пушка' },
     },
   },
+  egypt: {
+    name: { en: 'Egypt', ru: 'Египет' },
+    color: '#b8901f',
+    text: '#f0d27a',
+    roster: ['lightInfantry', 'heavyInfantry', 'archer', 'chariot'],
+    blurb: { en: "Pharaoh's army: spearmen and archers on foot, Medjay guards, and war chariots that ride fast and shoot on the move.", ru: 'Войско фараона: копейщики и лучники, стража меджаи и боевые колесницы, которые быстро мчатся и стреляют на ходу.' },
+    emblem: shield('#1f3f8f', '#d9a521', '<path d="M12 28Q30 14 48 28Q30 40 12 28Z" fill="none" stroke="#e8b923" stroke-width="3" stroke-linejoin="round"/><circle cx="30" cy="27.5" r="5" fill="#e8b923"/><path d="M12 22Q30 10 48 20" fill="none" stroke="#e8b923" stroke-width="3" stroke-linecap="round"/><path d="M27 37L24 52M24 52Q28 56 31 51" fill="none" stroke="#e8b923" stroke-width="2.6" stroke-linecap="round"/><path d="M35 36Q42 44 44 54" fill="none" stroke="#e8b923" stroke-width="2.6" stroke-linecap="round"/>'),
+    names: {
+      king: { en: 'Pharaoh', ru: 'Фараон' },
+      lightInfantry: { en: 'Spearmen', ru: 'Копейщики' },
+      heavyInfantry: { en: 'Medjay guards', ru: 'Стража меджаи' },
+      chariot: { en: 'War chariots', ru: 'Боевые колесницы' },
+    },
+    art: { king: 'pharaoh' },
+  },
+  pirates: {
+    name: { en: 'Pirates', ru: 'Пираты' },
+    color: '#0f4d52',
+    text: '#7cc9bd',
+    roster: ['boarder', 'skirmisher', 'bomber', 'cannon'],
+    blurb: { en: 'Buccaneers: cutlass boarders who hit hard but fall to one blow, musketeers, bombers whose grenades hit for 2, and a deck cannon.', ru: 'Флибустьеры: абордажники с саблями бьют сильно, но падают от одного удара; мушкетёры, гренадёры, чьи бомбы бьют на 2, и палубная пушка.' },
+    emblem: shield('#1b1b1d', '#e9e4d6', '<path d="M14 54L44 20M46 54L16 20" stroke="#e9e4d6" stroke-width="3" stroke-linecap="round"/><path d="M11 50L18 57M49 50L42 57" stroke="#e9e4d6" stroke-width="3" stroke-linecap="round"/><path d="M30 13Q41 13 41 25Q41 31 37 33V38H23V33Q19 31 19 25Q19 13 30 13Z" fill="#e9e4d6"/><circle cx="25.5" cy="25" r="3.2" fill="#1b1b1d"/><circle cx="34.5" cy="25" r="3.2" fill="#1b1b1d"/><path d="M30 29L28 32H32Z" fill="#1b1b1d"/><path d="M27 35V38M30 35V38M33 35V38" stroke="#1b1b1d" stroke-width="1.2"/>'),
+    names: {
+      king: { en: 'Captain', ru: 'Капитан' },
+      boarder: { en: 'Boarders', ru: 'Абордажники' },
+      skirmisher: { en: 'Musketeers', ru: 'Мушкетёры' },
+      bomber: { en: 'Bombers', ru: 'Гренадёры' },
+      cannon: { en: 'Deck cannon', ru: 'Палубная пушка' },
+    },
+    art: { king: 'tricorn' },
+  },
 };
 
-export const FACTION_ORDER: FactionId[] = ['romans', 'vikings', 'novgorod', 'teutonic', 'mongols', 'japanese', 'frontier', 'comanche', 'british', 'french'];
+export const FACTION_ORDER: FactionId[] = ['romans', 'egypt', 'vikings', 'novgorod', 'teutonic', 'mongols', 'japanese', 'frontier', 'comanche', 'british', 'french', 'pirates'];
 
 /** Which faction each side leads in the current battle. */
 export let sides: Record<Player, FactionId> = { red: 'novgorod', blue: 'teutonic' };

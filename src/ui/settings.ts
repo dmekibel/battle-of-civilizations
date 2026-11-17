@@ -5,6 +5,7 @@
 import { CONFIG, type GameConfig } from '../config';
 import type { Player } from '../engine';
 import { known, setSides, sides, type FactionId } from './factions';
+import { generateMap, MAP_STYLES, type MapStyle } from '../engine/mapgen';
 
 import MAPS from './maps.json';
 export type MapId = 'river' | 'open' | 'forest' | 'fords' | 'pass' | 'island' | 'longwood' | 'noford' | 'ridge' | 'marsh' | 'lake' | 'castles' | 'village' | 'siege' | 'random';
@@ -17,6 +18,9 @@ export interface Settings {
   size?: 'standard' | 'large';
   dice: DiceId;
   options: GameConfig['options'];
+  /** Random map: the seed and style it is grown from, so a resumed or online game rebuilds the very same map. */
+  mapSeed?: number;
+  mapStyle?: MapStyle;
   /** The faction each side leads (Novgorod side moves first). */
   sides: Record<Player, FactionId>;
 }
@@ -81,7 +85,13 @@ const ORIGINAL = structuredClone(CONFIG.board);
 /** Mirror a list of Novgorod-side forest hexes onto the Teutonic side. */
 const mirrored = (half: [number, number][]): [number, number][] => [...half, ...half.map(([c, r]) => [CONFIG.board.cols - 1 - c, r] as [number, number])];
 
-export function boardFor(map: MapId): GameConfig['board'] {
+/** A new random seed for a generated map. */
+export const newSeed = () => Math.floor(Math.random() * 2147483647) + 1;
+const styleOf = (s?: string): MapStyle => (MAP_STYLES.includes(s as MapStyle) ? (s as MapStyle) : 'valley');
+
+/** The board for a map. A random map needs its seed and style (and is grown at the board size, not enlarged). */
+export function boardFor(map: MapId, gen?: { seed?: number; style?: MapStyle; size?: 'standard' | 'large' }): GameConfig['board'] {
+  if (map === 'random') return generateMap(gen?.seed ?? 1, styleOf(gen?.style), gen?.size ?? 'standard');
   const { cols, rows } = ORIGINAL;
   const mid = Math.floor(cols / 2);
   const made = (MAPS as unknown as Record<string, Partial<GameConfig['board']>>)[map];
@@ -111,20 +121,6 @@ export function boardFor(map: MapId): GameConfig['board'] {
       const wall: [number, number][] = [];
       for (let r = 0; r < rows; r++) if (!gaps.has(r)) wall.push([mid - 1, r], [mid, r]);
       return { cols, rows, riverCol: null, bridgeRows: [], forests: [...mirrored(wall.filter(([c]) => c !== mid)), ...wall.filter(([c]) => c === mid), ...mirrored([[6, 4], [6, 10]])] };
-    }
-    case 'random': {
-      // A fair random map: woods placed at random on one side and mirrored on the other.
-      const half: [number, number][] = [];
-      const clusters = 4 + Math.floor(Math.random() * 4);
-      for (let i = 0; i < clusters; i++) {
-        const c = 6 + Math.floor(Math.random() * (mid - 6));
-        const r = Math.floor(Math.random() * rows);
-        half.push([c, r]);
-        if (Math.random() < 0.7) half.push([c + (Math.random() < 0.5 ? 1 : 0), Math.min(rows - 1, r + 1)]);
-      }
-      const river = Math.random() < 0.75;
-      const bridges = river ? [...new Set([2 + Math.floor(Math.random() * 4), rows - 3 - Math.floor(Math.random() * 4), ...(Math.random() < 0.5 ? [Math.floor(rows / 2)] : [])])] : [];
-      return { cols, rows, riverCol: river ? mid : null, bridgeRows: bridges, forests: mirrored(half) };
     }
   }
   return structuredClone(ORIGINAL);
@@ -158,7 +154,12 @@ export function enlargeBoard(b: GameConfig['board']): GameConfig['board'] {
 /** Puts the settings into the game's rules. Call before starting or loading a battle. */
 export function applySettings(s: Settings) {
   CONFIG.army.budget = s.budget;
-  CONFIG.board = s.size === 'large' ? enlargeBoard(boardFor(s.map)) : boardFor(s.map);
+  if (s.map === 'random') {
+    // A random map always has its own seed and style, saved with the battle.
+    s.mapSeed ??= newSeed();
+    s.mapStyle = styleOf(s.mapStyle);
+    CONFIG.board = boardFor('random', { seed: s.mapSeed, style: s.mapStyle, size: s.size === 'large' ? 'large' : 'standard' });
+  } else CONFIG.board = s.size === 'large' ? enlargeBoard(boardFor(s.map)) : boardFor(s.map);
   // A bigger board leaves more room to set up.
   CONFIG.deploy.depth = s.size === 'large' ? 7 : 5;
   CONFIG.dice =

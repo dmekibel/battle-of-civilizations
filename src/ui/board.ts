@@ -146,6 +146,11 @@ export function groundParts(b: GameConfig['board']): GroundPart[] {
   syncSize();
   const [gw, gh] = groundSize();
   if (b.overlay) out.push({ key: `over-${b.overlay}${SUF()}`, src: PART(`over-${b.overlay}${SUF()}`), x: 0, y: 0, w: gw, h: gh });
+  // Random maps have no painted overlay: their lakes are painted here, in the same style.
+  else if (b.lakes?.length) {
+    const lp = lakePart(b.lakes);
+    if (lp) out.push(lp);
+  }
   const rivers = [...(b.riverCol === null ? [] : [{ col: b.riverCol, bridges: b.bridgeRows, fords: b.fordRows ?? [] }]), ...(b.rivers ?? [])];
   for (const rv of rivers) {
     // The river picture was painted for column 12; other columns slide it sideways.
@@ -161,6 +166,108 @@ export function groundParts(b: GameConfig['board']): GroundPart[] {
     }
   }
   return out;
+}
+// ---------- lakes painted on the fly (random maps) ----------
+// The same recipe as _art/map_build.py: the lake hexes as one shape, softened into a rounded outline with a gently
+// wavy edge, a sandy shore, and water darker towards the banks with painted ripples. Painted once per lake layout.
+const lakeCache = new Map<string, GroundPart | null>();
+function lakePart(lakes: [number, number][]): GroundPart | null {
+  if (typeof document === 'undefined') return null;
+  const id = `lake${SUF()}-${lakes.map(([c, r]) => `${c}.${r}`).join('_')}`;
+  if (lakeCache.has(id)) return lakeCache.get(id)!;
+  const centre = (c: number, r: number): Pt => [S * 1.5 * c + S + GROUND_M, R3 * S * (r + 0.5 * (c & 1)) + (R3 / 2) * S + GROUND_M];
+  const pad = S + 40;
+  const cs = lakes.map(([c, r]) => centre(c, r));
+  const x0 = Math.floor(Math.min(...cs.map((p) => p[0])) - pad);
+  const y0 = Math.floor(Math.min(...cs.map((p) => p[1])) - pad);
+  const w = Math.ceil(Math.max(...cs.map((p) => p[0])) + pad) - x0;
+  const h = Math.ceil(Math.max(...cs.map((p) => p[1])) + pad) - y0;
+  // 1. The lake hexes on a coarse grid (2 units a cell), then blurred: a smooth "how much lake" field.
+  const G = 2;
+  const [gw, gh] = [Math.ceil(w / G) + 1, Math.ceil(h / G) + 1];
+  let f = new Float32Array(gw * gh);
+  const half = (R3 / 2) * S;
+  for (const [cx, cy] of cs)
+    for (let j = Math.floor((cy - half - y0) / G); j <= Math.ceil((cy + half - y0) / G); j++)
+      for (let i = Math.floor((cx - S - x0) / G); i <= Math.ceil((cx + S - x0) / G); i++) {
+        if (i < 0 || j < 0 || i >= gw || j >= gh) continue;
+        const [dx, dy] = [Math.abs(x0 + i * G - cx), Math.abs(y0 + j * G - cy)];
+        if (dy <= half && R3 * dx + dy <= R3 * S) f[j * gw + i] = 1;
+      }
+  // Three box blurs make a gaussian (about 15 units), enough to round off every hex corner.
+  const box = (src: Float32Array, rad: number, horiz: boolean) => {
+    const out = new Float32Array(src.length);
+    const [n, m] = horiz ? [gh, gw] : [gw, gh];
+    for (let a = 0; a < n; a++) {
+      let sum = 0;
+      const idx = (b: number) => (horiz ? a * gw + b : b * gw + a);
+      for (let b = -rad; b <= rad; b++) sum += src[idx(Math.min(m - 1, Math.max(0, b)))];
+      for (let b = 0; b < m; b++) {
+        out[idx(b)] = sum / (2 * rad + 1);
+        sum += src[idx(Math.min(m - 1, b + rad + 1))] - src[idx(Math.max(0, b - rad))];
+      }
+    }
+    return out;
+  };
+  for (let k = 0; k < 3; k++) f = box(box(f, 7, true), 7, false);
+  const field = (x: number, y: number) => {
+    const gx = Math.min(gw - 1.001, Math.max(0, x / G));
+    const gy = Math.min(gh - 1.001, Math.max(0, y / G));
+    const [i, j] = [Math.floor(gx), Math.floor(gy)];
+    const [u, v] = [gx - i, gy - j];
+    const a = f[j * gw + i], b = f[j * gw + i + 1], c = f[(j + 1) * gw + i], d = f[(j + 1) * gw + i + 1];
+    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+  };
+  // Smooth noise for the wavy edge and the water's light and dark.
+  const hash = (i: number, j: number) => {
+    let q = Math.imul(i, 374761393) ^ Math.imul(j, 668265263) ^ 0x5bd1e995;
+    q = Math.imul(q ^ (q >>> 13), 1274126177);
+    return ((q ^ (q >>> 16)) >>> 0) / 4294967296;
+  };
+  const noise = (x: number, y: number) => {
+    const [i, j] = [Math.floor(x), Math.floor(y)];
+    const [u, v] = [x - i, y - j].map((t) => t * t * (3 - 2 * t));
+    const a = hash(i, j), b = hash(i + 1, j), c = hash(i, j + 1), d = hash(i + 1, j + 1);
+    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v - 0.5;
+  };
+  // 2. Paint at 2 pixels a unit, like the ground picture.
+  const K = 2;
+  const cv = document.createElement('canvas');
+  cv.width = w * K;
+  cv.height = h * K;
+  const ctx = cv.getContext('2d');
+  if (!ctx) return null;
+  const img = ctx.createImageData(cv.width, cv.height);
+  const px = img.data;
+  const clamp = (t: number) => (t < 0 ? 0 : t > 1 ? 1 : t);
+  for (let py = 0; py < cv.height; py++)
+    for (let pxl = 0; pxl < cv.width; pxl++) {
+      const [lx, ly] = [pxl / K, py / K];
+      const [X, Y] = [x0 + lx, y0 + ly];
+      const wob = noise(X / 26, Y / 26) * 0.16 + noise(X / 9, Y / 9) * 0.05;
+      const v = field(lx, ly) + wob;
+      const shore = clamp((v - 0.4) * 14 + 0.5);
+      if (shore <= 0) continue;
+      const water = clamp((v - 0.56) * 16 + 0.5);
+      // Deeper (lighter) towards the middle, darker along the banks, as on the river.
+      const deep = clamp((v - 0.56) / 0.38);
+      const ripple = Math.sin((X / 8.5 + 0.55 * Math.sin(Y / 10 + X / 31) + noise(X / 40, Y / 40) * 1.5) * Math.PI * 2);
+      const glint = Math.pow(Math.max(0, ripple), 8) * 0.22 - Math.pow(Math.max(0, -ripple), 6) * 0.07;
+      const tone = (0.62 + 0.38 * deep) * (1 + noise(X / 60, Y / 60) * 0.12 + glint);
+      const [wr, wg, wb] = [62 * tone, 130 * tone, 160 * tone];
+      // Sand at the shore, a touch of grass mixed in so it sits in the meadow.
+      const grit = 1 + noise(X / 3, Y / 3) * 0.08;
+      const [sr, sg, sb] = [140 * grit, 128 * grit, 82 * grit];
+      const o = (py * cv.width + pxl) * 4;
+      px[o] = sr + (wr - sr) * water;
+      px[o + 1] = sg + (wg - sg) * water;
+      px[o + 2] = sb + (wb - sb) * water;
+      px[o + 3] = 255 * shore;
+    }
+  ctx.putImageData(img, 0, 0);
+  const part: GroundPart = { key: id, src: cv.toDataURL('image/png'), x: x0, y: y0, w, h };
+  lakeCache.set(id, part);
+  return part;
 }
 /** The picture's size in map units (its CSS size before the camera's transform). */
 export const groundSize = (): Pt => (syncSize(), [W + 2 * GROUND_M, H + 2 * GROUND_M]);
@@ -517,7 +624,7 @@ export const NO_EFFECTS: Effects = { from: new Map(), hits: [], walks: new Map()
 /** Time for one step of a walk, in ms. */
 export const STEP_MS = 130;
 /** Pieces that fire guns: a quick tracer and smoke instead of an arrow in flight. */
-const GUNS = new Set<UnitTypeId>(['gunslinger', 'rifleman', 'cowboy', 'deputy', 'lineInfantry', 'skirmisher', 'cannon']);
+const GUNS = new Set<UnitTypeId>(['gunslinger', 'rifleman', 'cowboy', 'deputy', 'lineInfantry', 'skirmisher', 'cannon', 'bomber']);
 /** When the blow lands after the attack starts (seconds): arrows fly, bullets and blades are quick. */
 /** How long an arrow is in the air (seconds): slow enough to follow with the eye. */
 export const ARROW_S = 0.65;
@@ -704,7 +811,8 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
         else if (groundReady) ground.push(roof(t, hex, v, L));
       }
       if (t === 'plain' && groundReady && L.tilt && CONFIG.board.boulders?.some(([bc, br]) => bc === c && br === r)) standing.push(...boulders(hex, v, L));
-      if ((t === 'plain' || t === 'hill') && groundReady && L.tilt) standing.push(...scenery(hex, v, L));
+      // Grass tufts and bushes sit off the hex's centre; on a lake shore they would land in the water.
+      if ((t === 'plain' || t === 'hill') && groundReady && L.tilt && !neighbors(hex).some((n) => s.board[n.row]?.[n.col] === 'lake')) standing.push(...scenery(hex, v, L));
       if (t === 'bridge' && !groundReady) standing.push(bridge(hex, v, L));
     }
   }

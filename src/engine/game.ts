@@ -166,7 +166,7 @@ function search(s: GameState, unitId: string, cfg: GameConfig): { out: Map<strin
 const enemyNext = (s: GameState, h: Hex, owner: Player) => s.units.some((e) => e.owner !== owner && distance(e.pos, h) === 1);
 
 const mounted = (u: Unit, cfg: GameConfig) => !!cfg.units[u.type].mounted;
-const INFANTRY = new Set(['heavyInfantry', 'lightInfantry', 'deputy', 'samurai', 'ashigaru', 'berserker', 'axeThrower', 'lineInfantry', 'skirmisher']);
+const INFANTRY = new Set(['heavyInfantry', 'lightInfantry', 'deputy', 'samurai', 'ashigaru', 'berserker', 'axeThrower', 'lineInfantry', 'skirmisher', 'boarder', 'bomber']);
 
 /** Points value of an army (its King not counted), for the morale rule. */
 export function armyValue(s: GameState, p: Player, cfg: GameConfig = CONFIG): number {
