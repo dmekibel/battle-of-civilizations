@@ -53,6 +53,7 @@ import { errorText, logText, playerName, reasonText, t, unitName, type Key, type
 import { unitIcon } from './symbols';
 import { FACTIONS, FACTION_ORDER, factionOf, rosterOf, sides, type FactionId } from './factions';
 import { morph, morphInto } from './morph';
+import { fetchGame, newId, pushGame } from './online';
 import { isMuted, musicOn, setMusic, sound, toggleMusic, toggleMute } from './sound';
 import { DADS_RULES, RECOMMENDED, applySettings, fixedPoints, loadSettings, saveSettings, type DiceId, type MapId, type Settings } from './settings';
 
@@ -72,7 +73,13 @@ function loadLang(): Lang {
 
 const SAVE_KEY = 'boc-save-v1';
 
-type Mode = 'pvp' | 'ai';
+type Mode = 'pvp' | 'ai' | 'online';
+/** An online game: its id (the invite link), which side this phone plays, and the last version seen (-1 = not loaded yet). */
+interface Net {
+  id: string;
+  me: Player;
+  rev: number;
+}
 /** In a game against the computer, it plays the Teutonic Order. */
 const AI_SIDE: Player = 'blue';
 
@@ -82,6 +89,7 @@ interface Saved {
   cover: boolean;
   mode: Mode;
   settings?: Settings;
+  net?: Net | null;
 }
 
 function loadGame(): Saved | null {
@@ -99,7 +107,7 @@ function loadGame(): Saved | null {
 
 function saveGame() {
   try {
-    const data: Saved = { board: [CONFIG.board.cols, CONFIG.board.rows], state: sess.state, cover, mode, settings };
+    const data: Saved = { board: [CONFIG.board.cols, CONFIG.board.rows], state: sess.state, cover, mode, settings, net };
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
   } catch {
     /* storage full or blocked: play on without saving */
@@ -126,12 +134,107 @@ let lastPoints = 0;
 let menuOpen = false;
 /** Pass-the-phone screen: shown whenever the other player must look away. */
 // A game reopened during secret setup always starts behind the cover, so nothing leaks.
-let mode: Mode = saved?.mode === 'ai' ? 'ai' : 'pvp';
+let mode: Mode = saved?.mode === 'ai' ? 'ai' : saved?.mode === 'online' && saved.net ? 'online' : 'pvp';
 let cover = saved ? saved.cover || (mode === 'pvp' && (saved.state.phase === 'draft' || saved.state.phase === 'deploy')) : false;
 /** The "how do you want to play" screen: first launch and every new game. */
 let choosing = !saved;
 let aiTimer: number | null = null;
 const aiTurn = (s: GameState) => mode === 'ai' && s.current === AI_SIDE && s.phase !== 'over' && setupPhase(s) === false;
+// ---------- online ----------
+let net: Net | null = mode === 'online' ? saved!.net! : null;
+/** The state both phones agree on: a different one on screen means this phone has something to send. */
+let netState: GameState | null = net ? sess.state : null;
+const roleKey = (id: string) => `boc-net-${id}`;
+{
+  // Opened from an invite link: join that game (as Blue, unless this phone started it).
+  const g = new URLSearchParams(location.search).get('g');
+  if (g && /^[a-z0-9]{16,40}$/.test(g) && g !== net?.id) {
+    let me: Player = 'blue';
+    try {
+      if (localStorage.getItem(roleKey(g)) === 'red') me = 'red';
+      localStorage.setItem(roleKey(g), me);
+    } catch { /* private window: play as Blue */ }
+    mode = 'online';
+    net = { id: g, me, rev: -1 };
+    netState = null;
+    choosing = false;
+  }
+  if (mode === 'online') cover = false;
+}
+/** Online and not this phone's go (or the game hasn't arrived yet). */
+const theirTurn = (s: GameState) => mode === 'online' && !!net && s.phase !== 'over' && (net.rev < 0 || s.current !== net.me);
+const notMine = (s: GameState) => aiTurn(s) || theirTurn(s);
+const inviteUrl = () => `${location.origin}${location.pathname}?g=${net?.id ?? ''}`;
+function leaveNet() {
+  net = null;
+  netState = null;
+  history.replaceState(null, '', location.pathname);
+}
+let sending = false;
+let unsent: { rev: number; body: string } | null = null;
+/** Sends this phone's latest position, retrying until it gets through; only the newest matters. */
+async function flush() {
+  if (sending) return;
+  sending = true;
+  while (unsent && net) {
+    const job = unsent;
+    const ok = await pushGame(net.id, job.rev, job.body);
+    if (ok && unsent === job) unsent = null;
+    if (!ok) await new Promise((r) => setTimeout(r, 2000));
+  }
+  sending = false;
+}
+function syncOut() {
+  if (mode !== 'online' || !net || net.rev < 0 || rolling || choosing || setupOpen || sess.state === netState) return;
+  netState = sess.state;
+  net.rev++;
+  unsent = { rev: net.rev, body: JSON.stringify({ state: sess.state, settings }) };
+  void flush();
+}
+let lastAsk = 0;
+async function syncIn() {
+  if (mode !== 'online' || !net || sending || unsent || rolling || document.visibilityState !== 'visible') return;
+  // Waiting for the other player: ask often. On your own go nothing should change, so rarely.
+  const every = theirTurn(sess.state) ? 2000 : 15000;
+  if (Date.now() - lastAsk < every) return;
+  lastAsk = Date.now();
+  const id = net.id;
+  let r;
+  try {
+    r = await fetchGame(id);
+  } catch {
+    return; // offline: try again next time
+  }
+  if (!net || net.id !== id || unsent) return;
+  if (!r) {
+    if (net.rev < 0) {
+      leaveNet();
+      mode = 'pvp';
+      choosing = true;
+      message = t(lang, 'gameNotFound');
+      render();
+    }
+    return;
+  }
+  if (r.rev <= net.rev) return;
+  const first = net.rev < 0;
+  const data = JSON.parse(r.state) as { state: GameState; settings: Settings };
+  settings = { ...data.settings, options: { ...DADS_RULES, ...data.settings.options } };
+  applySettings(settings);
+  sess = startSession(data.state);
+  netState = sess.state;
+  net.rev = r.rev;
+  selected = null;
+  cover = false;
+  if (first) {
+    // Don't replay the whole battle so far, and look at the board from this side's edge.
+    prevLog = sess.state.log.length;
+    cam = { ...cam, yaw: yawFor(net.me) };
+  }
+  render();
+}
+setInterval(() => void syncIn(), 1000);
+
 let draft: ArmyCounts = {};
 let tray: UnitTypeId | null = null;
 /** What the last render showed, so the next one can animate what changed. */
@@ -330,7 +433,7 @@ function overlay(s: GameState): Overlay {
     targets,
     zone: s.phase === 'deploy' ? { owner: s.current, hexes: zoneHexes(s, s.current) } : null,
     // During setup the other side's army stays secret.
-    hide: setupPhase(s) ? other(s.current) : null,
+    hide: setupPhase(s) ? other(mode === 'online' && net ? net.me : s.current) : null,
     spent: s.phase === 'act' ? spentUnits(s) : new Set(),
     trail: battle ? lastEnemyTurn(s) : { moves: [], kills: [] },
     rings: own && CONFIG.units[own.type].ranged && !setupPhase(s) ? shotZone(s, own) : [],
@@ -704,6 +807,7 @@ function startScreen(): string {
     </div>
     <button data-act="mode" data-mode="pvp" class="choice">${icon(people)}<span class="ctext"><b>${t(lang, 'twoPlayers')}</b><span>${t(lang, 'twoPlayersSub')}</span></span><i aria-hidden="true">›</i></button>
     <button data-act="mode" data-mode="ai" class="choice">${icon(robot)}<span class="ctext"><b>${t(lang, 'vsComputer')}</b><span>${t(lang, 'vsComputerSub')}</span></span><i aria-hidden="true">›</i></button>
+    <button data-act="mode" data-mode="online" class="choice">${icon('<circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3.5 12h17M12 3.5c3 3 3 14 0 17M12 3.5c-3 3-3 14 0 17" fill="none" stroke="currentColor" stroke-width="2"/>')}<span class="ctext"><b>${t(lang, 'playOnline')}</b><span>${t(lang, 'playOnlineSub')}</span></span><i aria-hidden="true">›</i></button>
   </div></div>`;
 }
 
@@ -794,6 +898,7 @@ function menuBody(s: GameState): string {
       ${row('cube', '#7a5bb0', G.cube, t(lang, 'rowCube'), '', showCube)}
       ${row('cam-reset', '#5b6b7a', G.target, t(lang, 'camResetMenu'))}
       ${mode === 'pvp' ? row('table', '#a8811a', G.seats, t(lang, 'rowSeating'), table === 'pass' ? t(lang, 'seatPass') : t(lang, 'seatAcross')) : ''}
+      ${mode === 'online' && net ? row('share', '#3a6fb0', G.globe, t(lang, 'inviteLink')) : ''}
       ${row('mute', '#3f8f5a', G.sound, t(lang, 'rowSound'), '', !isMuted())}
       ${row('music', '#8a5fb0', G.note, t(lang, 'rowMusic'), '', musicOn())}
     </div>
@@ -831,6 +936,8 @@ const icon = (name: keyof typeof ICON) =>
 
 function bar(s: GameState): string {
   if (aiTurn(s)) return `<div class="row"><p class="thinking">${playerName(lang, s.current)} ${t(lang, 'thinking')}</p></div>`;
+  if (theirTurn(s))
+    return `<div class="row"><p class="thinking">${net!.rev < 0 ? t(lang, 'connecting') : `${t(lang, 'waitingFor')} ${playerName(lang, s.current)}…`}</p><button data-act="share">${t(lang, 'inviteLink')}</button></div>`;
   if (s.phase === 'deploy') {
     const left = s.reserve[s.current];
     if (!tray || !left.includes(tray)) tray = TRAY_ORDER.find((x) => left.includes(x)) ?? null;
@@ -1058,7 +1165,7 @@ function draw() {
       <footer class="bar">${bar(s)}</footer>
       ${withPanel() ? `<aside class="side">${menuBody(s)}</aside>` : ''}
     </div>
-    ${s.phase === 'draft' && !cover && !choosing && !setupOpen ? draftSheet(s) : ''}
+    ${s.phase === 'draft' && !cover && !choosing && !setupOpen && !theirTurn(s) ? draftSheet(s) : ''}
     ${cover && s.phase !== 'over' && !choosing && !setupOpen ? passScreen(s) : ''}
     ${choosing ? startScreen() : ''}
     ${setupOpen ? setupScreen() : ''}
@@ -1069,6 +1176,7 @@ function draw() {
   document.documentElement.lang = lang;
   document.title = t(lang, 'title');
   saveGame();
+  syncOut();
   scheduleAi();
   scheduleRoll();
 }
@@ -1077,11 +1185,11 @@ function draw() {
 let rollTimer: number | null = null;
 function scheduleRoll() {
   const s = sess.state;
-  if (rollTimer !== null || rolling || cover || choosing || s.phase !== 'roll' || aiTurn(s)) return;
+  if (rollTimer !== null || rolling || cover || choosing || s.phase !== 'roll' || notMine(s)) return;
   rollTimer = window.setTimeout(() => {
     rollTimer = null;
     const st = sess.state;
-    if (!rolling && !cover && !choosing && st.phase === 'roll' && !aiTurn(st)) roll(selected);
+    if (!rolling && !cover && !choosing && st.phase === 'roll' && !notMine(st)) roll(selected);
   }, 600);
 }
 
@@ -1187,7 +1295,7 @@ function run(act: (s: GameState) => Result, checkpoint = false): boolean {
  *  turn ends by itself after a moment, so the last move is seen and can still be undone. */
 function autoEndIfDone() {
   const s = sess.state;
-  if (s.phase !== 'act' || s.advance || aiTurn(s)) return;
+  if (s.phase !== 'act' || s.advance || notMine(s)) return;
   const mine = s.units.filter((u) => u.owner === s.current).length;
   if (s.points > 0 && spentUnits(s).size < mine) return;
   const at = s;
@@ -1210,6 +1318,19 @@ function restart(state: GameState) {
   menuOpen = false;
   choosing = false;
   cover = mode === 'pvp' && state.phase === 'draft';
+  if (mode === 'online') {
+    if (!net) {
+      // A new online game: this phone is Red and holds the invite link.
+      net = { id: newId(), me: 'red', rev: 0 };
+      try {
+        localStorage.setItem(roleKey(net.id), 'red');
+      } catch { /* the link still works for this visit */ }
+      history.replaceState(null, '', `?g=${net.id}`);
+      void navigator.clipboard?.writeText(inviteUrl()).then(() => { message = t(lang, 'linkCopied'); render(); }, () => {});
+    }
+    netState = null; // a new battle on the same link: send it
+    if (net.rev < 0) net.rev = 0;
+  }
   render();
 }
 
@@ -1274,7 +1395,7 @@ function onDeployHex(s: GameState, hex: { col: number; row: number }) {
 
 function onHex(col: number, row: number) {
   const s = sess.state;
-  if (rolling || s.phase === 'over' || cover || choosing || setupOpen || aiTurn(s)) return;
+  if (rolling || s.phase === 'over' || cover || choosing || setupOpen || notMine(s)) return;
   const hex = { col, row };
   if (s.phase === 'deploy') return onDeployHex(s, hex);
   if (s.phase === 'draft') return;
@@ -1321,7 +1442,15 @@ app.addEventListener('click', (e) => {
   const type = btn!.getAttribute('data-type') as UnitTypeId | null;
   if (act !== 'new') confirmNew = false;
   if (act !== 'end') confirmEnd = false;
+  // Online, while the other player is on: look around freely, but nothing that plays the game.
+  if (theirTurn(sess.state) && !choosing && !setupOpen && ['ack', 'auto', 'auto-all', 'auto-army', 'done', 'draft', 'end', 'less', 'more', 'next', 'reroll', 'roll', 'take', 'tray', 'undo', 'quick'].includes(act)) return;
   switch (act) {
+    case 'share': {
+      const url = inviteUrl();
+      if (navigator.share) void navigator.share({ title: t(lang, 'title'), url }).catch(() => {});
+      else void navigator.clipboard?.writeText(url).then(() => { message = t(lang, 'linkCopied'); render(); }, () => {});
+      return;
+    }
     case 'ack':
       if (sess.state.phase === 'roll') sound('horn');
       cover = false;
@@ -1347,7 +1476,7 @@ app.addEventListener('click', (e) => {
     case 'done':
       if (run((s) => finishDeploy(s), true)) {
         if (mode === 'ai' && sess.state.current === AI_SIDE) aiSetup();
-        cover = true;
+        cover = mode !== 'online';
         tray = null;
         render();
       }
@@ -1364,7 +1493,7 @@ app.addEventListener('click', (e) => {
       run((s) => autoDeploy(s));
       if (run((s) => finishDeploy(s), true)) {
         if (mode === 'ai' && sess.state.current === AI_SIDE) aiSetup();
-        cover = true;
+        cover = mode !== 'online';
         tray = null;
         render();
       }
@@ -1376,7 +1505,8 @@ app.addEventListener('click', (e) => {
       choosing = true;
       return render();
     case 'mode':
-      mode = btn!.getAttribute('data-mode') === 'ai' ? 'ai' : 'pvp';
+      mode = (btn!.getAttribute('data-mode') ?? 'pvp') as Mode;
+      if (mode !== 'online' && net) leaveNet();
       choosing = false;
       setupOpen = true;
       settings = loadSettings();
@@ -1424,9 +1554,9 @@ app.addEventListener('click', (e) => {
     case 'take':
       return void run((s) => takeHex(s));
     case 'roll':
-      return aiTurn(sess.state) ? undefined : roll();
+      return notMine(sess.state) ? undefined : roll();
     case 'reroll':
-      return aiTurn(sess.state) ? undefined : rerollDice();
+      return notMine(sess.state) ? undefined : rerollDice();
     case 'undo':
       sess = undo(sess);
       message = null;
