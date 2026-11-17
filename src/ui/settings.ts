@@ -6,7 +6,8 @@ import { CONFIG, type GameConfig } from '../config';
 import type { Player } from '../engine';
 import { known, setSides, sides, type FactionId } from './factions';
 
-export type MapId = 'river' | 'open' | 'forest' | 'fords' | 'pass' | 'random';
+import MAPS from './maps.json';
+export type MapId = 'river' | 'open' | 'forest' | 'fords' | 'pass' | 'island' | 'longwood' | 'noford' | 'ridge' | 'marsh' | 'lake' | 'random';
 export type DiceId = '1d6' | '3d6' | '2d6' | 'fixed';
 
 export interface Settings {
@@ -78,9 +79,12 @@ const ORIGINAL = structuredClone(CONFIG.board);
 /** Mirror a list of Novgorod-side forest hexes onto the Teutonic side. */
 const mirrored = (half: [number, number][]): [number, number][] => [...half, ...half.map(([c, r]) => [CONFIG.board.cols - 1 - c, r] as [number, number])];
 
-function boardFor(map: MapId): GameConfig['board'] {
+export function boardFor(map: MapId): GameConfig['board'] {
   const { cols, rows } = ORIGINAL;
   const mid = Math.floor(cols / 2);
+  const made = (MAPS as unknown as Record<string, Partial<GameConfig['board']>>)[map];
+  // Maps drawn up in maps.json (shared with the script that paints their hills, swamps and lakes).
+  if (made) return { cols, rows, riverCol: null, bridgeRows: [], forests: [], ...structuredClone(made), ...(made.hills || made.swamps || made.lakes ? { overlay: map } : {}) } as GameConfig['board'];
   switch (map) {
     case 'river':
       return structuredClone(ORIGINAL);
@@ -121,6 +125,7 @@ function boardFor(map: MapId): GameConfig['board'] {
       return { cols, rows, riverCol: river ? mid : null, bridgeRows: bridges, forests: mirrored(half) };
     }
   }
+  return structuredClone(ORIGINAL);
 }
 
 /** Puts the settings into the game's rules. Call before starting or loading a battle. */

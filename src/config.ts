@@ -24,7 +24,7 @@ export type UnitTypeId =
   // Romans: a bolt-thrower, slow to move, that hits hard from far away.
   | 'ballista';
 
-export type TerrainId = 'plain' | 'forest' | 'river' | 'bridge' | 'ford';
+export type TerrainId = 'plain' | 'forest' | 'river' | 'bridge' | 'ford' | 'hill' | 'swamp' | 'lake';
 
 export interface TerrainRules {
   passable: boolean;
@@ -34,6 +34,10 @@ export interface TerrainRules {
   moveCostMultiplier: number;
   /** Damage subtracted from every hit on a unit standing here (hook for a future castle). */
   defenseBonus: number;
+  /** High ground: a piece shooting from here reaches one hex further and sees over forest. */
+  highGround?: boolean;
+  /** Riders can't enter (swamp). */
+  noMounted?: boolean;
 }
 
 export interface RangedRules {
@@ -74,6 +78,13 @@ export interface GameConfig {
     bridgeRows: number[];
     /** Rows where the river can be waded: a ford costs double to enter. */
     fordRows?: number[];
+    /** More rivers, for maps with two channels. */
+    rivers?: { col: number; bridges: number[]; fords: number[] }[];
+    hills?: [number, number][];
+    swamps?: [number, number][];
+    lakes?: [number, number][];
+    /** The painted layer that shows this map's hills, swamps and lakes (public/map/over-<name>.webp). */
+    overlay?: string;
     /** [col, row] of each forest hex. */
     forests: [number, number][];
   };
@@ -184,6 +195,9 @@ export const CONFIG: GameConfig = {
     river: { passable: false, blocksSight: false, moveCostMultiplier: 1, defenseBonus: 0 },
     bridge: { passable: true, blocksSight: false, moveCostMultiplier: 1, defenseBonus: 0 },
     ford: { passable: true, blocksSight: false, moveCostMultiplier: 2, defenseBonus: 0 },
+    hill: { passable: true, blocksSight: false, moveCostMultiplier: 1, defenseBonus: 0, highGround: true },
+    swamp: { passable: true, blocksSight: false, moveCostMultiplier: 2, defenseBonus: 0, noMounted: true },
+    lake: { passable: false, blocksSight: false, moveCostMultiplier: 1, defenseBonus: 0 },
   },
   dice: { count: 3, sides: 6 },
   // Speed ratio heavy inf : light inf : heavy cav : light cav = 1 : 2 : 3 : 6.

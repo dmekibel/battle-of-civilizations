@@ -127,16 +127,22 @@ export const DETAIL_BOX = [58, 58, 1316, 937];
 export interface GroundPart { key: string; src: string; x: number; y: number; w: number; h: number }
 const PART = (name: string) => `${import.meta.env.BASE_URL}map/${name}.webp?v=1`;
 export function groundParts(b: GameConfig['board']): GroundPart[] {
-  if (b.riverCol === null) return [];
-  const out: GroundPart[] = [{ key: 'river', src: PART('river'), x: 669.5, y: 0, w: 94, h: 1053 }];
-  const at = (row: number, w: number, h: number): [number, number] => [S * 1.5 * b.riverCol! + S + GROUND_M - w / 2, R3 * S * (row + 0.5 * (b.riverCol! & 1)) + (R3 / 2) * S + GROUND_M - h / 2];
-  for (const r of b.fordRows ?? []) {
-    const [x, y] = at(r, 94, 56);
-    out.push({ key: `ford${r}`, src: PART('ford'), x, y, w: 94, h: 56 });
-  }
-  for (const r of b.bridgeRows) {
-    const [x, y] = at(r, 108, 46.5);
-    out.push({ key: `bridge${r}`, src: PART('bridge'), x, y, w: 108, h: 46.5 });
+  const out: GroundPart[] = [];
+  // Hills, swamps and lakes are painted per map as one see-through picture the size of the ground.
+  if (b.overlay) out.push({ key: `over-${b.overlay}`, src: PART(`over-${b.overlay}`), x: 0, y: 0, w: GROUND_SIZE[0], h: GROUND_SIZE[1] });
+  const rivers = [...(b.riverCol === null ? [] : [{ col: b.riverCol, bridges: b.bridgeRows, fords: b.fordRows ?? [] }]), ...(b.rivers ?? [])];
+  for (const rv of rivers) {
+    // The river picture was painted for column 12; other columns slide it sideways.
+    out.push({ key: `river${rv.col}`, src: PART('river'), x: 669.5 + (rv.col - 12) * 1.5 * S, y: 0, w: 94, h: 1053 });
+    const at = (row: number, w: number, h: number): [number, number] => [S * 1.5 * rv.col + S + GROUND_M - w / 2, R3 * S * (row + 0.5 * (rv.col & 1)) + (R3 / 2) * S + GROUND_M - h / 2];
+    for (const r of rv.fords) {
+      const [x, y] = at(r, 94, 56);
+      out.push({ key: `ford${rv.col}-${r}`, src: PART('ford'), x, y, w: 94, h: 56 });
+    }
+    for (const r of rv.bridges) {
+      const [x, y] = at(r, 108, 46.5);
+      out.push({ key: `bridge${rv.col}-${r}`, src: PART('bridge'), x, y, w: 108, h: 46.5 });
+    }
   }
   return out;
 }
@@ -245,6 +251,8 @@ function fill(t: TerrainId, h: Hex): string {
   if (t === 'plain') return GRASS[(h.col * 7 + h.row * 13 + ((h.col * h.row) % 5)) % GRASS.length];
   if (t === 'forest') return '#3d6530';
   if (t === 'ford') return '#9fb8a0'; // shallows
+  if (t === 'hill') return '#a9b56a';
+  if (t === 'swamp') return '#5f6f45';
   return '#5f9ccc'; // river and the water under a bridge
 }
 
@@ -578,7 +586,7 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
       );
       if (t === 'river' && !groundReady) ground.push(riverRipple(hex, v, L));
       if (t === 'forest') standing.push(...trees(hex, v, L));
-      if (t === 'plain' && groundReady && L.tilt) standing.push(...scenery(hex, v, L));
+      if ((t === 'plain' || t === 'hill') && groundReady && L.tilt) standing.push(...scenery(hex, v, L));
       if (t === 'bridge' && !groundReady) standing.push(bridge(hex, v, L));
     }
   }

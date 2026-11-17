@@ -4,7 +4,7 @@
 
 import { CONFIG, type GameConfig, type UnitTypeId } from '../config';
 import { distance, key, neighbors, type Hex } from './hex';
-import { attack, canReroll, endTurn, hasLineOfSight, kingOf, moveUnit, onBoard, other, reachable, reroll, rollDice, shoot, strikeTargets, takeHex, terrainAt, type Rng } from './game';
+import { attack, canReroll, endTurn, hasLineOfSight, maxRangeAt, kingOf, moveUnit, onBoard, other, reachable, reroll, rollDice, shoot, strikeTargets, takeHex, terrainAt, type Rng } from './game';
 import type { GameState, Result, Unit } from './types';
 
 export type AiAction =
@@ -44,7 +44,7 @@ function bestHitFrom(s: GameState, u: Unit, at: Hex, pointsLeft: number, cfg: Ga
     if (e.owner === u.owner) continue;
     const d = distance(at, e.pos);
     if (r.attack > 0 && d === 1 && pointsLeft >= cfg.combat.attackCost) best = Math.max(best, strikeScore(e, r.attack, cfg));
-    if (r.ranged && d >= r.ranged.minRange && d <= r.ranged.maxRange && pointsLeft >= r.ranged.cost && hasLineOfSight(s, at, e.pos, cfg)) {
+    if (r.ranged && d >= r.ranged.minRange && d <= maxRangeAt(s, at, r.ranged.maxRange, cfg) && pointsLeft >= r.ranged.cost && hasLineOfSight(s, at, e.pos, cfg)) {
       best = Math.max(best, strikeScore(e, r.ranged.damage, cfg));
     }
   }

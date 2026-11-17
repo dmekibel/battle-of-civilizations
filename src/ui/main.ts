@@ -42,6 +42,7 @@ import {
   type Unit,
   distance,
   hasLineOfSight,
+  maxRangeAt,
   neighbors,
   type LogEntry,
   type Player,
@@ -56,7 +57,7 @@ import { morph, morphInto } from './morph';
 import { ART_VERSION, SPRITES } from './sprites';
 import { fetchGame, newId, pushGame } from './online';
 import { isMuted, musicOn, setMusic, sound, toggleMusic, toggleMute } from './sound';
-import { DADS_RULES, RECOMMENDED, applySettings, fixedPoints, loadSettings, saveSettings, type DiceId, type MapId, type Settings } from './settings';
+import { DADS_RULES, RECOMMENDED, applySettings, boardFor, fixedPoints, loadSettings, saveSettings, type DiceId, type MapId, type Settings } from './settings';
 
 const app = document.getElementById('app')!;
 
@@ -507,11 +508,12 @@ function threatZone(s: GameState): Hex[] {
       const left = AVERAGE_ROLL - cost;
       if (r.attack > 0 && left >= CONFIG.combat.attackCost) for (const n of neighbors(hex)) add(n);
       if (r.ranged && left >= r.ranged.cost) {
-        for (let row = hex.row - r.ranged.maxRange; row <= hex.row + r.ranged.maxRange; row++)
-          for (let col = hex.col - r.ranged.maxRange; col <= hex.col + r.ranged.maxRange; col++) {
+        const far = maxRangeAt(s, hex, r.ranged.maxRange);
+        for (let row = hex.row - far; row <= hex.row + far; row++)
+          for (let col = hex.col - far; col <= hex.col + far; col++) {
             const h = { col, row };
             const d = distance(hex, h);
-            if (d >= r.ranged.minRange && d <= r.ranged.maxRange && row >= 0 && col >= 0 && row < s.board.length && col < s.board[0].length && hasLineOfSight(s, hex, h)) add(h);
+            if (d >= r.ranged.minRange && d <= far && row >= 0 && col >= 0 && row < s.board.length && col < s.board[0].length && hasLineOfSight(s, hex, h)) add(h);
           }
       }
     }
@@ -574,7 +576,7 @@ function shotZone(s: GameState, u: Unit): Hex[] {
     for (let col = 0; col < s.board[0].length; col++) {
       const h = { col, row };
       const d = distance(u.pos, h);
-      if (d >= r.minRange && d <= r.maxRange && hasLineOfSight(s, u.pos, h)) out.push(h);
+      if (d >= r.minRange && d <= maxRangeAt(s, u.pos, r.maxRange) && hasLineOfSight(s, u.pos, h)) out.push(h);
     }
   return out;
 }
@@ -749,20 +751,18 @@ const RULE_GROUPS: { title: Key; color: string; keys: (keyof Settings['options']
 
 /** A tiny picture of each map type for the map tiles. */
 function mapThumb(m: MapId): string {
-  const tree = (x: number, y: number) => `<circle cx="${x}" cy="${y}" r="3.2" fill="#2f5a22"/>`;
-  const inner =
-    m === 'river'
-      ? `<rect x="33" y="0" width="6" height="44" fill="#4f8fc4"/><rect x="31" y="9" width="10" height="4" fill="#8a6038"/><rect x="31" y="31" width="10" height="4" fill="#8a6038"/>${tree(14, 12)}${tree(58, 32)}`
-      : m === 'fords'
-        ? `<rect x="33" y="0" width="6" height="44" fill="#4f8fc4"/><rect x="31" y="20" width="10" height="4" fill="#8a6038"/><rect x="32" y="4" width="8" height="5" fill="#c9c29a"/><rect x="32" y="35" width="8" height="5" fill="#c9c29a"/>${tree(18, 14)}${tree(54, 30)}`
-      : m === 'pass'
-        ? [3, 13, 18, 26, 31, 41].map((y) => `<rect x="31" y="${y - 3}" width="10" height="6" rx="2" fill="#2f5a22"/>`).join('') + `${tree(14, 12)}${tree(58, 32)}`
-      : m === 'open'
-        ? `${tree(20, 30)}${tree(52, 14)}`
-        : m === 'forest'
-          ? [[10, 10], [20, 22], [12, 34], [30, 12], [42, 30], [52, 10], [62, 24], [56, 36], [28, 34]].map(([x, y]) => tree(x, y)).join('')
-          : `<text x="36" y="30" text-anchor="middle" font-size="22" font-weight="700" fill="#f1e8d2">?</text>`;
-  return `<svg viewBox="0 0 72 44" width="72" height="44" aria-hidden="true"><rect width="72" height="44" rx="6" fill="#6f9a4a"/>${inner}</svg>`;
+  if (m === 'random') return `<svg viewBox="0 0 72 44" width="72" height="44" aria-hidden="true"><rect width="72" height="44" rx="6" fill="#6f9a4a"/><text x="36" y="30" text-anchor="middle" font-size="22" font-weight="700" fill="#f1e8d2">?</text></svg>`;
+  // A little picture of the real map: every special hex as a dot in its place.
+  const b = boardFor(m);
+  const at = (c: number, r: number) => [(c + 0.5) * (72 / b.cols), (r + 0.5 + (c & 1) * 0.5) * (44 / (b.rows + 0.5))];
+  const dots = (list: [number, number][] | undefined, fill: string, rad: number) => (list ?? []).map(([c, r]) => { const [x, y] = at(c, r); return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${rad}" fill="${fill}"/>`; }).join('');
+  const rivers = [...(b.riverCol === null ? [] : [{ col: b.riverCol, bridges: b.bridgeRows, fords: b.fordRows ?? [] }]), ...(b.rivers ?? [])];
+  const water = rivers.map((rv) => {
+    const x = at(rv.col, 0)[0];
+    const mark = (rows: number[], fill: string) => rows.map((r) => `<rect x="${(x - 4.5).toFixed(1)}" y="${(at(rv.col, r)[1] - 2).toFixed(1)}" width="9" height="4" rx="1" fill="${fill}"/>`).join('');
+    return `<rect x="${(x - 2.5).toFixed(1)}" y="0" width="5" height="44" fill="#4f8fc4"/>${mark(rv.fords, '#d8cfa0')}${mark(rv.bridges, '#8a6038')}`;
+  }).join('');
+  return `<svg viewBox="0 0 72 44" width="72" height="44" aria-hidden="true"><rect width="72" height="44" rx="6" fill="#6f9a4a"/>${dots(b.swamps, '#55663c', 1.9)}${dots(b.hills, '#c9cf86', 1.9)}${dots(b.lakes, '#4f8fc4', 2)}${water}${dots(b.forests, '#2f5a22', 1.7)}</svg>`;
 }
 
 function setupScreen(): string {
@@ -791,7 +791,7 @@ function setupScreen(): string {
   // Armies grouped by the age they fought in.
   const tiles = ERAS.filter((era) => READY().some((id) => ERA_OF[id] === era)).map((era) => `<h4 class="era">${t(lang, `era${era[0].toUpperCase()}${era.slice(1)}` as Key)}</h4><div class="ftiles">${READY().filter((id) => ERA_OF[id] === era).map(tile).join('')}</div>`).join('');
 
-  const mapTiles = (['river', 'fords', 'pass', 'open', 'forest', 'random'] as MapId[])
+  const mapTiles = (['river', 'fords', 'noford', 'island', 'ridge', 'pass', 'longwood', 'marsh', 'lake', 'open', 'forest', 'random'] as MapId[])
     .map((m) => {
       const label = t(lang, `map${m[0].toUpperCase()}${m.slice(1)}` as Key);
       return `<button data-act="set" data-field="map" data-value="${m}" class="mtile ${settings.map === m ? 'on' : ''}" aria-pressed="${settings.map === m}">${mapThumb(m)}<span>${label}</span></button>`;

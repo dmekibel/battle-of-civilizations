@@ -12,15 +12,19 @@ export const other = (p: Player): Player => (p === 'red' ? 'blue' : 'red');
 export function buildBoard(cfg: GameConfig = CONFIG): TerrainId[][] {
   const { cols, rows, riverCol, bridgeRows, forests } = cfg.board;
   const fordRows = cfg.board.fordRows ?? [];
+  const rivers = [...(riverCol === null ? [] : [{ col: riverCol, bridges: bridgeRows, fords: fordRows }]), ...(cfg.board.rivers ?? [])];
   const board: TerrainId[][] = [];
   for (let r = 0; r < rows; r++) {
     const line: TerrainId[] = [];
     for (let c = 0; c < cols; c++) {
-      if (c === riverCol) line.push(bridgeRows.includes(r) ? 'bridge' : fordRows.includes(r) ? 'ford' : 'river');
+      const rv = rivers.find((x) => x.col === c);
+      if (rv) line.push(rv.bridges.includes(r) ? 'bridge' : rv.fords.includes(r) ? 'ford' : 'river');
       else line.push('plain');
     }
     board.push(line);
   }
+  for (const [kind, list] of [['hill', cfg.board.hills], ['swamp', cfg.board.swamps], ['lake', cfg.board.lakes]] as const)
+    for (const [c, r] of list ?? []) if (onBoardSize(cfg, { col: c, row: r })) board[r][c] = kind;
   for (const [c, r] of forests) if (onBoardSize(cfg, { col: c, row: r })) board[r][c] = 'forest';
   return board;
 }
@@ -139,7 +143,7 @@ function search(s: GameState, unitId: string, cfg: GameConfig): { out: Map<strin
     for (const n of neighbors(cur.hex)) {
       if (!onBoard(s, n)) continue;
       const t = cfg.terrain[terrainAt(s, n)];
-      if (!t.passable) continue;
+      if (!t.passable || (t.noMounted && mounted(u, cfg))) continue;
       const occ = unitAt(s, n);
       if (occ && (occ.owner !== u.owner || !cfg.movement.passThroughFriendly)) continue;
       const steps = cur.steps + t.moveCostMultiplier;
@@ -165,7 +169,11 @@ export function armyValue(s: GameState, p: Player, cfg: GameConfig = CONFIG): nu
   return s.units.filter((u) => u.owner === p && u.type !== 'king').reduce((sum, u) => sum + cfg.army.cost[u.type as keyof GameConfig['army']['cost']], 0);
 }
 
+/** How far a shooter standing on this hex reaches: one hex further from high ground. */
+export const maxRangeAt = (s: GameState, at: Hex, base: number, cfg: GameConfig = CONFIG): number => base + (cfg.terrain[terrainAt(s, at)].highGround ? 1 : 0);
+
 export function hasLineOfSight(s: GameState, a: Hex, b: Hex, cfg: GameConfig = CONFIG): boolean {
+  if (cfg.terrain[terrainAt(s, a)].highGround) return true; // from a hill you see over the trees
   return between(a, b).every((h) => !onBoard(s, h) || !cfg.terrain[terrainAt(s, h)].blocksSight);
 }
 
@@ -236,7 +244,7 @@ function checkStrike(
     const r = rules.ranged;
     if (!r) return 'cannotShoot';
     const d = distance(a.pos, t.pos);
-    if (d < r.minRange || d > r.maxRange) return 'outOfRange';
+    if (d < r.minRange || d > maxRangeAt(s, a.pos, r.maxRange, cfg)) return 'outOfRange';
     if (!hasLineOfSight(s, a.pos, t.pos, cfg)) return 'noLineOfSight';
     if (cfg.options.volleys !== null && (a.shots ?? 0) >= cfg.options.volleys) return 'outOfArrows';
     cost = r.cost * (cfg.options.longShotFrom !== null && d > cfg.options.longShotFrom ? 2 : 1);
