@@ -48,7 +48,7 @@ import {
   type Result,
   type Session,
 } from '../engine';
-import { ARROW_S, GROUND_SIZE, GROUND_URL, NO_EFFECTS, STEP_MS, groundTransform, hasGround, groundParts, hexOnMap, loadGround, mapSize, renderBoard, screenToGround, viewCube, type Camera, type Effects, type Overlay } from './board';
+import { ARROW_S, GROUND_SIZE, GROUND_URL, NO_EFFECTS, STEP_MS, groundTransform, hasGround, groundParts, DETAIL_BOX, DETAIL_URL, hexOnMap, loadGround, mapSize, renderBoard, screenToGround, viewCube, type Camera, type Effects, type Overlay } from './board';
 import { errorText, logText, playerName, reasonText, t, unitName, type Key, type Lang } from './i18n';
 import { unitIcon } from './symbols';
 import { ERAS, ERA_OF, FACTIONS, FACTION_ORDER, factionOf, rosterOf, sides, type FactionId } from './factions';
@@ -1082,6 +1082,16 @@ function placeGround() {
   if (groundEl.parentElement !== clip) clip.prepend(groundEl);
   const T = groundTransform(view());
   groundEl.style.transform = T;
+  // Close-up grass: a fine repeating picture over the field that fades in as the camera comes near.
+  let detail = clip.querySelector<HTMLElement>('.gdetail');
+  if (!detail) {
+    detail = document.createElement('div');
+    detail.className = 'gdetail';
+    detail.style.backgroundImage = `url(${DETAIL_URL})`;
+    groundEl.after(detail);
+  }
+  detail.style.transform = `${T} translate(${DETAIL_BOX[0]}px, ${DETAIL_BOX[1]}px)`;
+  detail.style.opacity = String(Math.max(0, Math.min(0.8, (cam.zoom - 2) / 3.5)).toFixed(2));
   // The river, bridges and fords of this map, laid over the ground with the same projection.
   const parts = groundParts(CONFIG.board);
   const sig = parts.map((p) => p.key).join('|');

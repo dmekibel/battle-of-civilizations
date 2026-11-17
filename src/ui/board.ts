@@ -119,6 +119,9 @@ function lens(v: View): Lens {
 // It covers the flat map plus GROUND_M units all round and is laid under the hexes with the camera's own projection.
 const GROUND_M = 70;
 export const GROUND_URL = `${import.meta.env.BASE_URL}map/ground.webp?v=11`;
+/** Close-up grass (grass-detail.webp, one seamless tile): where the field lies in the ground picture, in map units. */
+export const DETAIL_URL = `${import.meta.env.BASE_URL}map/grass-detail.webp?v=1`;
+export const DETAIL_BOX = [58, 58, 1316, 937];
 /** The river, each bridge and each ford are their own pictures laid over the ground, so every map places its own.
  *  Positions and sizes are in the ground picture's own units (map units, origin at the picture's top left). */
 export interface GroundPart { key: string; src: string; x: number; y: number; w: number; h: number }
