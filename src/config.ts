@@ -17,9 +17,14 @@ export type UnitTypeId =
   | 'rifleman'
   | 'cowboy'
   // Deputies: the Cowboys' cheap foot soldiers, with a shotgun that reaches only 2 hexes.
-  | 'deputy';
+  | 'deputy'
+  // Vikings: berserkers hit hard and fall fast; axe throwers have a short reach.
+  | 'berserker'
+  | 'axeThrower'
+  // Romans: a bolt-thrower, slow to move, that hits hard from far away.
+  | 'ballista';
 
-export type TerrainId = 'plain' | 'forest' | 'river' | 'bridge';
+export type TerrainId = 'plain' | 'forest' | 'river' | 'bridge' | 'ford';
 
 export interface TerrainRules {
   passable: boolean;
@@ -67,6 +72,8 @@ export interface GameConfig {
     riverCol: number | null;
     /** Rows where the river has a bridge. */
     bridgeRows: number[];
+    /** Rows where the river can be waded: a ford costs double to enter. */
+    fordRows?: number[];
     /** [col, row] of each forest hex. */
     forests: [number, number][];
   };
@@ -176,6 +183,7 @@ export const CONFIG: GameConfig = {
     forest: { passable: false, blocksSight: true, moveCostMultiplier: 1, defenseBonus: 0 },
     river: { passable: false, blocksSight: false, moveCostMultiplier: 1, defenseBonus: 0 },
     bridge: { passable: true, blocksSight: false, moveCostMultiplier: 1, defenseBonus: 0 },
+    ford: { passable: true, blocksSight: false, moveCostMultiplier: 2, defenseBonus: 0 },
   },
   dice: { count: 3, sides: 6 },
   // Speed ratio heavy inf : light inf : heavy cav : light cav = 1 : 2 : 3 : 6.
@@ -194,6 +202,9 @@ export const CONFIG: GameConfig = {
     gunslinger: { moveCost: 3, attack: 1, hp: 1, ranged: { cost: 1, minRange: 2, maxRange: 3, damage: 1 }, heavy: false },
     rifleman: { moveCost: 4, attack: 0, hp: 1, ranged: { cost: 1, minRange: 2, maxRange: 6, damage: 1 }, heavy: false },
     deputy: { moveCost: 3, attack: 1, hp: 1, ranged: { cost: 1, minRange: 2, maxRange: 2, damage: 1 }, heavy: false },
+    berserker: { moveCost: 3, attack: 2, hp: 1, ranged: null, heavy: false },
+    axeThrower: { moveCost: 3, attack: 1, hp: 1, ranged: { cost: 1, minRange: 2, maxRange: 3, damage: 1 }, heavy: false },
+    ballista: { moveCost: 6, attack: 0, hp: 1, ranged: { cost: 2, minRange: 3, maxRange: 8, damage: 2 }, heavy: true },
     cowboy: { moveCost: 1, speed: 3, attack: 1, hp: 1, ranged: { cost: 1, minRange: 2, maxRange: 3, damage: 1 }, heavy: false, mounted: true },
     // Melee for archers is an open question; 0 = they only shoot.
     archer: {
@@ -228,7 +239,7 @@ export const CONFIG: GameConfig = {
   },
   army: {
     budget: 50,
-    cost: { lightInfantry: 1, heavyInfantry: 2, archer: 3, lightCavalry: 3, heavyCavalry: 4, horseArcher: 4, samurai: 4, ashigaru: 1, gunslinger: 3, rifleman: 3, cowboy: 4, deputy: 2 },
+    cost: { lightInfantry: 1, heavyInfantry: 2, archer: 3, lightCavalry: 3, heavyCavalry: 4, horseArcher: 4, samurai: 4, ashigaru: 1, gunslinger: 3, rifleman: 3, cowboy: 4, deputy: 2, berserker: 3, axeThrower: 3, ballista: 5 },
   },
   // 5 columns leave room for the largest possible army (50 light infantry and the King).
   deploy: { depth: 5 },

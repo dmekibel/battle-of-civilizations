@@ -6,7 +6,7 @@ import { CONFIG, type GameConfig } from '../config';
 import type { Player } from '../engine';
 import { known, setSides, sides, type FactionId } from './factions';
 
-export type MapId = 'river' | 'open' | 'forest' | 'random';
+export type MapId = 'river' | 'open' | 'forest' | 'fords' | 'pass' | 'random';
 export type DiceId = '1d6' | '3d6' | '2d6' | 'fixed';
 
 export interface Settings {
@@ -96,6 +96,16 @@ function boardFor(map: MapId): GameConfig['board'] {
           [6, 13], [7, 12], [7, 13], [10, 2], [10, 3], [10, 10], [10, 11], [9, 7], [10, 6],
         ]),
       };
+    case 'fords':
+      // One bridge in the middle and a ford near each edge: the fords are slow to wade, so the bridge is the prize.
+      return { cols, rows, riverCol: mid, bridgeRows: [7], fordRows: [1, 13], forests: mirrored([[8, 4], [8, 5], [9, 9], [9, 10], [6, 7]]) };
+    case 'pass': {
+      // A wall of forest across the middle with three gaps: a wide one at each end and a narrow one in the centre.
+      const gaps = new Set([1, 2, 7, 12, 13]);
+      const wall: [number, number][] = [];
+      for (let r = 0; r < rows; r++) if (!gaps.has(r)) wall.push([mid - 1, r], [mid, r]);
+      return { cols, rows, riverCol: null, bridgeRows: [], forests: [...mirrored(wall.filter(([c]) => c !== mid)), ...wall.filter(([c]) => c === mid), ...mirrored([[6, 4], [6, 10]])] };
+    }
     case 'random': {
       // A fair random map: woods placed at random on one side and mirrored on the other.
       const half: [number, number][] = [];

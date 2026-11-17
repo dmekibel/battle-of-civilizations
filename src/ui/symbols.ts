@@ -84,6 +84,15 @@ function picture(type: UnitTypeId, ink: string): string {
     case 'cowboy':
       // A horse with a lasso loop beside it.
       return `${HORSE(ink, -7)}<ellipse cx="13" cy="-5" rx="4.6" ry="6.5" fill="none" stroke="${ink}" stroke-width="2"/><path d="M12 1.5Q11 8 15 12" fill="none" stroke="${ink}" stroke-width="1.8" stroke-linecap="round"/>`;
+    case 'berserker':
+      // A big two-handed axe.
+      return `<path d="M-9 12L7 -10" stroke="${ink}" stroke-width="2.4" stroke-linecap="round"/><path d="M2 -13Q13 -14 14 -3Q8 -6 5 -4Z" fill="${ink}"/><path d="M4 -11Q-4 -14 -6 -5Q0 -6 4 -4Z" fill="${ink}"/>`;
+    case 'axeThrower':
+      // A small axe in flight.
+      return `<path d="M-10 9L4 -5" stroke="${ink}" stroke-width="2.2" stroke-linecap="round"/><path d="M0 -9Q10 -11 11 -1Q6 -3 3 -2Z" fill="${ink}"/><path d="M-13 -6L-8 -6M-14 -1L-10 -1" stroke="${ink}" stroke-width="1.6" stroke-linecap="round"/>`;
+    case 'ballista':
+      // A bolt-thrower: bow arms, stock and bolt.
+      return `<path d="M-3 -12Q8 0 -3 12" fill="none" stroke="${ink}" stroke-width="2.4" stroke-linecap="round"/><path d="M-13 0H12" stroke="${ink}" stroke-width="3" stroke-linecap="round"/><path d="M15 0L9 -3.5L9 3.5Z" fill="${ink}"/><path d="M-13 -4V4" stroke="${ink}" stroke-width="2"/>`;
     case 'samurai':
       // A katana: a long, slightly curved blade with a round guard.
       return `<path d="M-11 10Q1 4 12 -11" fill="none" stroke="${ink}" stroke-width="2.4" stroke-linecap="round"/><circle cx="-5" cy="6.3" r="2.6" fill="none" stroke="${ink}" stroke-width="1.8"/>`;

@@ -48,10 +48,10 @@ import {
   type Result,
   type Session,
 } from '../engine';
-import { ARROW_S, GROUND_SIZE, GROUND_URL, NO_EFFECTS, STEP_MS, groundTransform, hasGround, hexOnMap, loadGround, mapSize, renderBoard, screenToGround, viewCube, type Camera, type Effects, type Overlay } from './board';
+import { ARROW_S, GROUND_SIZE, GROUND_URL, NO_EFFECTS, STEP_MS, groundTransform, hasGround, groundParts, hexOnMap, loadGround, mapSize, renderBoard, screenToGround, viewCube, type Camera, type Effects, type Overlay } from './board';
 import { errorText, logText, playerName, reasonText, t, unitName, type Key, type Lang } from './i18n';
 import { unitIcon } from './symbols';
-import { FACTIONS, FACTION_ORDER, factionOf, rosterOf, sides, type FactionId } from './factions';
+import { ERAS, ERA_OF, FACTIONS, FACTION_ORDER, factionOf, rosterOf, sides, type FactionId } from './factions';
 import { morph, morphInto } from './morph';
 import { ART_VERSION, SPRITES } from './sprites';
 import { fetchGame, newId, pushGame } from './online';
@@ -404,12 +404,12 @@ let tilt = (() => {
   }
 })();
 /** Steps for the + / − buttons; pinching can stop anywhere between the first and last. */
-const [ZOOM_MIN, ZOOM_MAX] = [0.7, 10];
+const [ZOOM_MIN, ZOOM_MAX] = [0.7, 18]; // close enough to see the carving on a single piece
 
 type Buyable = keyof ArmyCounts;
 /** The side to move's faction decides what it can buy and what the pieces list shows. */
 const buyOrder = () => rosterOf(sess.state.current) as Buyable[];
-const TRAY_ORDER: UnitTypeId[] = ['king', 'heavyCavalry', 'lightCavalry', 'horseArcher', 'heavyInfantry', 'samurai', 'lightInfantry', 'deputy', 'ashigaru', 'archer'];
+const TRAY_ORDER: UnitTypeId[] = ['king', 'heavyCavalry', 'lightCavalry', 'horseArcher', 'heavyInfantry', 'samurai', 'lightInfantry', 'berserker', 'deputy', 'ashigaru', 'axeThrower', 'archer', 'ballista'];
 
 // ---------- view helpers ----------
 
@@ -633,6 +633,9 @@ function onSlide(input: HTMLInputElement) {
   sound('tick');
 }
 
+/** Armies whose carved figures are in the game (one still being carved stays off the list). */
+const READY = () => FACTION_ORDER.filter((id) => SPRITES[id]?.king?.front);
+
 /** A piece's carved figure as a picture for menus ('' if this army has none for it). */
 function figurePic(fac: string, type: UnitTypeId, view = 'front-left'): string {
   const art = type === 'deputy' ? 'lightInfantry' : type;
@@ -750,6 +753,10 @@ function mapThumb(m: MapId): string {
   const inner =
     m === 'river'
       ? `<rect x="33" y="0" width="6" height="44" fill="#4f8fc4"/><rect x="31" y="9" width="10" height="4" fill="#8a6038"/><rect x="31" y="31" width="10" height="4" fill="#8a6038"/>${tree(14, 12)}${tree(58, 32)}`
+      : m === 'fords'
+        ? `<rect x="33" y="0" width="6" height="44" fill="#4f8fc4"/><rect x="31" y="20" width="10" height="4" fill="#8a6038"/><rect x="32" y="4" width="8" height="5" fill="#c9c29a"/><rect x="32" y="35" width="8" height="5" fill="#c9c29a"/>${tree(18, 14)}${tree(54, 30)}`
+      : m === 'pass'
+        ? [3, 13, 18, 26, 31, 41].map((y) => `<rect x="31" y="${y - 3}" width="10" height="6" rx="2" fill="#2f5a22"/>`).join('') + `${tree(14, 12)}${tree(58, 32)}`
       : m === 'open'
         ? `${tree(20, 30)}${tree(52, 14)}`
         : m === 'forest'
@@ -774,15 +781,17 @@ function setupScreen(): string {
     return `<button data-act="pick-side" data-side="${p}" class="vs-card ${on ? 'on' : ''}" aria-pressed="${on}" style="--fc:${f.color}">
       <span class="vs-who">${who}</span>${figurePic(settings.sides[p], 'king', 'front') || f.emblem}<b>${f.name[lang]}</b></button>`;
   };
-  const tiles = FACTION_ORDER.map((id) => {
+  const tile = (id: FactionId) => {
     const f = FACTIONS[id];
     const mine = settings.sides[pickSide] === id;
     const theirs = settings.sides[other(pickSide)] === id;
     return `<button data-act="faction" data-side="${pickSide}" data-value="${id}" class="ftile ${mine ? 'on' : ''} ${theirs ? 'taken' : ''}" aria-pressed="${mine}" style="--fc:${f.color}">
       ${figurePic(id, 'king', 'front') || f.emblem}<span>${f.name[lang]}</span></button>`;
-  }).join('');
+  };
+  // Armies grouped by the age they fought in.
+  const tiles = ERAS.filter((era) => READY().some((id) => ERA_OF[id] === era)).map((era) => `<h4 class="era">${t(lang, `era${era[0].toUpperCase()}${era.slice(1)}` as Key)}</h4><div class="ftiles">${READY().filter((id) => ERA_OF[id] === era).map(tile).join('')}</div>`).join('');
 
-  const mapTiles = (['river', 'open', 'forest', 'random'] as MapId[])
+  const mapTiles = (['river', 'fords', 'pass', 'open', 'forest', 'random'] as MapId[])
     .map((m) => {
       const label = t(lang, `map${m[0].toUpperCase()}${m.slice(1)}` as Key);
       return `<button data-act="set" data-field="map" data-value="${m}" class="mtile ${settings.map === m ? 'on' : ''}" aria-pressed="${settings.map === m}">${mapThumb(m)}<span>${label}</span></button>`;
@@ -814,7 +823,7 @@ function setupScreen(): string {
         ${mode === 'online' ? `<span class="vs-mid">${t(lang, 'vs')}</span>` : `<button data-act="swap-sides" class="vs-swap" title="${t(lang, 'swapSides')}" aria-label="${t(lang, 'swapSides')}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h15M15 4l4 4-4 4M20 16H5M9 12l-4 4 4 4"/></svg></button>`}
         ${mode === 'online' ? `<div class="vs-card" style="--fc:#6b6b6b"><span class="vs-who">${t(lang, 'sideOpponent')}</span><b style="font-size:34px;line-height:48px">?</b><b>${t(lang, 'theyPick')}</b></div>` : side('blue', mode === 'ai' ? t(lang, 'sideComputer') : t(lang, 'sideSecond'))}
       </div>
-      <div class="ftiles">${tiles}</div>
+      ${tiles}
       <p class="blurb">${FACTIONS[settings.sides[pickSide]].blurb[lang]}</p>
 
       <h3>${t(lang, 'map')}</h3>
@@ -881,7 +890,7 @@ function inviteScreen(): string {
 
 /** Online: the invited player picks their own army (any but the host's). */
 function armyPickScreen(): string {
-  const tiles = FACTION_ORDER.map((id) => {
+  const tiles = READY().map((id) => {
     const f = FACTIONS[id];
     const taken = settings.sides.red === id;
     return `<button data-act="net-army" data-value="${id}" class="ftile ${taken ? 'taken' : ''}" ${taken ? 'disabled' : ''} style="--fc:${f.color}">${figurePic(id, 'king', 'front') || f.emblem}<span>${f.name[lang]}</span></button>`;
@@ -1070,8 +1079,27 @@ function placeGround() {
     clip.dataset.keep = '1';
     wrap.prepend(clip);
   }
-  if (groundEl.parentElement !== clip) clip.append(groundEl);
-  groundEl.style.transform = groundTransform(view());
+  if (groundEl.parentElement !== clip) clip.prepend(groundEl);
+  const T = groundTransform(view());
+  groundEl.style.transform = T;
+  // The river, bridges and fords of this map, laid over the ground with the same projection.
+  const parts = groundParts(CONFIG.board);
+  const sig = parts.map((p) => p.key).join('|');
+  if (clip.dataset.sig !== sig) {
+    clip.dataset.sig = sig;
+    clip.querySelectorAll('.gpart').forEach((n) => n.remove());
+    for (const p of parts) {
+      const im = new Image();
+      im.src = p.src;
+      im.className = 'gpart';
+      im.alt = '';
+      im.draggable = false;
+      im.style.width = `${p.w}px`;
+      im.style.height = `${p.h}px`;
+      clip.append(im);
+    }
+  }
+  clip.querySelectorAll<HTMLElement>('.gpart').forEach((im, i) => (im.style.transform = `${T} translate(${parts[i].x}px, ${parts[i].y}px)`));
 }
 
 /** Re-rendering replaces the board, so keep where the player had scrolled the zoomed map to. */

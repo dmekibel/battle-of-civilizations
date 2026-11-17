@@ -6,7 +6,11 @@ import type { ArmyCounts, Player } from '../engine';
 import type { Lang } from './i18n';
 import type { ArtId } from './symbols';
 
-export type FactionId = 'novgorod' | 'teutonic' | 'mongols' | 'japanese' | 'frontier' | 'comanche';
+export type FactionId = 'novgorod' | 'teutonic' | 'mongols' | 'japanese' | 'frontier' | 'comanche' | 'vikings' | 'romans';
+/** Armies are grouped by the age they fought in. */
+export type Era = 'ancient' | 'medieval' | 'gunpowder';
+export const ERAS: Era[] = ['ancient', 'medieval', 'gunpowder'];
+export const ERA_OF: Record<FactionId, Era> = { romans: 'ancient', vikings: 'medieval', novgorod: 'medieval', teutonic: 'medieval', mongols: 'medieval', japanese: 'medieval', frontier: 'gunpowder', comanche: 'gunpowder' };
 
 export interface Faction {
   name: Record<Lang, string>;
@@ -106,9 +110,36 @@ export const FACTIONS: Record<FactionId, Faction> = {
     },
     art: { king: 'bonnet', lightInfantry: 'tomahawk', lightCavalry: 'lancer' },
   },
+  vikings: {
+    name: { en: 'Vikings', ru: 'Викинги' },
+    color: '#2f5f8f',
+    text: '#8fc0ee',
+    roster: ['lightInfantry', 'heavyInfantry', 'berserker', 'axeThrower', 'archer'],
+    blurb: { en: 'Raiders on foot: berserkers who hit twice as hard but fall to one blow, and axes thrown from close range. No horses.', ru: 'Пешие налётчики: берсерки бьют вдвое сильнее, но падают от одного удара; топоры летят с близкого расстояния. Конницы нет.' },
+    emblem: shield('#2f5f8f', '#e9e4d6', '<circle cx="30" cy="32" r="17" fill="none" stroke="#e9e4d6" stroke-width="3"/><path d="M30 15V49M13 32H47" stroke="#e9e4d6" stroke-width="3"/><circle cx="30" cy="32" r="4.5" fill="#d9a521"/>'),
+    names: {
+      king: { en: 'Jarl', ru: 'Ярл' },
+      lightInfantry: { en: 'Raiders', ru: 'Налётчики' },
+      heavyInfantry: { en: 'Huscarls', ru: 'Хускарлы' },
+    },
+  },
+  romans: {
+    name: { en: 'Romans', ru: 'Римляне' },
+    color: '#c08a14',
+    text: '#f0c95a',
+    roster: ['lightInfantry', 'heavyInfantry', 'archer', 'heavyCavalry', 'ballista'],
+    blurb: { en: 'The legion: solid heavy infantry, a few riders, and a ballista that hits hard from far away but crawls.', ru: 'Легион: крепкая тяжёлая пехота, немного конницы и баллиста, которая бьёт издалека, но еле ползёт.' },
+    emblem: shield('#8e1b2e', '#e8b923', '<path d="M30 14L33 26H46L35.5 33.5L39.5 46L30 38.5L20.5 46L24.5 33.5L14 26H27Z" fill="#e8b923"/>'),
+    names: {
+      king: { en: 'Legate', ru: 'Легат' },
+      lightInfantry: { en: 'Auxiliaries', ru: 'Ауксиларии' },
+      heavyInfantry: { en: 'Legionaries', ru: 'Легионеры' },
+      heavyCavalry: { en: 'Equites', ru: 'Всадники' },
+    },
+  },
 };
 
-export const FACTION_ORDER: FactionId[] = ['novgorod', 'teutonic', 'mongols', 'japanese', 'frontier', 'comanche'];
+export const FACTION_ORDER: FactionId[] = ['romans', 'vikings', 'novgorod', 'teutonic', 'mongols', 'japanese', 'frontier', 'comanche'];
 
 /** Which faction each side leads in the current battle. */
 export let sides: Record<Player, FactionId> = { red: 'novgorod', blue: 'teutonic' };

@@ -3,7 +3,7 @@
 // In 2.5D the map is then turned and tilted by the camera like a table seen from a chair:
 // far rows are squashed and smaller, and pieces, trees and bridges stand up from the ground.
 
-import { CONFIG, type TerrainId, type UnitTypeId } from '../config';
+import { CONFIG, type GameConfig, type TerrainId, type UnitTypeId } from '../config';
 import type { AttackPreview, GameState, Hex, Player, Reach } from '../engine';
 import { maxHp } from '../engine';
 import { sides } from './factions';
@@ -118,7 +118,25 @@ function lens(v: View): Lens {
 // One picture of the whole board (grass, river, bridges, forest shade, the table around it), made by _art/map_build.py.
 // It covers the flat map plus GROUND_M units all round and is laid under the hexes with the camera's own projection.
 const GROUND_M = 70;
-export const GROUND_URL = `${import.meta.env.BASE_URL}map/ground.webp?v=10`;
+export const GROUND_URL = `${import.meta.env.BASE_URL}map/ground.webp?v=11`;
+/** The river, each bridge and each ford are their own pictures laid over the ground, so every map places its own.
+ *  Positions and sizes are in the ground picture's own units (map units, origin at the picture's top left). */
+export interface GroundPart { key: string; src: string; x: number; y: number; w: number; h: number }
+const PART = (name: string) => `${import.meta.env.BASE_URL}map/${name}.webp?v=1`;
+export function groundParts(b: GameConfig['board']): GroundPart[] {
+  if (b.riverCol === null) return [];
+  const out: GroundPart[] = [{ key: 'river', src: PART('river'), x: 669.5, y: 0, w: 94, h: 1053 }];
+  const at = (row: number, w: number, h: number): [number, number] => [S * 1.5 * b.riverCol! + S + GROUND_M - w / 2, R3 * S * (row + 0.5 * (b.riverCol! & 1)) + (R3 / 2) * S + GROUND_M - h / 2];
+  for (const r of b.fordRows ?? []) {
+    const [x, y] = at(r, 94, 56);
+    out.push({ key: `ford${r}`, src: PART('ford'), x, y, w: 94, h: 56 });
+  }
+  for (const r of b.bridgeRows) {
+    const [x, y] = at(r, 108, 46.5);
+    out.push({ key: `bridge${r}`, src: PART('bridge'), x, y, w: 108, h: 46.5 });
+  }
+  return out;
+}
 /** The picture's size in map units (its CSS size before the camera's transform). */
 export const GROUND_SIZE: Pt = [W + 2 * GROUND_M, H + 2 * GROUND_M];
 /** Carved trees, each drawn from 8 directions (tree-<kind>-<direction>.webp); picture size in pixels, trunk foot at bottom centre. */
@@ -170,7 +188,7 @@ let groundReady = false;
 /** Starts loading the painted ground and trees; `done` runs once they can be drawn. Until then the plain board shows. */
 export function loadGround(done: () => void) {
   if (typeof Image === 'undefined') return;
-  const all = [GROUND_URL, ...TREE_KINDS.flatMap(([k]) => DIRS8.map((d) => TREE_URL(k, d))), ...PROPS.map((_, i) => PROP_URL(i))].map((src) => {
+  const all = [GROUND_URL, PART('river'), PART('bridge'), PART('ford'), ...TREE_KINDS.flatMap(([k]) => DIRS8.map((d) => TREE_URL(k, d))), ...PROPS.map((_, i) => PROP_URL(i))].map((src) => {
     const im = new Image();
     im.src = src;
     KEEP.push(im);
@@ -223,6 +241,7 @@ const GRASS = ['#7fa35a', '#87ab61', '#789b53'];
 function fill(t: TerrainId, h: Hex): string {
   if (t === 'plain') return GRASS[(h.col * 7 + h.row * 13 + ((h.col * h.row) % 5)) % GRASS.length];
   if (t === 'forest') return '#3d6530';
+  if (t === 'ford') return '#9fb8a0'; // shallows
   return '#5f9ccc'; // river and the water under a bridge
 }
 

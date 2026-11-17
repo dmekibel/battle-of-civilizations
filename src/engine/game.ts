@@ -11,11 +11,12 @@ export const other = (p: Player): Player => (p === 'red' ? 'blue' : 'red');
 
 export function buildBoard(cfg: GameConfig = CONFIG): TerrainId[][] {
   const { cols, rows, riverCol, bridgeRows, forests } = cfg.board;
+  const fordRows = cfg.board.fordRows ?? [];
   const board: TerrainId[][] = [];
   for (let r = 0; r < rows; r++) {
     const line: TerrainId[] = [];
     for (let c = 0; c < cols; c++) {
-      if (c === riverCol) line.push(bridgeRows.includes(r) ? 'bridge' : 'river');
+      if (c === riverCol) line.push(bridgeRows.includes(r) ? 'bridge' : fordRows.includes(r) ? 'ford' : 'river');
       else line.push('plain');
     }
     board.push(line);
@@ -157,7 +158,7 @@ function search(s: GameState, unitId: string, cfg: GameConfig): { out: Map<strin
 const enemyNext = (s: GameState, h: Hex, owner: Player) => s.units.some((e) => e.owner !== owner && distance(e.pos, h) === 1);
 
 const mounted = (u: Unit, cfg: GameConfig) => !!cfg.units[u.type].mounted;
-const INFANTRY = new Set(['heavyInfantry', 'lightInfantry', 'deputy', 'samurai', 'ashigaru']);
+const INFANTRY = new Set(['heavyInfantry', 'lightInfantry', 'deputy', 'samurai', 'ashigaru', 'berserker', 'axeThrower']);
 
 /** Points value of an army (its King not counted), for the morale rule. */
 export function armyValue(s: GameState, p: Player, cfg: GameConfig = CONFIG): number {
