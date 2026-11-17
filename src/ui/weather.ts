@@ -38,6 +38,15 @@ const WEATHER: Record<WeatherKind, Look> = {
 
 // ---------- textures, drawn once on a canvas ----------
 const cache = new Map<string, string>();
+/** The same darkening as multiplying by `c`, as a plain see-through colour: blend modes over the 3D board
+ *  draw as solid colour in iPhone Safari (a white screen at dusk), so no layer may rely on them. */
+function shadeOf(c: RGB): string {
+  const a = 1 - Math.min(...c) / 255;
+  if (a <= 0.001) return 'rgba(0,0,0,0)';
+  const o = c.map((v) => Math.max(0, Math.round((v - 255 * (1 - a)) / a)));
+  return `rgba(${o[0]},${o[1]},${o[2]},${a.toFixed(3)})`;
+}
+
 function texture(key: string, w: number, h: number, draw: (c: CanvasRenderingContext2D) => void): string {
   const hit = cache.get(key);
   if (hit) return hit;
@@ -192,9 +201,9 @@ export function placeWeather(wrap: HTMLElement, clip: HTMLElement, groundTransfo
       const [near, far] = [mul(tn, wn), mul(tf, wf)];
       const mid = near.map((n, i) => (n + far[i]) / 2) as RGB;
       // Twice as wide as the light's reach, so the far colour carries on past it to the screen's edges.
-      l.style.background = `radial-gradient(closest-side, ${css(near)} 0%, ${css(mid)} 18%, ${css(far)} 42%, ${css(far)} 100%)`;
+      l.style.background = `radial-gradient(closest-side, ${shadeOf(near)} 0%, ${shadeOf(mid)} 18%, ${shadeOf(far)} 42%, ${shadeOf(far)} 100%)`;
       const desat = Math.min(0.8, look('desat').reduce((a, b) => a + b, 0));
-      if (desat > 0) {
+      if (desat > 0 && false) { // saturation blend: off (blend modes break on iPhone)
         const d = el('wx-desat wx-ground');
         d.style.opacity = desat.toFixed(2);
         clip.append(d);
@@ -203,7 +212,7 @@ export function placeWeather(wrap: HTMLElement, clip: HTMLElement, groundTransfo
       const warm = look('warm').find(Boolean);
       if (warm) {
         const w = el('wx-warm');
-        w.style.background = `radial-gradient(closest-side, ${css(warm[0], warm[1])} 0%, ${css(warm[0], warm[1] * 0.5)} 14%, ${css(warm[0], 0)} 32%)`;
+        w.style.background = `radial-gradient(closest-side, ${css(warm[0], warm[1] * 0.45)} 0%, ${css(warm[0], warm[1] * 0.2)} 14%, ${css(warm[0], 0)} 32%)`;
         clip.append(w);
       }
     }
@@ -268,7 +277,7 @@ export function placeWeather(wrap: HTMLElement, clip: HTMLElement, groundTransfo
   const dim = mul(tp, wp);
   if (dim.some((n) => n < 254)) {
     const d = el('wx-dim');
-    d.style.background = css(dim);
+    d.style.background = shadeOf(dim);
     top.append(d);
   }
   const vig = Math.max(...look('vignette'));

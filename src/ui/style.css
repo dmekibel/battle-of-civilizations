@@ -1137,11 +1137,11 @@ button.primary.ready { animation: ready 2.2s ease-in-out infinite; }
 /* ---------- weather & light (src/ui/weather.ts) ----------
    Page layers around the board, all moved or blended by the GPU: the light tint lies on the ground under the board,
    .wx-sky over it (under the camera buttons). Nothing here takes a tap. */
-.ground-clip .wx-puddles { position: absolute; left: 0; top: 0; max-width: none; transform-origin: 0 0; will-change: transform; mix-blend-mode: screen; opacity: .8; }
-.ground-clip .wx-light { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; mix-blend-mode: multiply; pointer-events: none; }
+.ground-clip .wx-puddles { position: absolute; left: 0; top: 0; max-width: none; transform-origin: 0 0; will-change: transform; opacity: .35; }
+.ground-clip .wx-light { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; pointer-events: none; }
 .wx-sky { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .wx-sky > * { position: absolute; inset: 0; pointer-events: none; }
-.wx-dim { mix-blend-mode: multiply; }
+.wx-dim { }
 /* Falling rain and snow: a tile that repeats, slid by exactly one tile and started over, so it never jumps. */
 .wx-sky .wx-fall { inset: auto; left: calc(-1 * var(--tw)); top: calc(-1 * var(--th)); width: calc(100% + 2 * var(--tw)); height: calc(100% + 2 * var(--th)); background-repeat: repeat; will-change: transform; animation: wx-fall linear infinite; }
 @keyframes wx-fall { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(var(--tw), var(--th), 0); } }
@@ -1166,7 +1166,7 @@ button.primary.ready { animation: ready 2.2s ease-in-out infinite; }
   .choice b { font-size: 20px; }
 }
 .ground-clip .wx-desat { position: absolute; inset: 0; background: #808080; mix-blend-mode: saturation; pointer-events: none; }
-.ground-clip .wx-warm { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; mix-blend-mode: soft-light; pointer-events: none; }
+.ground-clip .wx-warm { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; pointer-events: none; }
 /* Alegreya Sans draws old-style figures by default; counters and stats need lining ones. */
 *, *::before, *::after { font-feature-settings: 'lnum' 1; }
 .ground-clip .wx-gfog { position: absolute; left: 0; top: 0; overflow: hidden; transform-origin: 0 0; will-change: transform; pointer-events: none; }
