@@ -2245,7 +2245,33 @@ if (import.meta.env.DEV) {
     get cam() { return cam; },
     set cam(c: Camera) { cam = c; render(); },
     scheduleAi,
+    /** Starts a quick battle on any map, shelved ones too (e.g. boc.loadMap('ridge') for the raised high ground). */
+    loadMap(map: MapId, size?: 'standard' | 'large') {
+      settings = { ...settings, map, ...(size ? { size } : {}) };
+      applySettings(settings);
+      selected = null;
+      choosing = false;
+      cover = false;
+      sess = startSession(quickStart());
+      render();
+    },
   };
+  // Dev screenshots: ?map=ridge&cam=yaw,pitch,zoom[,x,y]&put=unitId:col:row,... (a fresh browser profile keeps the real save untouched).
+  const q = new URLSearchParams(location.search);
+  const qMap = q.get('map') as MapId | null;
+  if (qMap) {
+    const dev = (window as unknown as { boc: { loadMap: (m: MapId, size?: 'standard' | 'large') => void } }).boc;
+    dev.loadMap(qMap, q.get('size') === 'large' ? 'large' : 'standard');
+    const moves = (q.get('put') ?? '').split(',').filter(Boolean).map((t) => t.split(':'));
+    if (moves.length) {
+      const st = sess.state;
+      sess = startSession({ ...st, units: st.units.map((u) => { const m = moves.find((mv) => mv[0] === u.id); return m ? { ...u, pos: { col: +m[1], row: +m[2] } } : u; }) });
+    }
+    const c = q.get('cam')?.split(',').map(Number);
+    if (c) cam = { yaw: c[0], pitch: c[1], zoom: c[2], x: c.length > 3 ? c[3] : null, y: c.length > 4 ? c[4] : null };
+    if (q.get('flat') === '1') tilt = false;
+    render();
+  }
 }
 
 /** When the game comes back on screen (or every few minutes), check whether a newer version has been put online:

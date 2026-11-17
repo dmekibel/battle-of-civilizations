@@ -70,6 +70,13 @@ interface Lens {
   tilt: boolean;
   /** The same projection as a 3x3 matrix (rows), flat (x, y, 1) -> screen (X·w, Y·w, w): lays a picture on the ground. */
   h: number[];
+  /** A point `z` map units above the table (raised high ground); `pt` and `size` already lift points on raised hexes. */
+  pt3: (x: number, y: number, z: number) => Pt;
+  size3: (x: number, y: number, z: number) => number;
+  /** How high a hex's top stands (0 = the table). */
+  hexZ: (h: Hex) => number;
+  /** Where the camera is, over the flat map (to tell which cliff faces it sees). */
+  eye: Pt;
 }
 
 /** Flat map size for this orientation (portrait turns the map 90°). */
@@ -78,7 +85,7 @@ export const mapSize = (portrait: boolean): Pt => (syncSize(), portrait ? [H, W]
 /** Camera tilt: 0° looks straight down, up to 76° looks almost across the table. */
 const tiltAngle = (v: View) => (v.tilt ? (76 * v.cam.pitch * Math.PI) / 180 : 0);
 
-function lens(v: View): Lens {
+function lens(v: View, T: Terraces | null = null): Lens {
   syncSize();
   const [fw, fh] = mapSize(v.portrait);
   const radius = Math.hypot(fw, fh) / 2;
@@ -92,20 +99,29 @@ function lens(v: View): Lens {
   const fit = Math.min(v.vw / (fw * (v.tilt ? 1.12 : 1) + 60), v.vh / ((v.tilt ? fh * 0.8 : fh) + 110));
   const scale = fit * v.cam.zoom;
   const [cx, cy] = [v.vw / 2, v.vh / 2 + (v.tilt ? 18 : 0)];
-  const raw = (x: number, y: number) => {
+  // `z` lifts the point off the table (raised high ground): up the screen and a little towards the camera.
+  const raw = (x: number, y: number, z = 0) => {
     const dx = x - tx;
     const dy = y - ty;
     const rx = dx * cos - dy * sin;
     const ry = dx * sin + dy * cos; // positive = towards the viewer
-    const k = dist / Math.max(dist * 0.15, dist - ry * sinA); // true perspective
-    return [cx + rx * k * scale, cy + ry * cosA * k * scale, k * scale, ry] as const;
+    const k = dist / Math.max(dist * 0.15, dist - ry * sinA - z * cosA); // true perspective
+    return [cx + rx * k * scale, cy + (ry * cosA - z * sinA) * k * scale, k * scale, ry] as const;
   };
+  const zAt = T ? T.at : () => 0;
   return {
     pt: (x, y) => {
-      const [X, Y] = raw(x, y);
+      const [X, Y] = raw(x, y, zAt(x, y));
       return [X, Y];
     },
-    size: (x, y) => raw(x, y)[2],
+    size: (x, y) => raw(x, y, zAt(x, y))[2],
+    pt3: (x, y, z) => {
+      const [X, Y] = raw(x, y, z);
+      return [X, Y];
+    },
+    size3: (x, y, z) => raw(x, y, z)[2],
+    hexZ: T ? T.hex : () => 0,
+    eye: [tx + dist * sinA * sin, ty + dist * sinA * cos],
     depth: (x, y) => raw(x, y)[3],
     ground: (X, Y) => {
       const xr = (X - cx) / scale;
@@ -145,7 +161,7 @@ export function groundParts(b: GameConfig['board']): GroundPart[] {
   // Hills, swamps and lakes are painted per map as one see-through picture the size of the ground.
   syncSize();
   const [gw, gh] = groundSize();
-  if (b.overlay) out.push({ key: `over-${b.overlay}${SUF()}`, src: PART(`over-${b.overlay}${SUF()}`), x: 0, y: 0, w: gw, h: gh });
+  if (b.overlay && !raisedHills(b)) out.push({ key: `over-${b.overlay}${SUF()}`, src: PART(`over-${b.overlay}${SUF()}`), x: 0, y: 0, w: gw, h: gh });
   // Random maps have no painted overlay: their lakes are painted here, in the same style.
   else if (b.lakes?.length) {
     const lp = lakePart(b.lakes);
@@ -366,12 +382,16 @@ function flat(h: Hex, v: View): Pt {
 const fmt = ([x, y]: Pt) => `${x.toFixed(1)},${y.toFixed(1)}`;
 
 function corners(h: Hex, v: View, L: Lens, r = S): string {
+  return cornerPts(h, v, L, r).map(fmt).join(' ');
+}
+/** A hex's corners on screen, on top of the hex (lifted when it is raised ground); `z` overrides the height. */
+function cornerPts(h: Hex, v: View, L: Lens, r = S, z = L.hexZ(h)): Pt[] {
   const [x, y] = flat(h, v);
   const turn = v.portrait ? Math.PI / 2 : 0;
   return Array.from({ length: 6 }, (_, i) => {
     const a = (Math.PI / 3) * i + turn;
-    return fmt(L.pt(x + r * Math.cos(a), y + r * Math.sin(a)));
-  }).join(' ');
+    return L.pt3(x + r * Math.cos(a), y + r * Math.sin(a), z);
+  });
 }
 
 // Grass in three close shades so the field doesn't look flat; the shade is fixed per hex.
@@ -746,6 +766,185 @@ function piece(type: UnitTypeId, owner: Player, hp: number, L: Lens, [sx, sy]: P
 /** Height of a piece's middle above its hex, for badges, numbers and arrows. */
 const lift = (L: Lens, k: number) => (L.tilt ? 20 * k : 3 * k);
 
+// ---------- raised high ground ----------
+// Hill hexes stand up off the table as carved terraces: the meadow on top, lifted by one step (two for a summit
+// ringed by hills), with turf-lipped earthen sides where the ground drops away. Raised neighbours merge into one
+// plateau (no wall between them). Pieces, trees and tufts on a raised hex stand on its top: the lens lifts every
+// point that lies on one. The old painted hill overlay is not used while this is on.
+
+/** Height of each step above the table, in map units (a foot soldier stands about 49 tall). */
+const RISE = [0, 15, 26];
+/** A hill hex whose every neighbour is a hill rises a second step. */
+const SUMMITS = true;
+
+/** The map's hills are drawn raised (instead of the painted overlay) once the ground pictures are loaded. */
+export const raisedHills = (b: GameConfig['board']): boolean => !!b.hills?.length && !b.swamps?.length && !b.lakes?.length;
+
+/** Heights of the raised hexes for one render. */
+interface Terraces {
+  /** Height of the ground at a flat map point. */
+  at: (x: number, y: number) => number;
+  /** Height of a hex's top. */
+  hex: (h: Hex) => number;
+  list: Hex[];
+}
+
+function terraces(s: GameState, v: View): Terraces | null {
+  if (!groundReady || !raisedHills(CONFIG.board)) return null;
+  const rows = s.board.length;
+  const cols = s.board[0]?.length ?? 0;
+  const isHill = (c: number, r: number) => s.board[r]?.[c] === 'hill';
+  const level = new Map<number, number>();
+  const list: Hex[] = [];
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++) {
+      if (!isHill(c, r)) continue;
+      const ring = neighbors({ col: c, row: r }).filter((n) => n.row >= 0 && n.row < rows && n.col >= 0 && n.col < cols);
+      level.set(r * 1000 + c, SUMMITS && ring.length === 6 && ring.every((n) => isHill(n.col, n.row)) ? 2 : 1);
+      list.push({ col: c, row: r });
+    }
+  if (!list.length) return null;
+  const hex = (h: Hex) => RISE[level.get(h.row * 1000 + h.col) ?? 0];
+  // Which hex a flat point lies in: the nearest hex centre (hexes are exactly the cells of their centres).
+  const at = (px: number, py: number) => {
+    const [x, y] = v.portrait ? [W - py, px] : [px, py];
+    const c0 = Math.round((x - S) / (1.5 * S));
+    let best = Infinity;
+    let z = 0;
+    for (let c = c0 - 1; c <= c0 + 1; c++) {
+      const r0 = Math.round((y - (R3 / 2) * S) / (R3 * S) - 0.5 * (c & 1));
+      for (let r = r0 - 1; r <= r0 + 1; r++) {
+        const d = (x - (S * 1.5 * c + S)) ** 2 + (y - (R3 * S * (r + 0.5 * (c & 1)) + (R3 / 2) * S)) ** 2;
+        if (d < best) {
+          best = d;
+          z = c >= 0 && r >= 0 && c < cols && r < rows ? RISE[level.get(r * 1000 + c) ?? 0] : 0;
+        }
+      }
+    }
+    return best <= S * S ? z : 0;
+  };
+  return { at, hex, list };
+}
+
+/** Direction the sun shines from, on the flat map: the board's far-left corner, as the light layer paints it. */
+function sunDir(v: View): Pt {
+  const [fw, fh] = mapSize(v.portrait);
+  const [dx, dy] = [-0.75 * fw, -0.85 * fh];
+  const l = Math.hypot(dx, dy);
+  return [dx / l, dy / l];
+}
+
+/** The shadow the raised ground throws on the table: every raised hex's footprint slid away from the sun,
+ *  as one shape (so overlapping hexes don't darken twice). Drawn on the ground, under everything. */
+function raisedShadow(T: Terraces, v: View, L: Lens): string {
+  const [sx, sy] = sunDir(v);
+  const turn = v.portrait ? Math.PI / 2 : 0;
+  const outline = (x: number, y: number, r: number) =>
+    `M${Array.from({ length: 6 }, (_, i) => {
+      const a = (Math.PI / 3) * i + turn;
+      return fmt(L.pt3(x + r * Math.cos(a), y + r * Math.sin(a), 0));
+    }).join('L')}Z`;
+  let cast = '';
+  let foot = '';
+  for (const h of T.list) {
+    const [x, y] = flat(h, v);
+    const z = T.hex(h);
+    cast += outline(x - sx * z * 1.1, y - sy * z * 1.1, S * 1.02);
+    foot += outline(x, y, S + 3.5);
+  }
+  // A soft dark ring where the sides meet the ground, then the shadow itself.
+  return `<path d="${foot}" fill="#1b2410" fill-opacity=".2"/><path d="${cast}" fill="#1b2410" fill-opacity=".3"/>`;
+}
+
+const rgb = (c: [number, number, number], lum: number) => `rgb(${c.map((n) => Math.max(0, Math.min(255, Math.round(n * lum)))).join(',')})`;
+const SOIL: [number, number, number] = [172, 124, 76];
+const TURF: [number, number, number] = [104, 136, 58];
+
+/** One raised hex: its visible cliff faces, its meadow top (the same ground painting, lifted), a lit rim along
+ *  its edges, then `extra` (its tap shape, highlights and marks, which must lie on the top, not under it). */
+function raisedHex(h: Hex, T: Terraces, v: View, L: Lens, u: string, groundId: string | null, detail: number, extra: string): Standing {
+  const [x, y] = flat(h, v);
+  const z = T.hex(h);
+  const turn = v.portrait ? Math.PI / 2 : 0;
+  const [sx, sy] = sunDir(v);
+  const top = cornerPts(h, v, L, S, z);
+  const k = L.size3(x, y, z);
+  let faces = '';
+  let rim = '';
+  for (let i = 0; i < 6; i++) {
+    const a = (Math.PI / 3) * (i + 0.5) + turn; // this edge's outward direction
+    const [nx, ny] = [Math.cos(a), Math.sin(a)];
+    const low = T.at(x + nx * R3 * S, y + ny * R3 * S); // the neighbour's height
+    if (low >= z) continue;
+    const ca = (Math.PI / 3) * i + turn;
+    const cb = (Math.PI / 3) * (i + 1) + turn;
+    const A: Pt = [x + S * Math.cos(ca), y + S * Math.sin(ca)];
+    const B: Pt = [x + S * Math.cos(cb), y + S * Math.sin(cb)];
+    const lit = nx * sx + ny * sy; // 1 = facing the sun
+    if (!L.tilt) {
+      // Straight down: no sides show. A thin light edge on the sunny side and a dark one in the shade reads as a step.
+      rim += `<line x1="${fmt(top[i]).replace(',', '" y1="')}" x2="${fmt(top[(i + 1) % 6]).replace(',', '" y2="')}" stroke="${lit > 0 ? '#f4efc4' : '#24301a'}" stroke-opacity="${(0.25 + 0.4 * Math.abs(lit)).toFixed(2)}" stroke-width="${(1.6 * k).toFixed(1)}" stroke-linecap="round"/>`;
+      continue;
+    }
+    // Only sides that face the camera are drawn (the top hides the rest).
+    const [mx, my] = [(A[0] + B[0]) / 2, (A[1] + B[1]) / 2];
+    if ((L.eye[0] - mx) * nx + (L.eye[1] - my) * ny <= 0) continue;
+    const lum = 0.8 + 0.26 * lit;
+    const P = (p: Pt, zz: number) => L.pt3(p[0], p[1], zz);
+    const lerp = (t: number): Pt => [A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t];
+    const quad = (z1: number, z2: number) => [P(A, z1), P(B, z1), P(B, z2), P(A, z2)].map(fmt).join(' ');
+    const hgt = z - low;
+    const seed = (h.col * 31 + h.row * 17 + i * 7) % 13;
+    // The earth, darker towards its foot where it meets the ground below.
+    faces += `<polygon points="${quad(z, low)}" fill="${rgb(SOIL, lum)}"/><polygon points="${quad(z, low)}" fill="url(#${u}cliff)"/>`;
+    // A carved layer line across the earth, gently wavering.
+    const band = Array.from({ length: 6 }, (_, j) => fmt(P(lerp(j / 5), low + hgt * (0.55 + 0.06 * Math.sin(seed + j * 2.1)))));
+    faces += `<polyline points="${band.join(' ')}" fill="none" stroke="${rgb(SOIL, lum * 0.78)}" stroke-width="${(0.7 * k).toFixed(1)}" stroke-linecap="round"/>`;
+    // The turf lip: grass hanging a little over the edge, its lower edge scalloped like carved tufts.
+    const lip = Math.min(2.4, hgt * 0.22);
+    const under = Array.from({ length: 9 }, (_, j) => {
+      const t = 1 - j / 8;
+      return fmt(P(lerp(t), z - lip * (0.75 + 0.45 * Math.abs(Math.sin(seed * 1.7 + t * 9.4)))));
+    });
+    faces += `<polygon points="${fmt(P(A, z))} ${fmt(P(B, z))} ${under.join(' ')}" fill="${rgb(TURF, lum)}"/>`;
+    // Sunlight catching the top edge.
+    rim += `<line x1="${fmt(top[i]).replace(',', '" y1="')}" x2="${fmt(top[(i + 1) % 6]).replace(',', '" y2="')}" stroke="#eef0b8" stroke-opacity="${(0.2 + 0.25 * Math.max(0, lit)).toFixed(2)}" stroke-width="${(1.1 * k).toFixed(1)}" stroke-linecap="round"/>`;
+  }
+  // The top: the ground painting laid on the lifted plane. Locally the lift is an affine map, so the picture
+  // goes through one matrix per hex, clipped a hair wider than the hex so neighbouring tops meet without a seam.
+  let surface = '';
+  const clip = cornerPts(h, v, L, S + 0.8, z).map(fmt).join(' ');
+  if (groundId) {
+    const toFlat = (gu: number, gv: number): Pt => (v.portrait ? [gv - GROUND_M, W + GROUND_M - gu] : [gu - GROUND_M, gv - GROUND_M]);
+    const [u0, v0] = v.portrait ? [W + GROUND_M - y, x + GROUND_M] : [x + GROUND_M, y + GROUND_M];
+    const scr = (gu: number, gv: number) => L.pt3(...toFlat(gu, gv), z);
+    const d = S / 2;
+    const [pu1, pu0, pv1, pv0, p0] = [scr(u0 + d, v0), scr(u0 - d, v0), scr(u0, v0 + d), scr(u0, v0 - d), scr(u0, v0)];
+    const m = [(pu1[0] - pu0[0]) / (2 * d), (pu1[1] - pu0[1]) / (2 * d), (pv1[0] - pv0[0]) / (2 * d), (pv1[1] - pv0[1]) / (2 * d)];
+    const e = p0[0] - m[0] * u0 - m[2] * v0;
+    const f = p0[1] - m[1] * u0 - m[3] * v0;
+    const db = detailBox();
+    surface =
+      `<clipPath id="${u}r${h.col}_${h.row}"><polygon points="${clip}"/></clipPath>` +
+      `<g clip-path="url(#${u}r${h.col}_${h.row})"><g transform="matrix(${[...m, e, f].map((n) => +n.toFixed(5)).join(' ')})"><use href="#${groundId}"/>` +
+      (detail > 0 ? `<rect x="${db[0]}" y="${db[1]}" width="${db[2]}" height="${db[3]}" fill="url(#${u}gd)" opacity="${detail.toFixed(2)}"/>` : '') +
+      `</g></g>`;
+  } else surface = `<polygon points="${clip}" fill="${fill('hill', h)}"/>`;
+  // The light and shade the rest of the board gets from the sun layer; higher ground a touch brighter.
+  surface += `<polygon points="${clip}" fill="url(#${u}sun)"/><polygon points="${clip}" fill="#fff4cc" fill-opacity="${(0.07 * (z / RISE[1])).toFixed(3)}"/>`;
+  return { depth: L.depth(x, y) - 0.65 * S, svg: `<g>${faces}${surface}${rim}${extra}</g>` };
+}
+
+/** The grass close-up for the raised tops, in the ground picture's units, as the .gdetail layer tiles it (150 wide). */
+function raisedDefs(u: string, detail: number): string {
+  // The sides darken smoothly towards their foot, where little light reaches.
+  const cliff = `<defs><linearGradient id="${u}cliff" x1="0" y1="0" x2="0" y2="1"><stop offset=".1" stop-color="#1e1208" stop-opacity="0"/><stop offset="1" stop-color="#1e1208" stop-opacity=".55"/></linearGradient></defs>`;
+  if (detail <= 0) return cliff;
+  const th = 150 * (747 / 1280);
+  const db = detailBox();
+  return `${cliff}<defs><pattern id="${u}gd" patternUnits="userSpaceOnUse" x="${db[0]}" y="${db[1]}" width="150" height="${th.toFixed(2)}"><image href="${DETAIL_URL}" width="150" height="${th.toFixed(2)}"/></pattern></defs>`;
+}
+
 /** The table is a thick slab of wood, not a sheet: its sides towards the camera, and the shadow it throws below. */
 const SLAB = 26;
 function slab(v: View, L: Lens): string {
@@ -786,13 +985,26 @@ function slab(v: View, L: Lens): string {
 }
 
 export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_EFFECTS): string {
-  const L = lens(v);
+  // Raised high ground: the lens lifts every point on a raised hex onto its top.
+  const T = terraces(s, v);
+  const L = lens(v, T);
+  // Ids unique to this drawing: while the camera moves an older board can still be in the page.
+  const u = `b${++BOARD_SEQ}`;
   if (v.tilt) preloadFigures();
   const looks: Record<Player, Look> = { red: lookFor('red', v, s), blue: lookFor('blue', v, s) };
   const ground: string[] = [];
   const standing: Standing[] = [];
   const top: string[] = [];
   if (groundReady && L.tilt) ground.push(slab(v, L));
+  // What lies on a raised hex (its tap shape, highlights, marks) is drawn with that hex's top, after it, not on the
+  // ground under it; everything else goes on the ground as before.
+  const onTop = new Map<string, string[]>();
+  for (const h of T?.list ?? []) onTop.set(`${h.col},${h.row}`, []);
+  const onHex = (h: Hex, ...svg: string[]) => {
+    const b = onTop.get(`${h.col},${h.row}`);
+    (b ?? ground).push(...svg);
+  };
+  if (T) ground.push(raisedShadow(T, v, L));
 
   for (let r = 0; r < s.board.length; r++) {
     for (let c = 0; c < s.board[r].length; c++) {
@@ -800,7 +1012,8 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
       const t = s.board[r][c];
       const [x, y] = flat(hex, v);
       const [lx, ly] = L.pt(x, y - S * 0.62);
-      ground.push(
+      onHex(
+        hex,
         `<polygon class="hex" data-col="${c}" data-row="${r}" points="${corners(hex, v, L)}" ${groundReady ? 'fill="#000" fill-opacity="0" stroke="#1d3312" stroke-opacity=".28" stroke-width="1"' : `fill="${fill(t, hex)}" stroke="#5d7f40" stroke-width="1"`}/>`,
         v.labels ? `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" class="coord" style="font-size:${(7 * L.size(x, y)).toFixed(1)}px">${hexName(hex)}</text>` : '',
       );
@@ -822,16 +1035,16 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
   if (o.zone) {
     const c = armyColor(o.zone.owner);
     for (const hex of o.zone.hexes) {
-      ground.push(`<polygon points="${corners(hex, v, L, S - 2)}" fill="${c}" fill-opacity=".14" stroke="${c}" stroke-opacity=".55" stroke-width="1.5"/>`);
+      onHex(hex, `<polygon points="${corners(hex, v, L, S - 2)}" fill="${c}" fill-opacity=".14" stroke="${c}" stroke-opacity=".55" stroke-width="1.5"/>`);
     }
   }
 
   for (const hex of o.danger) {
-    ground.push(`<polygon points="${corners(hex, v, L, S - 3)}" fill="#e0302a" fill-opacity=".22" stroke="#ff6a5a" stroke-opacity=".5" stroke-width="1"/>`);
+    onHex(hex, `<polygon points="${corners(hex, v, L, S - 3)}" fill="#e0302a" fill-opacity=".22" stroke="#ff6a5a" stroke-opacity=".5" stroke-width="1"/>`);
   }
 
   for (const hex of o.rings) {
-    ground.push(`<polygon points="${corners(hex, v, L, S - 4)}" fill="#a066ff" fill-opacity=".32" stroke="#d4b0ff" stroke-opacity=".8" stroke-width="1.5"/>`);
+    onHex(hex, `<polygon points="${corners(hex, v, L, S - 4)}" fill="#a066ff" fill-opacity=".32" stroke="#d4b0ff" stroke-opacity=".8" stroke-width="1.5"/>`);
   }
 
   // Where pieces fell this battle the grass stays trampled.
@@ -839,7 +1052,7 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
     if ((e.kind === 'attack' || e.kind === 'shoot') && e.killed) {
       const [mx, my] = L.pt(...flat(e.at, v));
       const k = L.size(...flat(e.at, v));
-      ground.push(`<ellipse class="scar" cx="${mx.toFixed(1)}" cy="${(my + 2 * k).toFixed(1)}" rx="${(13 * k).toFixed(1)}" ry="${((L.tilt ? 4.5 : 10) * k).toFixed(1)}"/>`);
+      onHex(e.at, `<ellipse class="scar" cx="${mx.toFixed(1)}" cy="${(my + 2 * k).toFixed(1)}" rx="${(13 * k).toFixed(1)}" ry="${((L.tilt ? 4.5 : 10) * k).toFixed(1)}"/>`);
     }
   }
 
@@ -847,20 +1060,19 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
   // (this turn's clearly, the other side's last turn fainter).
   for (const m of o.trail.moves) {
     const f = m.old ? 0.55 : 1;
-    ground.push(
-      `<polygon points="${corners(m.from, v, L, S - 2.5)}" fill="#f2d24a" fill-opacity="${(0.2 * f).toFixed(2)}" pointer-events="none"/>`,
-      `<polygon points="${corners(m.to, v, L, S - 2.5)}" fill="#f2d24a" fill-opacity="${(0.36 * f).toFixed(2)}" pointer-events="none"/>`,
-    );
+    onHex(m.from, `<polygon points="${corners(m.from, v, L, S - 2.5)}" fill="#f2d24a" fill-opacity="${(0.2 * f).toFixed(2)}" pointer-events="none"/>`);
+    onHex(m.to, `<polygon points="${corners(m.to, v, L, S - 2.5)}" fill="#f2d24a" fill-opacity="${(0.36 * f).toFixed(2)}" pointer-events="none"/>`);
   }
   for (const h of o.trail.kills) {
     const [kx, ky] = L.pt(...flat(h, v));
-    ground.push(`<text x="${kx.toFixed(1)}" y="${(ky + 7).toFixed(1)}" class="trail-kill">✕</text>`);
+    onHex(h, `<text x="${kx.toFixed(1)}" y="${(ky + 7).toFixed(1)}" class="trail-kill">✕</text>`);
   }
 
   for (const { hex, cost } of o.reach.values()) {
     const [x, y] = flat(hex, v);
     const [cx, cy] = L.pt(x, y);
-    ground.push(
+    onHex(
+      hex,
       // A light wash, so the board still looks like a board; the cost numbers come with the hex labels switch.
       `<polygon points="${corners(hex, v, L, S - 3)}" fill="#fffbe0" fill-opacity=".13" stroke="#fff3a6" stroke-opacity=".5" stroke-width="1.2"/>`,
       v.labels ? `<text x="${cx.toFixed(1)}" y="${(cy + 5).toFixed(1)}" class="cost">${cost}</text>` : '',
@@ -871,9 +1083,12 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
   if (o.route.length) {
     const sel = o.selected ? s.units.find((u) => u.id === o.selected) : undefined;
     const pts = [...(sel ? [sel.pos] : []), ...o.route].map((h) => L.pt(...flat(h, v)));
-    ground.push(`<polyline points="${pts.map(fmt).join(' ')}" class="route"/>`);
+    // Over raised ground the line would pass under the hill tops, so it is drawn above everything there.
+    const line = `<polyline points="${pts.map(fmt).join(' ')}" class="route"/>`;
+    if ([...(sel ? [sel.pos] : []), ...o.route].some((h) => L.hexZ(h) > 0)) top.push(line);
+    else ground.push(line);
     const end = o.route[o.route.length - 1];
-    ground.push(`<polygon points="${corners(end, v, L, S - 4)}" class="route-end"/>`);
+    onHex(end, `<polygon points="${corners(end, v, L, S - 4)}" class="route-end"/>`);
   }
 
   for (const u of s.units) {
@@ -881,9 +1096,9 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
     const [x, y] = flat(u.pos, v);
     const at = L.pt(x, y);
     const k = L.size(x, y);
-    if (u.id === o.selected) ground.push(`<polygon points="${corners(u.pos, v, L, S - 2)}" fill="#ffe27a" fill-opacity=".6" stroke="#c99a00" stroke-width="3"/>`);
+    if (u.id === o.selected) onHex(u.pos, `<polygon points="${corners(u.pos, v, L, S - 2)}" fill="#ffe27a" fill-opacity=".6" stroke="#c99a00" stroke-width="3"/>`);
     const p = o.targets.get(u.id);
-    if (p) ground.push(`<polygon points="${corners(u.pos, v, L, S - 3)}" fill="#e53935" fill-opacity=".2" stroke="#d32f2f" stroke-width="3" stroke-dasharray="6 4"/>`);
+    if (p) onHex(u.pos, `<polygon points="${corners(u.pos, v, L, S - 3)}" fill="#e53935" fill-opacity=".2" stroke="#d32f2f" stroke-width="3" stroke-dasharray="6 4"/>`);
     const hit = fx.hits.find((h) => !h.killed && same(h.at, u.pos));
     let svg = piece(u.type, u.owner, u.hp, L, at, k, o.spent.has(u.id) ? 'spent' : '', looks[u.owner]);
     if (hit) svg = `<g class="hit" style="animation-delay:${impact(hit)}s">${svg}</g>`;
@@ -952,10 +1167,19 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
     }
     top.push(`<g transform="translate(${hx.toFixed(1)} ${ty.toFixed(1)})"><path class="spark" style="animation-delay:${d}s" d="${RAYS}"/></g>`);
     if (h.killed) {
-      ground.push(`<g transform="translate(${hx.toFixed(1)} ${hy.toFixed(1)})"><ellipse class="dust" style="animation-delay:${d + 0.25}s" rx="${(16 * k).toFixed(1)}" ry="${((L.tilt ? 6 : 12) * k).toFixed(1)}"/></g>`);
+      onHex(h.at, `<g transform="translate(${hx.toFixed(1)} ${hy.toFixed(1)})"><ellipse class="dust" style="animation-delay:${d + 0.25}s" rx="${(16 * k).toFixed(1)}" ry="${((L.tilt ? 6 : 12) * k).toFixed(1)}"/></g>`);
       standing.push({ depth: L.depth(x, y), svg: `<g class="ghost" style="animation-delay:${d}s">${piece(h.type, h.owner, 0, L, [hx, hy], k, '', looks[h.owner])}</g>` });
     }
     top.push(`<text class="float" style="animation-delay:${d}s" x="${hx}" y="${ty - 8}">${h.killed ? '✕' : `−${h.damage}`}</text>`);
+  }
+
+  // The raised hexes themselves, each with what lies on its top.
+  if (T) {
+    const detail = Math.max(0, Math.min(0.8, (v.cam.zoom - 2) / 3.5));
+    const [gw, gh] = groundSize();
+    const gid = sheetId(groundUrl(), gw, gh);
+    ground.push(raisedDefs(u, detail));
+    for (const h of T.list) standing.push(raisedHex(h, T, v, L, u, gid, detail, onTop.get(`${h.col},${h.row}`)!.join('')));
   }
 
   // Paint from the back of the board to the front so nearer things overlap farther ones.
@@ -971,8 +1195,6 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
   SHADOW = [(fx2 - mx) / sl, (fy2 - my) / sl];
   const reach = Math.hypot(...L.pt(1.2 * fw, 1.3 * fh).map((c, i) => c - [sunX, sunY][i]) as [number, number]);
   const W = L.width.toFixed(0), H = L.height.toFixed(0);
-  // Ids unique to this drawing: while the camera moves an older board can still be in the page.
-  const u = `b${++BOARD_SEQ}`;
   const light = `<defs>
       <radialGradient id="${u}sun" gradientUnits="userSpaceOnUse" cx="${sunX.toFixed(0)}" cy="${sunY.toFixed(0)}" r="${reach.toFixed(0)}">
         <stop offset="0" stop-color="#e8a948" stop-opacity=".13"/><stop offset=".45" stop-color="#e8a948" stop-opacity=".03"/>

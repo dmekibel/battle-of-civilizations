@@ -124,7 +124,7 @@ body {
 .cam button { width: 40px; height: 40px; padding: 0; font-size: 19px; line-height: 1; border-radius: 50%; background: rgba(43, 38, 30, .92); color: var(--ink); border-color: var(--line); box-shadow: 0 2px 6px rgba(0, 0, 0, .4); }
 .zoom { position: absolute; right: 6px; bottom: 6px; display: flex; flex-direction: column; gap: 6px; }
 .zoom button { width: 44px; height: 44px; padding: 0; font-size: 22px; line-height: 1; border-radius: 50%; background: rgba(43, 38, 30, .92); color: var(--ink); border-color: var(--line); box-shadow: 0 2px 6px rgba(0, 0, 0, .4); }
-.board .hex { cursor: pointer; }
+.board .hex { cursor: pointer; pointer-events: auto; } /* also inside a raised hex's group */
 .board *:not(.hex) { pointer-events: none; }
 .board .tap, .board .tap * { pointer-events: auto; cursor: pointer; }
 /* Pieces that can't do anything with the points left fade a little (opacity works on SVG in every browser; filters don't). */
