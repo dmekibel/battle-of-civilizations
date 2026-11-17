@@ -5,8 +5,11 @@
 
 import { CONFIG, type TerrainId, type UnitTypeId } from '../config';
 import type { AttackPreview, GameState, Hex, Player, Reach } from '../engine';
+import { maxHp } from '../engine';
+import { sides } from './factions';
 import { hexName } from './i18n';
-import { armyColor, unitSymbol } from './symbols';
+import { SPRITES } from './sprites';
+import { armyColor, healthBar, unitSymbol } from './symbols';
 
 const S = 34; // hex radius in SVG units
 const R3 = Math.sqrt(3);
@@ -249,9 +252,56 @@ const RAYS = Array.from({ length: 8 }, (_, i) => {
   return `M${(5 * Math.cos(a)).toFixed(1)} ${(5 * Math.sin(a)).toFixed(1)}L${(12 * Math.cos(a)).toFixed(1)} ${(12 * Math.sin(a)).toFixed(1)}`;
 }).join('');
 
-/** A piece: flat it lies on the hex; in 2.5D the counter itself stands upright on the hex,
- *  with a thin edge underneath and a shadow, low enough not to hide the hex behind it. */
-function piece(type: UnitTypeId, owner: Player, hp: number, L: Lens, [sx, sy]: Pt, k: number, cls = ''): string {
+/** Which side of its figure a piece shows: each army faces the enemy, and the camera's turn
+ *  decides whether we see it from the front, the side (mirrored when it faces right) or the back. */
+interface Look { view: 'front' | 'side' | 'back'; flip: boolean }
+
+function lookFor(owner: Player, v: View): Look {
+  // Red stands at the left (landscape) or bottom (portrait) of the flat map and faces the other way.
+  const f: Pt = v.portrait ? (owner === 'red' ? [0, -1] : [0, 1]) : owner === 'red' ? [1, 0] : [-1, 0];
+  const [cos, sin] = [Math.cos(v.cam.yaw), Math.sin(v.cam.yaw)];
+  const rx = f[0] * cos - f[1] * sin;
+  const ry = f[0] * sin + f[1] * cos; // positive = towards the viewer
+  if (Math.abs(ry) >= Math.abs(rx)) return { view: ry > 0 ? 'front' : 'back', flip: false };
+  return { view: 'side', flip: rx > 0 };
+}
+
+/** Pixels of figure art per map unit at size 1: a foot figure (about 190 px) stands about 49 units tall. */
+const ART_SCALE = 0.26;
+const SPRITE_URL = (fac: string, type: string, view: string) => `${import.meta.env.BASE_URL}pieces/${fac}/${type}-${view}.webp`;
+
+/** The carved figure for this piece in 2.5D, if its army has one. */
+function figure(type: UnitTypeId, owner: Player, hp: number, k: number, look: Look): string | null {
+  const fac = sides[owner];
+  const size = SPRITES[fac]?.[type]?.[look.view];
+  if (!size) return null;
+  const [w, h] = [size[0] * ART_SCALE * k, size[1] * ART_SCALE * k];
+  const full = maxHp(type);
+  const bar = hp > 0 && hp < full ? `<g transform="translate(0 ${(7 * k).toFixed(1)}) scale(${(0.7 * k).toFixed(3)}) translate(0 -16)">${healthBar(hp, full)}</g>` : '';
+  const flip = look.view === 'side' && look.flip ? ' transform="scale(-1 1)"' : '';
+  return `<ellipse cx="0" cy="${k.toFixed(1)}" rx="${(16 * k).toFixed(1)}" ry="${(5 * k).toFixed(1)}" fill="#000" opacity=".3"/>
+    <ellipse cx="0" cy="${k.toFixed(1)}" rx="${(17 * k).toFixed(1)}" ry="${(5.6 * k).toFixed(1)}" fill="none" stroke="${armyColor(owner)}" stroke-width="${(2 * k).toFixed(1)}" opacity=".9"/>
+    <image href="${SPRITE_URL(fac, type, look.view)}" x="${(-w / 2).toFixed(1)}" y="${(-h + 4 * k).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"${flip}/>${bar}`;
+}
+
+let preloaded = '';
+/** Starts loading both armies' figures, once per pair of armies, so pieces don't pop in. */
+export function preloadFigures() {
+  const key = `${sides.red}/${sides.blue}`;
+  if (key === preloaded || typeof Image === 'undefined') return;
+  preloaded = key;
+  for (const fac of [sides.red, sides.blue]) {
+    for (const type of Object.keys(SPRITES[fac] ?? {})) {
+      for (const view of ['front', 'side', 'back']) new Image().src = SPRITE_URL(fac, type, view);
+    }
+  }
+}
+
+/** A piece: flat it lies on the hex; in 2.5D it is its carved figure standing on the hex (or, for a
+ *  piece without one, the counter itself standing upright, with a thin edge underneath and a shadow). */
+function piece(type: UnitTypeId, owner: Player, hp: number, L: Lens, [sx, sy]: Pt, k: number, cls = '', look?: Look): string {
+  const fig = L.tilt && look ? figure(type, owner, hp, k, look) : null;
+  if (fig) return `<g transform="translate(${sx} ${sy})"><g class="${cls}">${fig}</g></g>`;
   const counter = unitSymbol(type, owner, hp);
   if (!L.tilt) return `<g transform="translate(${sx} ${sy}) scale(${k.toFixed(3)})"><g class="${cls}">${counter}</g></g>`;
   return `<g transform="translate(${sx} ${sy})"><g class="${cls}">
@@ -262,10 +312,12 @@ function piece(type: UnitTypeId, owner: Player, hp: number, L: Lens, [sx, sy]: P
 }
 
 /** Height of a piece's middle above its hex, for badges, numbers and arrows. */
-const lift = (L: Lens, k: number) => (L.tilt ? 16 * k : 3 * k);
+const lift = (L: Lens, k: number) => (L.tilt ? 20 * k : 3 * k);
 
 export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_EFFECTS): string {
   const L = lens(v);
+  if (v.tilt) preloadFigures();
+  const looks: Record<Player, Look> = { red: lookFor('red', v), blue: lookFor('blue', v) };
   const ground: string[] = [];
   const standing: Standing[] = [];
   const top: string[] = [];
@@ -353,7 +405,7 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
     const p = o.targets.get(u.id);
     if (p) ground.push(`<polygon points="${corners(u.pos, v, L, S - 3)}" fill="#e53935" fill-opacity=".2" stroke="#d32f2f" stroke-width="3" stroke-dasharray="6 4"/>`);
     const hit = fx.hits.find((h) => !h.killed && same(h.at, u.pos));
-    let svg = piece(u.type, u.owner, u.hp, L, at, k, o.spent.has(u.id) ? 'spent' : '');
+    let svg = piece(u.type, u.owner, u.hp, L, at, k, o.spent.has(u.id) ? 'spent' : '', looks[u.owner]);
     if (hit) svg = `<g class="hit" style="animation-delay:${impact(hit)}s">${svg}</g>`;
     // A melee attacker lunges at its target and comes back.
     const blow = fx.hits.find((h) => !h.shotFrom && !h.advanced && same(h.from, u.pos) && u.owner !== h.owner);
@@ -409,7 +461,7 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
     top.push(`<g transform="translate(${hx.toFixed(1)} ${ty.toFixed(1)})"><path class="spark" style="animation-delay:${d}s" d="${RAYS}"/></g>`);
     if (h.killed) {
       ground.push(`<g transform="translate(${hx.toFixed(1)} ${hy.toFixed(1)})"><ellipse class="dust" style="animation-delay:${d + 0.25}s" rx="${(16 * k).toFixed(1)}" ry="${((L.tilt ? 6 : 12) * k).toFixed(1)}"/></g>`);
-      standing.push({ depth: L.depth(x, y), svg: `<g class="ghost" style="animation-delay:${d}s">${piece(h.type, h.owner, 0, L, [hx, hy], k)}</g>` });
+      standing.push({ depth: L.depth(x, y), svg: `<g class="ghost" style="animation-delay:${d}s">${piece(h.type, h.owner, 0, L, [hx, hy], k, '', looks[h.owner])}</g>` });
     }
     top.push(`<text class="float" style="animation-delay:${d}s" x="${hx}" y="${ty - 8}">${h.killed ? '✕' : `−${h.damage}`}</text>`);
   }

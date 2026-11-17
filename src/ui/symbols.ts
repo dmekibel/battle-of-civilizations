@@ -96,7 +96,7 @@ function picture(type: UnitTypeId, ink: string): string {
   }
 }
 
-function healthBar(hp: number, full: number): string {
+export function healthBar(hp: number, full: number): string {
   const gap = 1.5;
   const w = (W - 4 - gap * (full - 1)) / full;
   let out = `<rect x="${-W / 2}" y="${H / 2 + 2}" width="${W}" height="5" rx="2.5" fill="#000000aa"/>`;

@@ -959,7 +959,8 @@ function draw() {
       : '';
 
   if (s.phase !== 'over') overHidden = false;
-  const over = s.phase === 'over' && s.winner && !overHidden ? victory(s, s.winner) : '';
+  // The result stays put while a new battle is being set up on top of the finished one.
+  const over = s.phase === 'over' && s.winner && !overHidden && !choosing && !setupOpen ? victory(s, s.winner) : '';
 
   app.innerHTML = `
     <div class="screen ${portrait ? 'portrait' : 'landscape'} ${withPanel() ? 'desktop' : desktop ? 'full' : ''} ${s.current} ${upsideDown() ? 'flipped' : ''}">
