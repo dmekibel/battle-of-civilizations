@@ -1788,3 +1788,23 @@ if (import.meta.env.DEV) {
     scheduleAi,
   };
 }
+
+/** When the game comes back on screen (or every few minutes), check whether a newer version has been put online:
+ *  the page's script has a new name after every update, so a different name means reload to get it. A game in
+ *  progress is saved, so the reload loses nothing. */
+async function checkForUpdate() {
+  if (import.meta.env.DEV) return;
+  try {
+    const html = await (await fetch('./', { cache: 'no-store' })).text();
+    const live = html.match(/assets\/index-[\w-]+\.js/)?.[0];
+    const mine = [...document.scripts].map((x) => x.src).find((src) => /assets\/index-[\w-]+\.js/.test(src));
+    if (live && mine && !mine.includes(live)) location.reload();
+  } catch {
+    /* offline: keep playing this version */
+  }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') void checkForUpdate();
+});
+setInterval(() => void checkForUpdate(), 5 * 60 * 1000);
+
