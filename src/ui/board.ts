@@ -543,7 +543,7 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
   const u = `b${++BOARD_SEQ}`;
   const light = `<defs>
       <radialGradient id="${u}sun" gradientUnits="userSpaceOnUse" cx="${sunX.toFixed(0)}" cy="${sunY.toFixed(0)}" r="${reach.toFixed(0)}">
-        <stop offset="0" stop-color="#ffd27a" stop-opacity=".30"/><stop offset=".45" stop-color="#ffd27a" stop-opacity=".06"/>
+        <stop offset="0" stop-color="#e8a948" stop-opacity=".13"/><stop offset=".45" stop-color="#e8a948" stop-opacity=".03"/>
         <stop offset=".75" stop-color="#1e2c4a" stop-opacity=".10"/><stop offset="1" stop-color="#14203a" stop-opacity=".30"/>
       </radialGradient>
       <linearGradient id="${u}haze" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#dfe8f0" stop-opacity=".34"/><stop offset=".42" stop-color="#dfe8f0" stop-opacity="0"/></linearGradient>
@@ -552,7 +552,7 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
     </defs>
     <rect class="light" width="${W}" height="${H}" fill="url(#${u}sun)" clip-path="url(#${u}clip)"/>
     <g clip-path="url(#${u}clip)"><g class="clouds" fill="url(#${u}cloud)" style="animation-delay:-${((performance.now() / 1000) % 180).toFixed(2)}s"><ellipse cx="${(+W * 0.2).toFixed(0)}" cy="${(+H * 0.35).toFixed(0)}" rx="${(+W * 0.16).toFixed(0)}" ry="${(+H * 0.09).toFixed(0)}"/><ellipse cx="${(+W * 0.75).toFixed(0)}" cy="${(+H * 0.7).toFixed(0)}" rx="${(+W * 0.2).toFixed(0)}" ry="${(+H * 0.1).toFixed(0)}"/></g></g>`;
-  const haze = L.tilt ? `<rect class="light" width="${W}" height="${H}" fill="url(#${u}haze)" clip-path="url(#${u}clip)"/>` : '';
+  const haze = ''; // a pale haze read as glare on the board, so it's off
   const body = ground.join('') + light + standing.map((x) => x.svg).join('') + haze + top.join('');
   return `<svg class="board ${L.tilt ? 'tilted' : ''}" viewBox="0 0 ${L.width.toFixed(0)} ${L.height.toFixed(0)}" role="img">${body}</svg>`;
 }
