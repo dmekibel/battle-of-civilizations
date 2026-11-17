@@ -49,7 +49,7 @@ import {
   type Result,
   type Session,
 } from '../engine';
-import { ARROW_S, GROUND_SIZE, GROUND_URL, NO_EFFECTS, STEP_MS, groundTransform, hasGround, groundParts, DETAIL_BOX, DETAIL_URL, hexOnMap, loadGround, mapSize, renderBoard, screenToGround, viewCube, type Camera, type Effects, type Overlay } from './board';
+import { ARROW_S, groundSize, groundUrl, NO_EFFECTS, STEP_MS, groundTransform, hasGround, groundParts, detailBox, DETAIL_URL, hexOnMap, loadGround, mapSize, renderBoard, screenToGround, viewCube, type Camera, type Effects, type Overlay } from './board';
 import { errorText, logText, playerName, reasonText, t, unitName, type Key, type Lang } from './i18n';
 import { unitIcon } from './symbols';
 import { ERAS, ERA_OF, FACTIONS, FACTION_ORDER, factionOf, rosterOf, sides, type FactionId } from './factions';
@@ -102,7 +102,8 @@ function loadGame(): Saved | null {
     if (!raw) return null;
     const saved = JSON.parse(raw) as Saved;
     const ok = saved?.state?.phase && Array.isArray(saved.state.units) && saved.state.reserve && 'advance' in saved.state;
-    const sameBoard = saved.board?.[0] === CONFIG.board.cols && saved.board?.[1] === CONFIG.board.rows;
+    const want = saved.settings?.size === 'large' ? [33, 19] : [25, 15];
+    const sameBoard = saved.board?.[0] === want[0] && saved.board?.[1] === want[1];
     return ok && sameBoard ? saved : null;
   } catch {
     return null;
@@ -833,6 +834,8 @@ function setupScreen(): string {
       ${seg('budget', [['20', `20 <small>${t(lang, 'skirmish')}</small>`], ['30', '30'], ['50', '50'], ['80', `80 <small>${t(lang, 'epic')}</small>`]], String(settings.budget))}
 
       <h3>${t(lang, 'pointsEachTurn')}</h3>
+      <h3>${t(lang, 'boardSize')}</h3>
+      ${seg('size', [['standard', t(lang, 'sizeStandard')], ['large', t(lang, 'sizeLarge')]], settings.size ?? 'standard')}
       ${seg('dice', [['1d6', t(lang, 'dice1')], ['2d6', t(lang, 'dice2')], ['3d6', t(lang, 'dice3')], ['fixed', `${t(lang, 'always')} ${fixedPoints(settings)}`]], settings.dice)}
 
       <h3>${t(lang, 'rules')}</h3>
@@ -1065,13 +1068,16 @@ function placeGround() {
   if (!wrap) return;
   if (!groundEl) {
     groundEl = new Image();
-    groundEl.src = GROUND_URL;
+    groundEl.src = groundUrl();
     groundEl.className = 'ground';
     groundEl.alt = '';
     groundEl.draggable = false;
-    groundEl.width = GROUND_SIZE[0];
-    groundEl.height = GROUND_SIZE[1];
   }
+  // The board size can change between battles; the ground picture follows it.
+  const [gw, gh] = groundSize();
+  if (!groundEl.src.endsWith(groundUrl().replace(/^\//, ''))) groundEl.src = groundUrl();
+  if (groundEl.width !== gw) groundEl.width = gw;
+  if (groundEl.height !== gh) groundEl.height = gh;
   let clip = wrap.querySelector<HTMLElement>('.ground-clip');
   if (!clip) {
     clip = document.createElement('div');
@@ -1090,7 +1096,10 @@ function placeGround() {
     detail.style.backgroundImage = `url(${DETAIL_URL})`;
     groundEl.after(detail);
   }
-  detail.style.transform = `${T} translate(${DETAIL_BOX[0]}px, ${DETAIL_BOX[1]}px)`;
+  const db = detailBox();
+  detail.style.width = `${db[2]}px`;
+  detail.style.height = `${db[3]}px`;
+  detail.style.transform = `${T} translate(${db[0]}px, ${db[1]}px)`;
   detail.style.opacity = String(Math.max(0, Math.min(0.8, (cam.zoom - 2) / 3.5)).toFixed(2));
   // The river, bridges and fords of this map, laid over the ground with the same projection.
   const parts = groundParts(CONFIG.board);
@@ -1684,6 +1693,7 @@ app.addEventListener('click', (e) => {
       const value = btn!.getAttribute('data-value')!;
       if (field === 'budget') settings = { ...settings, budget: Number(value) };
       if (field === 'map') settings = { ...settings, map: value as MapId };
+      if (field === 'size') settings = { ...settings, size: value === 'large' ? 'large' : 'standard' };
       if (field === 'dice') settings = { ...settings, dice: value as DiceId };
       return render();
     }

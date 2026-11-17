@@ -13,8 +13,21 @@ import { armyColor, healthBar, unitSymbol } from './symbols';
 
 const S = 34; // hex radius in SVG units
 const R3 = Math.sqrt(3);
-const W = S * 1.5 * (CONFIG.board.cols - 1) + 2 * S;
-const H = R3 * S * (CONFIG.board.rows + 0.5);
+/** The flat map's size in units; follows the board size (standard 25 x 15, large 33 x 19). */
+let W = 0;
+let H = 0;
+let sizedFor = '';
+function syncSize() {
+  const k = `${CONFIG.board.cols}x${CONFIG.board.rows}`;
+  if (k === sizedFor) return;
+  sizedFor = k;
+  W = S * 1.5 * (CONFIG.board.cols - 1) + 2 * S;
+  H = R3 * S * (CONFIG.board.rows + 0.5);
+}
+syncSize();
+/** The bigger board has its own paintings (*-large.webp). */
+const LARGE = () => CONFIG.board.cols > 25;
+const SUF = () => (LARGE() ? '-large' : '');
 
 /** A real perspective camera over the board, like a 3D program. It looks at a point on the
  *  ground (`x`, `y` in flat map units, null = the board's middle), orbits that point (`yaw`,
@@ -60,12 +73,13 @@ interface Lens {
 }
 
 /** Flat map size for this orientation (portrait turns the map 90°). */
-export const mapSize = (portrait: boolean): Pt => (portrait ? [H, W] : [W, H]);
+export const mapSize = (portrait: boolean): Pt => (syncSize(), portrait ? [H, W] : [W, H]);
 
 /** Camera tilt: 0° looks straight down, up to 76° looks almost across the table. */
 const tiltAngle = (v: View) => (v.tilt ? (76 * v.cam.pitch * Math.PI) / 180 : 0);
 
 function lens(v: View): Lens {
+  syncSize();
   const [fw, fh] = mapSize(v.portrait);
   const radius = Math.hypot(fw, fh) / 2;
   const tx = v.cam.x ?? fw / 2;
@@ -118,10 +132,10 @@ function lens(v: View): Lens {
 // One picture of the whole board (grass, river, bridges, forest shade, the table around it), made by _art/map_build.py.
 // It covers the flat map plus GROUND_M units all round and is laid under the hexes with the camera's own projection.
 const GROUND_M = 70;
-export const GROUND_URL = `${import.meta.env.BASE_URL}map/ground.webp?v=11`;
+export const groundUrl = () => `${import.meta.env.BASE_URL}map/ground${SUF()}.webp?v=11`;
 /** Close-up grass (grass-detail.webp, one seamless tile): where the field lies in the ground picture, in map units. */
 export const DETAIL_URL = `${import.meta.env.BASE_URL}map/grass-detail.webp?v=1`;
-export const DETAIL_BOX = [58, 58, 1316, 937];
+export const detailBox = (): number[] => (syncSize(), [GROUND_M - 12, GROUND_M - 12, W + 24, H + 24]);
 /** The river, each bridge and each ford are their own pictures laid over the ground, so every map places its own.
  *  Positions and sizes are in the ground picture's own units (map units, origin at the picture's top left). */
 export interface GroundPart { key: string; src: string; x: number; y: number; w: number; h: number }
@@ -129,11 +143,13 @@ const PART = (name: string) => `${import.meta.env.BASE_URL}map/${name}.webp?v=1`
 export function groundParts(b: GameConfig['board']): GroundPart[] {
   const out: GroundPart[] = [];
   // Hills, swamps and lakes are painted per map as one see-through picture the size of the ground.
-  if (b.overlay) out.push({ key: `over-${b.overlay}`, src: PART(`over-${b.overlay}`), x: 0, y: 0, w: GROUND_SIZE[0], h: GROUND_SIZE[1] });
+  syncSize();
+  const [gw, gh] = groundSize();
+  if (b.overlay) out.push({ key: `over-${b.overlay}${SUF()}`, src: PART(`over-${b.overlay}${SUF()}`), x: 0, y: 0, w: gw, h: gh });
   const rivers = [...(b.riverCol === null ? [] : [{ col: b.riverCol, bridges: b.bridgeRows, fords: b.fordRows ?? [] }]), ...(b.rivers ?? [])];
   for (const rv of rivers) {
     // The river picture was painted for column 12; other columns slide it sideways.
-    out.push({ key: `river${rv.col}`, src: PART('river'), x: 669.5 + (rv.col - 12) * 1.5 * S, y: 0, w: 94, h: 1053 });
+    out.push({ key: `river${rv.col}${SUF()}`, src: PART(`river${SUF()}`), x: S * 1.5 * rv.col + S + GROUND_M - 47, y: 0, w: 94, h: gh });
     const at = (row: number, w: number, h: number): [number, number] => [S * 1.5 * rv.col + S + GROUND_M - w / 2, R3 * S * (row + 0.5 * (rv.col & 1)) + (R3 / 2) * S + GROUND_M - h / 2];
     for (const r of rv.fords) {
       const [x, y] = at(r, 94, 56);
@@ -147,7 +163,7 @@ export function groundParts(b: GameConfig['board']): GroundPart[] {
   return out;
 }
 /** The picture's size in map units (its CSS size before the camera's transform). */
-export const GROUND_SIZE: Pt = [W + 2 * GROUND_M, H + 2 * GROUND_M];
+export const groundSize = (): Pt => (syncSize(), [W + 2 * GROUND_M, H + 2 * GROUND_M]);
 /** Carved trees, each drawn from 8 directions (tree-<kind>-<direction>.webp); picture size in pixels, trunk foot at bottom centre. */
 const TREE_KINDS: [string, Pt][] = [['pine', [150, 301]], ['spruce', [126, 285]], ['oak', [198, 251]]];
 const DIRS8 = ['front', 'front-left', 'left', 'back-left', 'back', 'back-right', 'right', 'front-right'];
@@ -197,7 +213,7 @@ let groundReady = false;
 /** Starts loading the painted ground and trees; `done` runs once they can be drawn. Until then the plain board shows. */
 export function loadGround(done: () => void) {
   if (typeof Image === 'undefined') return;
-  const all = [GROUND_URL, PART('river'), PART('bridge'), PART('ford'), ...TREE_KINDS.flatMap(([k]) => DIRS8.map((d) => TREE_URL(k, d))), ...PROPS.map((_, i) => PROP_URL(i))].map((src) => {
+  const all = [groundUrl(), PART('river'), PART('bridge'), PART('ford'), ...TREE_KINDS.flatMap(([k]) => DIRS8.map((d) => TREE_URL(k, d))), ...PROPS.map((_, i) => PROP_URL(i))].map((src) => {
     const im = new Image();
     im.src = src;
     KEEP.push(im);
@@ -211,6 +227,7 @@ export const hasGround = () => groundReady;
 export function groundTransform(v: View): string {
   const m = lens(v).h;
   // Picture point -> flat map point: shift by the margin; portrait turns the map a quarter turn.
+  syncSize();
   const P = v.portrait ? [0, 1, -GROUND_M, -1, 0, W + GROUND_M, 0, 0, 1] : [1, 0, -GROUND_M, 0, 1, -GROUND_M, 0, 0, 1];
   const a = [0, 1, 2].flatMap((r) => [0, 1, 2].map((c) => m[r * 3] * P[c] + m[r * 3 + 1] * P[3 + c] + m[r * 3 + 2] * P[6 + c]));
   const n = a.map((x) => x / a[8]);
@@ -228,6 +245,7 @@ export const hexOnMap = (h: Hex, v: Pick<View, 'portrait'>): Pt => flat(h, v as 
 
 /** Centre of a hex on the flat map. Portrait turns the map so Red's edge is at the bottom. */
 function flat(h: Hex, v: View): Pt {
+  syncSize();
   const x = S * 1.5 * h.col + S;
   const y = R3 * S * (h.row + 0.5 * (h.col & 1)) + (R3 / 2) * S;
   return v.portrait ? [y, W - x] : [x, y];

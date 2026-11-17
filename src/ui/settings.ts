@@ -13,6 +13,8 @@ export type DiceId = '1d6' | '3d6' | '2d6' | 'fixed';
 export interface Settings {
   budget: number;
   map: MapId;
+  /** Standard 25 x 15 hexes, or a larger 33 x 19 board for big battles. */
+  size?: 'standard' | 'large';
   dice: DiceId;
   options: GameConfig['options'];
   /** The faction each side leads (Novgorod side moves first). */
@@ -128,10 +130,34 @@ export function boardFor(map: MapId): GameConfig['board'] {
   return structuredClone(ORIGINAL);
 }
 
+/** The large board (33 x 19): every hex takes the terrain of the nearest standard-board hex, rivers move to their
+ *  matching column and bridges and fords to their matching row. _art/map_build.py paints it with the same rule. */
+const LARGE: [number, number] = [33, 19];
+export function enlargeBoard(b: GameConfig['board']): GameConfig['board'] {
+  const [C, R] = LARGE;
+  const back = (c: number, r: number) => `${Math.floor((c * (b.cols - 1)) / (C - 1) + 0.5)},${Math.floor((r * (b.rows - 1)) / (R - 1) + 0.5)}`;
+  const area = (cells?: [number, number][]) => {
+    if (!cells) return undefined;
+    const want = new Set(cells.map(([c, r]) => `${c},${r}`));
+    const out: [number, number][] = [];
+    for (let c = 0; c < C; c++) for (let r = 0; r < R; r++) if (want.has(back(c, r))) out.push([c, r]);
+    return out;
+  };
+  const col = (c: number) => Math.round((c * (C - 1)) / (b.cols - 1));
+  const row = (r: number) => Math.round((r * (R - 1)) / (b.rows - 1));
+  const rivers = [...(b.riverCol === null ? [] : [{ col: b.riverCol, bridges: b.bridgeRows, fords: b.fordRows ?? [] }]), ...(b.rivers ?? [])].map((rv) => ({ col: col(rv.col), bridges: rv.bridges.map(row), fords: rv.fords.map(row) }));
+  // Forest keeps its clumps: each standard forest hex becomes the large hexes nearest it (rivers win over trees).
+  const riverCols = new Set(rivers.map((rv) => rv.col));
+  const forests = (area(b.forests) ?? []).filter(([c]) => !riverCols.has(c));
+  return { ...b, cols: C, rows: R, riverCol: null, bridgeRows: [], fordRows: [], rivers, forests, hills: area(b.hills), swamps: area(b.swamps), lakes: area(b.lakes) };
+}
+
 /** Puts the settings into the game's rules. Call before starting or loading a battle. */
 export function applySettings(s: Settings) {
   CONFIG.army.budget = s.budget;
-  CONFIG.board = boardFor(s.map);
+  CONFIG.board = s.size === 'large' ? enlargeBoard(boardFor(s.map)) : boardFor(s.map);
+  // A bigger board leaves more room to set up.
+  CONFIG.deploy.depth = s.size === 'large' ? 7 : 5;
   CONFIG.dice =
     s.dice === 'fixed' ? { count: 0, sides: 6, fixed: fixedPoints(s) }
     : s.dice === '1d6' ? { count: 1, sides: 6, fixed: null }

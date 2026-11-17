@@ -392,7 +392,7 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 
 /* Map tiles with a small picture of each map. */
 .mtiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.gdetail { position: absolute; left: 0; top: 0; width: 1316px; height: 937px; border-radius: 12px; background-size: 150px auto; transform-origin: 0 0; will-change: transform, opacity; pointer-events: none; }
+.gdetail { position: absolute; left: 0; top: 0; border-radius: 12px; background-size: 150px auto; transform-origin: 0 0; will-change: transform, opacity; pointer-events: none; }
 .gpart { position: absolute; left: 0; top: 0; max-width: none; transform-origin: 0 0; will-change: transform; user-select: none; -webkit-user-select: none; }
 .era { margin: 12px 0 0; font: 700 11px/1 'PT Sans', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 .era + .ftiles { margin-top: 6px; }
