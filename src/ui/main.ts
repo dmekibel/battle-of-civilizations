@@ -48,7 +48,7 @@ import {
   type Result,
   type Session,
 } from '../engine';
-import { ARROW_S, GROUND_SIZE, GROUND_URL, NO_EFFECTS, STEP_MS, groundTransform, hasGround, hexOnMap, loadGround, mapSize, renderBoard, screenToGround, groundToScreen, viewCube, type Camera, type Effects, type Overlay } from './board';
+import { ARROW_S, GROUND_SIZE, GROUND_URL, NO_EFFECTS, STEP_MS, groundTransform, hasGround, hexOnMap, loadGround, mapSize, renderBoard, screenToGround, viewCube, type Camera, type Effects, type Overlay } from './board';
 import { errorText, logText, playerName, reasonText, t, unitName, type Key, type Lang } from './i18n';
 import { unitIcon } from './symbols';
 import { FACTIONS, FACTION_ORDER, factionOf, rosterOf, sides, type FactionId } from './factions';
@@ -1276,6 +1276,7 @@ function aiSetup() {
 /** On the computer's turn, take one step every so often so the player can follow it. */
 function scheduleAi() {
   const s = sess.state;
+  if (camHome && !aiTurn(s) && !rolling) comeHome();
   if (aiTimer !== null || rolling || cover || choosing || !aiTurn(s)) return;
   // Each computer attack gets its own beat: the target is marked first, then the hit lands,
   // so a volley never looks like one click doing several attacks at once.
@@ -1283,12 +1284,8 @@ function scheduleAi() {
   const strike = next && (next.kind === 'attack' || next.kind === 'shoot');
   // Let the last blow finish playing before the board is drawn again, or its arrow would be wiped mid-flight.
   let wait = Math.max(0, fxUntil - Date.now());
-  // Bring what the computer is about to do into view first.
-  if (next && 'unitId' in next && !drag && !touch) {
-    const u = getUnit(s, next.unitId);
-    const other2 = next.kind === 'move' ? next.to : getUnit(s, next.targetId)?.pos;
-    if (u && other2) wait += showHexes([u.pos, other2], wait);
-  }
+  // The computer's turn is watched from further back, so the whole board shows; nothing moves until the camera has settled.
+  wait += watchWholeBoard();
   const mark = () => {
     if (!next || !strike || !aiTurn(sess.state)) return;
     aiAim = next.targetId;
@@ -1312,34 +1309,52 @@ function scheduleAi() {
   if (strike) wait ? setTimeout(mark, wait) : mark();
 }
 
-/** If any of these hexes is off the screen (or under its edge), glide the camera to them. Returns how long the glide takes, in ms. */
-function showHexes(hexes: Hex[], after = 0): number {
-  const v = view();
-  const pts = hexes.map((h) => hexOnMap(h, { portrait }));
-  const pad = Math.min(90, stageSize[0] * 0.14);
-  const seen = pts.every(([x, y]) => {
-    const [X, Y] = groundToScreen(v, x, y);
-    return X > pad && X < stageSize[0] - pad && Y > pad + 30 && Y < stageSize[1] - pad;
-  });
-  if (seen) return 0;
+/** The player's own view while the camera is pulled back to watch the computer's turn; it glides home afterwards. */
+let camHome: Camera | null = null;
+let glideId = 0;
+/** Glides the camera smoothly to a spot and zoom. A touch or drag from the player takes over at once. */
+function glideTo(to: { x: number; y: number; zoom: number }, ms: number) {
   const [fw, fh] = mapSize(portrait);
-  const from: [number, number] = [cam.x ?? fw / 2, cam.y ?? fh / 2];
-  const to: [number, number] = [pts.reduce((a, p) => a + p[0], 0) / pts.length, pts.reduce((a, p) => a + p[1], 0) / pts.length];
-  const ms = 450;
+  const from = { x: cam.x ?? fw / 2, y: cam.y ?? fh / 2, zoom: cam.zoom };
+  const id = ++glideId;
+  const t0 = performance.now();
+  const step = () => {
+    if (id !== glideId) return;
+    if (drag || touch) return camDone();
+    const t = Math.min(1, (performance.now() - t0) / ms);
+    const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; // slow start, slow stop
+    // Zoom glides evenly in "how many times bigger", so it doesn't rush at one end.
+    cam = { ...cam, x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e, zoom: from.zoom * Math.pow(to.zoom / from.zoom, e) };
+    if (t < 1) {
+      camFrame();
+      requestAnimationFrame(step);
+    } else camDone();
+  };
+  requestAnimationFrame(step);
+}
+/** When the computer's turn starts, pull back to show the whole board; returns how long that takes (ms). */
+function watchWholeBoard(): number {
+  if (camHome) return 0;
+  const [fw, fh] = mapSize(portrait);
+  camHome = { ...cam };
+  const [x, y] = [cam.x ?? fw / 2, cam.y ?? fh / 2];
+  if (cam.zoom <= 1.05 && Math.hypot(x - fw / 2, y - fh / 2) < 30) return 0;
+  const ms = 1100;
+  glideTo({ x: fw / 2, y: fh / 2, zoom: Math.min(cam.zoom, 1) }, ms);
+  return ms + 150;
+}
+/** Back to where the player was looking, once the computer's last blow has finished playing. */
+function comeHome() {
+  const home = camHome;
+  if (!home) return;
+  camHome = null;
+  const [fw, fh] = mapSize(portrait);
+  const to = { x: home.x ?? fw / 2, y: home.y ?? fh / 2, zoom: home.zoom };
+  if (Math.abs(to.zoom - cam.zoom) < 0.02 && Math.hypot(to.x - (cam.x ?? fw / 2), to.y - (cam.y ?? fh / 2)) < 10) return;
+  const id = ++glideId;
   setTimeout(() => {
-    const t0 = performance.now();
-    const step = () => {
-      const t = Math.min(1, (performance.now() - t0) / ms);
-      const e = t * t * (3 - 2 * t);
-      cam = { ...cam, x: from[0] + (to[0] - from[0]) * e, y: from[1] + (to[1] - from[1]) * e };
-      if (t < 1) {
-        camFrame();
-        requestAnimationFrame(step);
-      } else camDone();
-    };
-    step();
-  }, after);
-  return ms + 80;
+    if (id === glideId && !drag && !touch) glideTo(to, 900);
+  }, Math.max(0, fxUntil - Date.now()) + 500);
 }
 
 /** How long the last move's walk takes to play, in ms (the computer waits for it). */
