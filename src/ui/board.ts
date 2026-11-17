@@ -116,16 +116,24 @@ function lens(v: View): Lens {
 // One picture of the whole board (grass, river, bridges, forest shade, the table around it), made by _art/map_build.py.
 // It covers the flat map plus GROUND_M units all round and is laid under the hexes with the camera's own projection.
 const GROUND_M = 70;
-export const GROUND_URL = `${import.meta.env.BASE_URL}map/ground.webp?v=3`;
+export const GROUND_URL = `${import.meta.env.BASE_URL}map/ground.webp?v=4`;
 /** The picture's size in map units (its CSS size before the camera's transform). */
 export const GROUND_SIZE: Pt = [W + 2 * GROUND_M, H + 2 * GROUND_M];
-const TREES: Pt[] = [[120, 297], [120, 226], [132, 235], [74, 243], [98, 149], [95, 185]];
-const TREE_URL = (i: number) => `${import.meta.env.BASE_URL}map/tree-${i + 1}.webp?v=1`;
+/** Carved trees, each drawn from 8 directions (tree-<kind>-<direction>.webp); picture size in pixels, trunk foot at bottom centre. */
+const TREE_KINDS: [string, Pt][] = [['pine', [202, 307]], ['spruce', [198, 292]], ['oak', [198, 251]]];
+const DIRS8 = ['front', 'front-left', 'left', 'back-left', 'back', 'back-right', 'right', 'front-right'];
+const TREE_URL = (kind: string, dir: string) => `${import.meta.env.BASE_URL}map/tree-${kind}-${dir}.webp?v=2`;
+/** Small standing scenery (prop-N.webp): picture size in pixels and how tall it stands in map units.
+ *  Grass tufts and flowers reach a soldier's knee; the bush his waist. */
+const PROPS: [Pt, number][] = [[[100, 135], 9], [[160, 117], 8], [[116, 128], 9], [[123, 127], 9], [[134, 115], 17], [[148, 99], 11], [[144, 70], 6], [[135, 150], 6]];
+/** Which prop a hex gets: mostly grass, now and then flowers, a bush, stones or mushrooms. */
+const PROP_MIX = [0, 1, 0, 1, 0, 2, 1, 3, 0, 4, 1, 6, 0, 5, 2, 7];
+const PROP_URL = (i: number) => `${import.meta.env.BASE_URL}map/prop-${i + 1}.webp?v=1`;
 let groundReady = false;
 /** Starts loading the painted ground and trees; `done` runs once they can be drawn. Until then the plain board shows. */
 export function loadGround(done: () => void) {
   if (typeof Image === 'undefined') return;
-  const all = [GROUND_URL, ...TREES.map((_, i) => TREE_URL(i))].map((src) => {
+  const all = [GROUND_URL, ...TREE_KINDS.flatMap(([k]) => DIRS8.map((d) => TREE_URL(k, d))), ...PROPS.map((_, i) => PROP_URL(i))].map((src) => {
     const im = new Image();
     im.src = src;
     return im.decode ? im.decode() : new Promise<void>((ok, no) => ((im.onload = () => ok()), (im.onerror = no)));
@@ -210,6 +218,31 @@ function oak(tx: number, ty: number, k: number, tall: boolean): string {
   );
 }
 
+/** Which of the 8 sides of something standing on the map the camera sees: 0 when the map's +x points at the viewer, counting round in eighths. */
+function seenFrom(v: View, L: Lens): number {
+  const [fw, fh] = mapSize(v.portrait);
+  const [ax, ay] = L.pt(fw / 2, fh / 2);
+  const [bx, by] = L.pt(fw / 2 + 20, fh / 2);
+  const a = Math.atan2(bx - ax, (by - ay) / Math.max(0.2, Math.cos(tiltAngle(v))));
+  // Pointing down the screen = facing us (0); pointing down-left = 'front-left' (1), and so on round.
+  return ((-Math.round(a / (Math.PI / 4)) % 8) + 8) % 8;
+}
+
+/** Small standing scenery on open ground: a grass tuft, flowers, a stone. Fixed per hex, set off-centre so pieces don't hide it. */
+function scenery(h: Hex, v: View, L: Lens): Standing[] {
+  const seed = (h.col * 73 + h.row * 151 + ((h.col * h.row) % 7) * 31) % 97;
+  if (seed % 5 > 1) return [];
+  const [x, y] = flat(h, v);
+  const a = (seed * 2.399) % (Math.PI * 2);
+  const [px, py] = [x + Math.cos(a) * S * 0.62, y + Math.sin(a) * S * 0.62];
+  const pi = PROP_MIX[seed % PROP_MIX.length];
+  const [[pw, ph], tall] = PROPS[pi];
+  const k = L.size(px, py);
+  const [sx, sy] = L.pt(px, py);
+  const [w, hh] = [(pw / ph) * tall * k, tall * k];
+  return [{ depth: L.depth(px, py), svg: `<image href="${PROP_URL(pi)}" x="${(sx - w / 2).toFixed(1)}" y="${(sy - hh + 0.8 * k).toFixed(1)}" width="${w.toFixed(1)}" height="${hh.toFixed(1)}"/>` }];
+}
+
 function trees(h: Hex, v: View, L: Lens): Standing[] {
   const [x, y] = flat(h, v);
   // A small grove; which trees are pines or leafy is fixed per hex so the map doesn't flicker.
@@ -221,11 +254,14 @@ function trees(h: Hex, v: View, L: Lens): Standing[] {
     const leafy = (h.col * 3 + h.row * 5 + i) % 3 === 0;
     const shadow = `<ellipse cx="${tx + 4 * k}" cy="${ty + 1}" rx="${10 * k}" ry="${3.5 * k}" fill="#000" opacity="${L.tilt ? 0.3 : 0.18}"/>`;
     if (groundReady) {
-      // A carved wooden tree, the same one every time for this spot.
-      const ti = (h.col * 7 + h.row * 11 + i * 5) % TREES.length;
+      // A carved wooden tree: the same kind, turned the same way, every time for this spot.
+      // It is drawn from the side the camera sees it from, so it turns as the camera orbits.
+      const seed = h.col * 7 + h.row * 11 + i * 5;
+      const [kind, size] = TREE_KINDS[seed % TREE_KINDS.length];
+      const dir = L.tilt ? DIRS8[(seenFrom(v, L) + (seed % 8)) % 8] : 'front';
       const f = (L.tilt ? 0.27 : 0.12) * k; // the tallest tree stands about one and a half soldiers high
-      const [w, hh] = [TREES[ti][0] * f, TREES[ti][1] * f];
-      return { depth: L.depth(x + dx, y + dy), svg: `${shadow}<image href="${TREE_URL(ti)}" x="${(tx - w / 2).toFixed(1)}" y="${(ty - hh + 2 * k).toFixed(1)}" width="${w.toFixed(1)}" height="${hh.toFixed(1)}"/>` };
+      const [w, hh] = [size[0] * f, size[1] * f];
+      return { depth: L.depth(x + dx, y + dy), svg: `${shadow}<image href="${TREE_URL(kind, dir)}" x="${(tx - w / 2).toFixed(1)}" y="${(ty - hh + 2 * k).toFixed(1)}" width="${w.toFixed(1)}" height="${hh.toFixed(1)}"/>` };
     }
     return { depth: L.depth(x + dx, y + dy), svg: shadow + (leafy ? oak(tx, ty, k, L.tilt) : pine(tx, ty, k, L.tilt)) };
   });
@@ -430,6 +466,7 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
       );
       if (t === 'river' && !groundReady) ground.push(riverRipple(hex, v, L));
       if (t === 'forest') standing.push(...trees(hex, v, L));
+      if (t === 'plain' && groundReady && L.tilt) standing.push(...scenery(hex, v, L));
       if (t === 'bridge' && !groundReady) standing.push(bridge(hex, v, L));
     }
   }
