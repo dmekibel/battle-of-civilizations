@@ -124,13 +124,13 @@ export const GROUND_SIZE: Pt = [W + 2 * GROUND_M, H + 2 * GROUND_M];
 /** Carved trees, each drawn from 8 directions (tree-<kind>-<direction>.webp); picture size in pixels, trunk foot at bottom centre. */
 const TREE_KINDS: [string, Pt][] = [['pine', [150, 301]], ['spruce', [126, 285]], ['oak', [198, 251]]];
 const DIRS8 = ['front', 'front-left', 'left', 'back-left', 'back', 'back-right', 'right', 'front-right'];
-const TREE_URL = (kind: string, dir: string) => `${import.meta.env.BASE_URL}map/tree-${kind}-${dir}.webp?v=3`;
+const TREE_URL = (kind: string, dir: string) => `${import.meta.env.BASE_URL}map/tree-${kind}-${dir}.webp?v=4`;
 /** Small standing scenery (prop-N.webp): picture size in pixels and how tall it stands in map units.
  *  Grass tufts and flowers reach a soldier's knee; the bush his waist. */
 const PROPS: [Pt, number][] = [[[100, 135], 9], [[160, 117], 8], [[116, 128], 9], [[123, 127], 9], [[134, 115], 17], [[148, 99], 11], [[144, 70], 6], [[135, 150], 6]];
 /** Which prop a hex gets: mostly grass, now and then flowers, a bush, stones or mushrooms. */
 const PROP_MIX = [0, 1, 0, 1, 0, 2, 1, 3, 0, 4, 1, 6, 0, 5, 2, 7];
-const PROP_URL = (i: number) => `${import.meta.env.BASE_URL}map/prop-${i + 1}.webp?v=1`;
+const PROP_URL = (i: number) => `${import.meta.env.BASE_URL}map/prop-${i + 1}.webp?v=2`;
 // ---------- pictures ----------
 // Every picture on the board (pieces, trees, scenery) is loaded once into a hidden sheet that stays in the page,
 // and the board only points at it. Turning a piece to another view is then instant: nothing is loaded, so nothing blinks.

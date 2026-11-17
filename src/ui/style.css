@@ -507,3 +507,6 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 /* faction tiles: the army's leader */
 .ftile .figpic { height: 72px; object-fit: contain; filter: drop-shadow(0 4px 4px rgba(0, 0, 0, .45)); }
 .vs-card .figpic { height: 110px; object-fit: contain; filter: drop-shadow(0 5px 6px rgba(0, 0, 0, .5)); }
+
+.vs-swap { width: 44px; height: 44px; padding: 0; border-radius: 50%; display: grid; place-items: center; color: var(--gold); background: var(--panel-2); border: 1px solid var(--line); flex: none; }
+.vs-swap:active { transform: rotate(180deg); transition: transform .2s; }

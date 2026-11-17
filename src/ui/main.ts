@@ -811,7 +811,7 @@ function setupScreen(): string {
     <div class="sheet-scroll">
       <div class="vs">
         ${side('red', mode === 'pvp' ? t(lang, 'sideFirst') : t(lang, 'sideYou'))}
-        <span class="vs-mid">${t(lang, 'vs')}</span>
+        ${mode === 'online' ? `<span class="vs-mid">${t(lang, 'vs')}</span>` : `<button data-act="swap-sides" class="vs-swap" title="${t(lang, 'swapSides')}" aria-label="${t(lang, 'swapSides')}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h15M15 4l4 4-4 4M20 16H5M9 12l-4 4 4 4"/></svg></button>`}
         ${mode === 'online' ? `<div class="vs-card" style="--fc:#6b6b6b"><span class="vs-who">${t(lang, 'sideOpponent')}</span><b style="font-size:34px;line-height:48px">?</b><b>${t(lang, 'theyPick')}</b></div>` : side('blue', mode === 'ai' ? t(lang, 'sideComputer') : t(lang, 'sideSecond'))}
       </div>
       <div class="ftiles">${tiles}</div>
@@ -1635,7 +1635,7 @@ app.addEventListener('click', (e) => {
     case 'mode':
       mode = (btn!.getAttribute('data-mode') ?? 'pvp') as Mode;
       if (net) leaveNet(); // picking a way to play always starts afresh; an online game gets a new link
-      if (mode === 'online') pickSide = 'red';
+      pickSide = 'red';
       choosing = false;
       setupOpen = true;
       settings = loadSettings();
@@ -1657,8 +1657,13 @@ app.addEventListener('click', (e) => {
       const sidesNext = { ...settings.sides, [side]: f };
       if (settings.sides[otherSide] === f) sidesNext[otherSide] = settings.sides[side];
       settings = { ...settings, sides: sidesNext };
+      // Yours is chosen: move straight on to the other side's army.
+      if (side === 'red' && mode !== 'online') pickSide = 'blue';
       return render();
     }
+    case 'swap-sides':
+      settings = { ...settings, sides: { red: settings.sides.blue, blue: settings.sides.red } };
+      return render();
     case 'pick-side':
       pickSide = mode === 'online' ? 'red' : (btn!.getAttribute('data-side') as Player);
       return render();
