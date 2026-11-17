@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CONFIG, sideConfig, type GameConfig } from '../src/config';
 import { autoDeploy, buildBoard, draftArmy, finishDeploy, newGame, playAiTurn, suggestArmy, type GameState, type Result } from '../src/engine';
 import { key, neighbors, type Hex } from '../src/engine/hex';
-import { deployDepth, generateMap, MAP_STYLES, type BoardSize } from '../src/engine/mapgen';
+import { cleanKnobs, deployDepth, generateMap, KNOB_IDS, KNOB_STEPS, MAP_STYLES, PRESET_KNOBS, type BoardSize, type MapKnobs } from '../src/engine/mapgen';
 import { applySettings, boardFor, DEFAULT_SETTINGS } from '../src/ui/settings';
 
 function seeded(seed: number) {
@@ -163,5 +163,126 @@ describe('random map generator', () => {
     expect(fresh.mapStyle).toBe('valley');
     CONFIG.board = saved;
     applySettings(DEFAULT_SETTINGS);
+  });
+
+  // ---------- Customize land (knobs) ----------
+  /** The checks every random map must pass: mirrored, open deploy zones that reach the enemy, nothing cut off,
+   *  rivers straight with spread crossings, lakes off the edges, hills never on water or in a deploy zone. */
+  function valid(b: GameConfig['board'], size: BoardSize) {
+    const cfg = cfgFor(b, size);
+    const board = buildBoard(cfg);
+    const depth = deployDepth(size);
+    for (let r = 0; r < b.rows; r++) for (let c = 0; c < b.cols; c++) expect(board[r][c]).toBe(board[r][b.cols - 1 - c]);
+    const reach = flood(board, cfg, { col: 0, row: 0 });
+    for (let r = 0; r < b.rows; r++)
+      for (let c = 0; c < b.cols; c++) {
+        if (cfg.terrain[board[r][c]].passable) expect(reach.has(`${c},${r}`)).toBe(true);
+        if (c >= depth && c < b.cols - depth) continue;
+        expect(board[r][c]).toBe('plain');
+      }
+    for (const rv of b.rivers ?? []) {
+      const rows = [...rv.bridges, ...rv.fords].sort((x, y) => x - y);
+      expect(rows.length).toBeGreaterThanOrEqual(2);
+      expect(rv.bridges.length).toBeGreaterThanOrEqual(1);
+      for (let r = 0; r < b.rows; r++) expect(['river', 'bridge', 'ford']).toContain(board[r][rv.col]);
+    }
+    for (const [c, r] of b.lakes ?? []) expect(r > 0 && r < b.rows - 1 && c >= depth).toBe(true);
+    for (const [c, r] of b.hills ?? []) {
+      expect(board[r][c]).toBe('hill');
+      expect(c >= depth && c < b.cols - depth).toBe(true);
+    }
+    expect(b.swamps ?? []).toHaveLength(0);
+    expect(b.overlay).toBeUndefined();
+  }
+
+  const MID: MapKnobs = { woods: 1, water: 1, rivers: 1, hills: 1, villages: 1, rocks: 0 };
+  for (const id of KNOB_IDS)
+    for (const step of [0, KNOB_STEPS[id] - 1])
+      it(`knob ${id} = ${step}: 30 seeds, at both sizes, all valid`, () => {
+        const knobs = { ...MID, [id]: step } as MapKnobs;
+        for (let seed = 1; seed <= 30; seed++)
+          for (const size of ['standard', 'large'] as const) valid(generateMap(seed * 7919, 'valley', size, knobs), size);
+      });
+
+  it('every knob at its extremes together still makes valid maps, quickly', () => {
+    const t0 = performance.now();
+    let n = 0;
+    for (const lo of [true, false])
+      for (let seed = 1; seed <= 30; seed++) {
+        const knobs = Object.fromEntries(KNOB_IDS.map((id) => [id, lo ? 0 : KNOB_STEPS[id] - 1])) as unknown as MapKnobs;
+        valid(generateMap(seed * 31, 'forest', 'standard', knobs), 'standard');
+        n++;
+      }
+    expect((performance.now() - t0) / n).toBeLessThan(60);
+  });
+
+  it('the knobs do what they say', () => {
+    const avg = (k: Partial<MapKnobs>, f: (b: GameConfig['board']) => number) => {
+      let sum = 0;
+      for (let seed = 1; seed <= 30; seed++) sum += f(generateMap(seed, 'valley', 'standard', { ...MID, ...k }));
+      return sum / 30;
+    };
+    const n = (l?: unknown[]) => l?.length ?? 0;
+    expect(avg({ woods: 3 }, (b) => n(b.forests))).toBeGreaterThan(avg({ woods: 0 }, (b) => n(b.forests)) * 3);
+    expect(avg({ water: 0 }, (b) => n(b.lakes))).toBe(0);
+    expect(avg({ water: 2 }, (b) => n(b.lakes))).toBeGreaterThan(avg({ water: 1 }, (b) => n(b.lakes)));
+    expect(avg({ rivers: 0 }, (b) => n(b.rivers))).toBe(0);
+    expect(avg({ rivers: 2 }, (b) => n(b.rivers))).toBe(2);
+    expect(avg({ hills: 0 }, (b) => n(b.hills))).toBe(0);
+    expect(avg({ hills: 2 }, (b) => n(b.hills))).toBeGreaterThan(avg({ hills: 1 }, (b) => n(b.hills)));
+    expect(avg({ villages: 0 }, (b) => n(b.houses))).toBe(0);
+    expect(avg({ villages: 2 }, (b) => n(b.houses))).toBeGreaterThan(avg({ villages: 1 }, (b) => n(b.houses)));
+    expect(avg({ rocks: 1 }, (b) => n(b.boulders))).toBeGreaterThan(avg({ rocks: 0 }, (b) => n(b.boulders)));
+  });
+
+  it('hills come as ridges and plateaus: no lone hill hexes', () => {
+    for (let seed = 1; seed <= 30; seed++) {
+      const b = generateMap(seed, 'valley', 'standard', { ...MID, hills: 2 });
+      const hills = new Set((b.hills ?? []).map(([c, r]) => `${c},${r}`));
+      for (const [c, r] of b.hills ?? []) expect(neighbors({ col: c, row: r }).some((h) => hills.has(key(h)))).toBe(true);
+    }
+  });
+
+  it('same seed and knobs, same map; presets without knobs stay exactly as before', () => {
+    const k: MapKnobs = { woods: 2, water: 2, rivers: 2, hills: 2, villages: 2, rocks: 1 };
+    expect(generateMap(99, 'valley', 'standard', k)).toEqual(generateMap(99, 'valley', 'standard', { ...k }));
+    expect(generateMap(99, 'valley', 'large', k)).toEqual(generateMap(99, 'valley', 'large', k));
+    expect(generateMap(99, 'valley', 'standard', k)).not.toEqual(generateMap(99, 'valley', 'standard', { ...k, hills: 0 }));
+    for (const style of MAP_STYLES) expect(generateMap(1234, style, 'standard', undefined)).toEqual(generateMap(1234, style));
+    // Knobs from a save or another phone are checked; bad ones mean the preset.
+    expect(cleanKnobs(PRESET_KNOBS.valley)).toEqual(PRESET_KNOBS.valley);
+    expect(cleanKnobs({ ...k, hills: 7 })).toBeUndefined();
+    expect(cleanKnobs('x')).toBeUndefined();
+  });
+
+  it('settings carry the knobs (saved and online games rebuild the same map); old saves without them still work', () => {
+    const g = globalThis as unknown as { document?: unknown };
+    g.document ??= { documentElement: { style: { setProperty() {} } } };
+    const saved = structuredClone(CONFIG.board);
+    const knobs: MapKnobs = { woods: 0, water: 1, rivers: 0, hills: 2, villages: 1, rocks: 1 };
+    const st = { ...structuredClone(DEFAULT_SETTINGS), map: 'random' as const, mapSeed: 777, mapStyle: 'plains' as const, mapKnobs: knobs };
+    applySettings(JSON.parse(JSON.stringify(st)));
+    expect(CONFIG.board).toEqual(generateMap(777, 'plains', 'standard', knobs));
+    const old = { ...structuredClone(DEFAULT_SETTINGS), map: 'random' as const, mapSeed: 777, mapStyle: 'plains' as const };
+    applySettings(old);
+    expect(CONFIG.board).toEqual(generateMap(777, 'plains'));
+    expect(old.mapKnobs).toBeUndefined();
+    CONFIG.board = saved;
+    applySettings(DEFAULT_SETTINGS);
+  });
+
+  it('two computer players finish a whole game on a hilly custom map', () => {
+    for (const size of ['standard', 'large'] as const) {
+      const cfg = cfgFor(generateMap(21, 'valley', size, { woods: 1, water: 1, rivers: 1, hills: 2, villages: 1, rocks: 0 }), size);
+      expect(cfg.board.hills!.length).toBeGreaterThan(10);
+      const rng = seeded(9);
+      let s = setUp(cfg, 9);
+      let turns = 0;
+      while (s.phase !== 'over' && turns < 600) {
+        s = playAiTurn(s, rng, cfg);
+        turns++;
+      }
+      expect(s.winner).not.toBeNull();
+    }
   });
 });

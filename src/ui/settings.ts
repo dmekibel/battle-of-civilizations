@@ -2,13 +2,13 @@
 // turn, and which optional rules are on. They are applied to the game's rules before a battle
 // starts and saved with it, so a reloaded game keeps its own settings.
 
-import { CONFIG, type GameConfig } from '../config';
-import type { Player } from '../engine';
+import { CONFIG, type GameConfig, type TimeOfDay, type WeatherKind } from '../config';
+import type { Difficulty, Player } from '../engine';
 import { known, setSides, sides, type FactionId } from './factions';
-import { generateMap, MAP_STYLES, type MapStyle } from '../engine/mapgen';
+import { cleanKnobs, generateMap, MAP_STYLES, type MapKnobs, type MapStyle } from '../engine/mapgen';
 
 import MAPS from './maps.json';
-export type MapId = 'river' | 'open' | 'forest' | 'fords' | 'pass' | 'island' | 'longwood' | 'noford' | 'ridge' | 'marsh' | 'lake' | 'castles' | 'village' | 'siege' | 'random';
+export type MapId = 'river' | 'open' | 'forest' | 'fords' | 'pass' | 'island' | 'longwood' | 'noford' | 'ridge' | 'marsh' | 'lake' | 'castles' | 'village' | 'siege' | 'waterloo' | 'isandlwana' | 'random';
 export type DiceId = '1d6' | '3d6' | '2d6' | 'fixed';
 
 export interface Settings {
@@ -21,8 +21,19 @@ export interface Settings {
   /** Random map: the seed and style it is grown from, so a resumed or online game rebuilds the very same map. */
   mapSeed?: number;
   mapStyle?: MapStyle;
+  /** "Customize land": set only when the player moved a knob off the preset (older saves have none: the style alone). */
+  mapKnobs?: MapKnobs;
   /** The faction each side leads (Novgorod side moves first). */
   sides: Record<Player, FactionId>;
+  /** How well the computer plays (games against the computer only; online games ignore it). Older saves have none: Normal. */
+  difficulty?: Difficulty;
+  /** Light and weather as chosen (none = day and clear; 'random' is rolled when the battle starts). */
+  time?: TimeOfDay | 'random';
+  weather?: WeatherKind | 'random';
+  /** The light and weather this battle actually has (a random choice rolled once, saved and sent with the battle). */
+  sky?: { time: TimeOfDay; kind: WeatherKind };
+  /** A campaign battle (src/ui/scenarios.ts): its id, so its result can be recorded. */
+  scenario?: string;
 }
 
 /** Dad's rules exactly: nothing optional switched on. */
@@ -42,9 +53,15 @@ export const RECOMMENDED: GameConfig['options'] = {
   longShotFrom: 4,
   charge: true,
   toughness: 2,
+  rainRange: true,
+  snowCavalry: true,
+  fogCap: true,
 };
 
-export const DEFAULT_SETTINGS: Settings = { budget: 50, map: 'river', dice: '3d6', options: { ...RECOMMENDED }, sides: { red: 'novgorod', blue: 'teutonic' } };
+export const TIMES: readonly TimeOfDay[] = ['day', 'dusk', 'night'];
+export const WEATHERS: readonly WeatherKind[] = ['clear', 'rain', 'snow', 'fog'];
+
+export const DEFAULT_SETTINGS: Settings = { budget: 50, map: 'river', dice: '3d6', options: { ...RECOMMENDED }, sides: { red: 'novgorod', blue: 'teutonic' }, difficulty: 'normal' };
 
 const KEY = 'boc-settings';
 
@@ -63,7 +80,12 @@ export function loadSettings(): Settings {
     if (s && typeof s.budget === 'number' && s.v !== 5 && s.v !== 6 && s.options && (s.options.runLimit === 3 || s.options.runLimit === 4)) s.options.runLimit = 6;
     // Version 6 (2026-11-18): Recommended rules are the default; anyone still on untouched Dad's rules moves to them.
     if (s && typeof s.budget === 'number' && s.v !== 6 && s.options && (Object.keys(DADS_RULES) as (keyof typeof DADS_RULES)[]).every((k) => s.options[k] === undefined || s.options[k] === DADS_RULES[k])) s.options = { ...RECOMMENDED };
-    if (s && typeof s.budget === 'number') return { ...DEFAULT_SETTINGS, ...s, options: { ...DADS_RULES, ...s.options }, sides: { red: known(s.sides?.red, 'novgorod'), blue: known(s.sides?.blue, 'teutonic') } };
+    // Weather rules (2026-11-17): someone on the Recommended rules gets them too; everyone else keeps them off.
+    if (s && typeof s.budget === 'number' && s.options && s.options.rainRange === undefined) {
+      const rec = (Object.keys(RECOMMENDED) as (keyof typeof RECOMMENDED)[]).every((k) => k === 'rainRange' || k === 'snowCavalry' || k === 'fogCap' || s.options[k] === undefined || s.options[k] === RECOMMENDED[k]);
+      if (rec) s.options = { ...s.options, rainRange: true, snowCavalry: true, fogCap: true };
+    }
+    if (s && typeof s.budget === 'number') return { ...DEFAULT_SETTINGS, ...s, options: { ...DADS_RULES, ...s.options }, sides: { red: known(s.sides?.red, 'novgorod'), blue: known(s.sides?.blue, 'teutonic') }, difficulty: s.difficulty === 'easy' || s.difficulty === 'hard' ? s.difficulty : 'normal' };
   } catch {
     /* fall through to the defaults */
   }
@@ -74,8 +96,10 @@ export function loadSettings(): Settings {
 export const fixedPoints = (_s: Settings) => 10;
 
 export function saveSettings(s: Settings) {
+  // Saved before a new battle: its light and weather are rolled afresh from the choice.
+  delete s.sky;
   try {
-    localStorage.setItem(KEY, JSON.stringify({ ...s, v: 6 }));
+    localStorage.setItem(KEY, JSON.stringify({ ...s, sky: undefined, v: 6 }));
   } catch {
     /* keep them for this visit only */
   }
@@ -92,8 +116,8 @@ export const newSeed = () => Math.floor(Math.random() * 2147483647) + 1;
 const styleOf = (s?: string): MapStyle => (MAP_STYLES.includes(s as MapStyle) ? (s as MapStyle) : 'valley');
 
 /** The board for a map. A random map needs its seed and style (and is grown at the board size, not enlarged). */
-export function boardFor(map: MapId, gen?: { seed?: number; style?: MapStyle; size?: 'standard' | 'large' }): GameConfig['board'] {
-  if (map === 'random') return generateMap(gen?.seed ?? 1, styleOf(gen?.style), gen?.size ?? 'standard');
+export function boardFor(map: MapId, gen?: { seed?: number; style?: MapStyle; size?: 'standard' | 'large'; knobs?: MapKnobs }): GameConfig['board'] {
+  if (map === 'random') return generateMap(gen?.seed ?? 1, styleOf(gen?.style), gen?.size ?? 'standard', cleanKnobs(gen?.knobs));
   const { cols, rows } = ORIGINAL;
   const mid = Math.floor(cols / 2);
   const made = (MAPS as unknown as Record<string, Partial<GameConfig['board']>>)[map];
@@ -160,7 +184,9 @@ export function applySettings(s: Settings) {
     // A random map always has its own seed and style, saved with the battle.
     s.mapSeed ??= newSeed();
     s.mapStyle = styleOf(s.mapStyle);
-    CONFIG.board = boardFor('random', { seed: s.mapSeed, style: s.mapStyle, size: s.size === 'large' ? 'large' : 'standard' });
+    s.mapKnobs = cleanKnobs(s.mapKnobs);
+    if (!s.mapKnobs) delete s.mapKnobs;
+    CONFIG.board = boardFor('random', { seed: s.mapSeed, style: s.mapStyle, size: s.size === 'large' ? 'large' : 'standard', knobs: s.mapKnobs });
   } else CONFIG.board = s.size === 'large' ? enlargeBoard(boardFor(s.map)) : boardFor(s.map);
   // A bigger board leaves more room to set up.
   CONFIG.deploy.depth = s.size === 'large' ? 7 : 5;
@@ -170,6 +196,10 @@ export function applySettings(s: Settings) {
     : s.dice === '2d6' ? { count: 2, sides: 6, fixed: null }
     : { count: 3, sides: 6, fixed: null };
   CONFIG.options = { ...s.options };
+  // Light and weather: a random choice is rolled once per battle and kept in `sky`, so a resumed or online game matches.
+  const pick = <T,>(all: readonly T[]) => all[Math.floor(Math.random() * all.length)];
+  if (!s.sky) s.sky = { time: s.time === 'random' ? pick(TIMES) : (s.time ?? 'day'), kind: s.weather === 'random' ? pick(WEATHERS) : (s.weather ?? 'clear') };
+  CONFIG.weather = { ...s.sky };
   setSides(s.sides ?? DEFAULT_SETTINGS.sides);
   s.sides = { ...sides };
 }

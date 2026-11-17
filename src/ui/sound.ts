@@ -5,6 +5,8 @@
 
 export type Cue =
   | 'tick' | 'dice' | 'step' | 'hoof' | 'clash' | 'bow' | 'thunk' | 'pistol' | 'rifle' | 'cannon' | 'boom' | 'death' | 'horn' | 'win' | 'lose'
+  /** What a blow lands on (sword on shield, axe on mail, spear into a horse, arrow into a body, a club), a musket, and the ground underfoot. */
+  | 'shield' | 'axe' | 'spear' | 'flesh' | 'musket' | 'club' | 'splash' | 'bridge' | 'snort'
   /** Older name for a bow shot. */
   | 'arrow';
 
@@ -12,6 +14,7 @@ export type Cue =
 const TAKES: Record<Exclude<Cue, 'arrow'>, [number, number]> = {
   tick: [1, 0.35], dice: [2, 0.8], step: [3, 0.32], hoof: [3, 0.38], clash: [3, 0.7], bow: [2, 0.55], thunk: [2, 0.6],
   pistol: [2, 0.6], rifle: [2, 0.65], cannon: [2, 0.75], boom: [2, 0.7], death: [2, 0.7], horn: [1, 0.45], win: [1, 0.8], lose: [1, 0.75],
+  shield: [3, 0.65], axe: [3, 0.65], spear: [2, 0.6], flesh: [2, 0.55], musket: [2, 0.65], club: [3, 0.65], splash: [3, 0.35], bridge: [3, 0.35], snort: [3, 0.4],
 };
 /** Cues that keep their pitch: music and the horn. */
 const STEADY = new Set<Cue>(['win', 'lose', 'horn']);
@@ -35,8 +38,77 @@ function load(c: AudioContext) {
   }
 }
 
+// ---------- mixer ----------
+// Three volumes (effects, voices, music), each a gain every sound of that kind runs through. The old Sound switch
+// still silences effects and voices together; the Music switch still silences music.
+
+export type Bus = 'fx' | 'voice' | 'music';
+const MIX_KEY = 'boc-mix';
+const mix: Record<Bus, number> = (() => {
+  const m = { fx: 1, voice: 1, music: 1 };
+  try {
+    const saved = JSON.parse(localStorage.getItem(MIX_KEY) ?? '{}') as Partial<Record<Bus, unknown>>;
+    for (const k of ['fx', 'voice', 'music'] as Bus[]) if (typeof saved[k] === 'number') m[k] = Math.min(1, Math.max(0, saved[k] as number));
+  } catch {
+    /* defaults */
+  }
+  return m;
+})();
+const buses = new Map<Bus, GainNode>();
+
+/** The gain every sound of one kind goes through (made on first use). */
+export function busOf(c: AudioContext, b: Bus): GainNode {
+  let g = buses.get(b);
+  if (!g) {
+    g = c.createGain();
+    g.gain.value = mix[b];
+    g.connect(c.destination);
+    buses.set(b, g);
+  }
+  return g;
+}
+
+export const volumeOf = (b: Bus) => mix[b];
+
+export function setVolume(b: Bus, v: number) {
+  mix[b] = Math.min(1, Math.max(0, v));
+  if (ctx) busOf(ctx, b).gain.setTargetAtTime(mix[b], ctx.currentTime, 0.05);
+  try {
+    localStorage.setItem(MIX_KEY, JSON.stringify(mix));
+  } catch {
+    /* keep it for this visit only */
+  }
+}
+
+/** Where a sound goes: your own side's sounds play full and close; the other side's a little quieter and duller, as if across the field. */
+export function outlet(c: AudioContext, b: Bus, near = true): AudioNode {
+  if (near) return busOf(c, b);
+  const g = c.createGain();
+  g.gain.value = 0.7;
+  const lp = c.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 2600;
+  g.connect(lp).connect(busOf(c, b));
+  return g;
+}
+
+/** Three sliders for the menu (Effects / Voices / Music). They save themselves; no click handler needed. */
+export function mixerHtml(labels: Record<Bus, string>): string {
+  const one = (b: Bus) =>
+    `<label class="mix-row"><span>${labels[b]}</span><input type="range" min="0" max="100" step="5" value="${Math.round(mix[b] * 100)}" data-mix="${b}" aria-label="${labels[b]}"></label>`;
+  return `<div class="mixer">${one('fx')}${one('voice')}${one('music')}</div>`;
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('input', (e) => {
+    const el = e.target as HTMLInputElement | null;
+    const b = el?.dataset?.mix as Bus | undefined;
+    if (b && b in mix) setVolume(b, Number(el!.value) / 100);
+  });
+}
+
 /** Plays a recording of the cue; false if none has loaded yet. */
-function sample(c: AudioContext, cue: Exclude<Cue, 'arrow'>, delay: number): boolean {
+function sample(c: AudioContext, cue: Exclude<Cue, 'arrow'>, delay: number, near = true): boolean {
   const [n, vol] = TAKES[cue];
   const takes = Array.from({ length: n }, (_, i) => buffers.get(`${cue}-${i + 1}`)).filter((b): b is AudioBuffer => !!b);
   if (!takes.length) return false;
@@ -45,7 +117,7 @@ function sample(c: AudioContext, cue: Exclude<Cue, 'arrow'>, delay: number): boo
   if (!STEADY.has(cue)) src.playbackRate.value = 0.93 + Math.random() * 0.14;
   const g = c.createGain();
   g.gain.value = vol;
-  src.connect(g).connect(c.destination);
+  src.connect(g).connect(outlet(c, 'fx', near));
   src.start(c.currentTime + delay);
   return true;
 }
@@ -71,7 +143,8 @@ export function toggleMute() {
   }
 }
 
-function audio(): AudioContext | null {
+/** The sound engine, started if it can be (null before the first tap on some browsers, or with no Web Audio). */
+export function audio(): AudioContext | null {
   if (!ctx) {
     const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AC) return null;
@@ -94,7 +167,7 @@ function envelope(c: AudioContext, at: number, peak: number, attack: number, dec
   g.gain.setValueAtTime(0.0001, at);
   g.gain.exponentialRampToValueAtTime(peak, at + attack);
   g.gain.exponentialRampToValueAtTime(0.0001, at + attack + decay);
-  g.connect(c.destination);
+  g.connect(busOf(c, 'fx'));
   return g;
 }
 
@@ -122,13 +195,13 @@ function tone(c: AudioContext, at: number, type: OscillatorType, from: number, t
   o.stop(at + dur + 0.05);
 }
 
-/** Plays a cue now, or `delay` seconds from now. */
-export function sound(cue: Cue, delay = 0) {
+/** Plays a cue now, or `delay` seconds from now. `near` = false plays it as the far side's (quieter, duller). */
+export function sound(cue: Cue, delay = 0, near = true) {
   if (muted) return;
   const c = audio();
   if (!c) return;
   if (cue === 'arrow') cue = 'bow';
-  if (sample(c, cue, delay)) return;
+  if (sample(c, cue, delay, near)) return;
   const t = c.currentTime + delay;
   switch (cue) {
     case 'tick':
@@ -139,7 +212,20 @@ export function sound(cue: Cue, delay = 0) {
       return noise(c, t + 0.62, 0.09, 0.4, 900, 2);
     case 'step':
     case 'hoof':
+    case 'bridge':
       return noise(c, t, 0.12, 0.25, 260, 1.5);
+    case 'splash':
+      return noise(c, t, 0.2, 0.25, 1400, 0.8);
+    case 'snort':
+      return noise(c, t, 0.3, 0.12, 700, 1);
+    case 'shield':
+    case 'club':
+    case 'flesh':
+      return noise(c, t, 0.1, 0.35, cue === 'shield' ? 700 : 400, 1.5);
+    case 'axe':
+    case 'spear':
+      noise(c, t, 0.15, 0.45, 2400, 1.5);
+      return noise(c, t, 0.1, 0.3, 500, 2);
     case 'clash':
       // Steel on steel: a bright burst with ringing partials.
       noise(c, t, 0.18, 0.5, 3200, 2);
@@ -151,6 +237,7 @@ export function sound(cue: Cue, delay = 0) {
       return noise(c, t, 0.08, 0.3, 500, 2);
     case 'pistol':
     case 'rifle':
+    case 'musket':
       return noise(c, t, 0.2, 0.6, 1200, 0.7);
     case 'cannon':
     case 'boom':
@@ -197,7 +284,7 @@ let scene: { themes: string[]; active: string | null; tension: boolean } = { the
 function loopTrack(c: AudioContext, name: string, buf: AudioBuffer): Track {
   const gain = c.createGain();
   gain.gain.value = 0;
-  gain.connect(c.destination);
+  gain.connect(busOf(c, 'music'));
   const tr: Track = { gain, timer: 0, live: [] };
   const play = (first: boolean) => {
     const src = c.createBufferSource();

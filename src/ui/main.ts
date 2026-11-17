@@ -1,5 +1,5 @@
 import './style.css';
-import { CONFIG, budgetOf, sideConfig, type UnitTypeId } from '../config';
+import { CONFIG, type GameConfig, budgetOf, sideConfig, type UnitTypeId } from '../config';
 import {
   apply,
   armyCost,
@@ -49,17 +49,22 @@ import {
   type Result,
   type Session,
 } from '../engine';
-import { ARROW_S, groundSize, groundUrl, NO_EFFECTS, STEP_MS, groundTransform, hasGround, groundParts, detailBox, DETAIL_URL, hexOnMap, loadGround, mapSize, renderBoard, screenToGround, viewCube, type Camera, type Effects, type Overlay } from './board';
+import { ARROW_S, groundSize, groundUrl, NO_EFFECTS, STEP_MS, groundTransform, hasGround, groundParts, detailBox, DETAIL_URL, hexOnMap, loadGround, mapSize, pickHex, renderBoard, screenToGround, targetFrame, viewCube, type Camera, type Effects, type Overlay } from './board';
 import { errorText, logText, playerName, reasonText, t, unitName, type Key, type Lang } from './i18n';
 import { unitIcon } from './symbols';
 import { ERAS, ERA_OF, FACTIONS, FACTION_ORDER, factionOf, rosterOf, sides, type FactionId } from './factions';
 import { morph, morphInto } from './morph';
+import { placeWeather, weatherPanel } from './weather';
 import { ART_VERSION, SPRITES } from './sprites';
 import { fetchGame, newId, pushGame } from './online';
-import { isMuted, musicOn, setMusic, sound, toggleMusic, toggleMute } from './sound';
-import { boardThumb } from './thumb';
+import { initReplay, replayControls, replayState, replaying, resultButtons } from './replay';
+import { isMuted, mixerHtml, musicOn, setMusic, sound, toggleMusic, toggleMute } from './sound';
+import { fightSounds, marchSounds, prepareVoices, selectVoice, toggleVoices, victoryVoice, voiceMode } from './voices';
+import { cachedThumb, paintThumb, thumbAspect } from './thumb';
+import { enemyAction as tutorialEnemy, initTutorial, startTutorial, tutorialLabel, tutorialOn, tutorialRng } from './tutorial';
 import { DADS_RULES, RECOMMENDED, applySettings, boardFor, fixedPoints, loadSettings, newSeed, saveSettings, type DiceId, type MapId, type Settings } from './settings';
-import { MAP_STYLES, type MapStyle } from '../engine/mapgen';
+import { buildScenario, campaignScreen, campaignText, checkHold, goalText, scenarioById, scenarioResult, scenarioSettings } from './scenarios';
+import { KNOB_IDS, KNOB_STEPS, MAP_STYLES, PRESET_KNOBS, type KnobId, type MapKnobs, type MapStyle } from '../engine/mapgen';
 
 const app = document.getElementById('app')!;
 
@@ -113,6 +118,7 @@ function loadGame(): Saved | null {
 }
 
 function saveGame() {
+  if (tutorialOn()) return; // the tutorial plays in memory: the player's saved game stays as it was
   try {
     const data: Saved = { board: [CONFIG.board.cols, CONFIG.board.rows], state: sess.state, cover, mode, settings, net };
     localStorage.setItem(SAVE_KEY, JSON.stringify(data));
@@ -145,10 +151,14 @@ let mode: Mode = saved?.mode === 'ai' ? 'ai' : saved?.mode === 'online' && saved
 let cover = saved ? saved.cover || (mode === 'pvp' && (saved.state.phase === 'draft' || saved.state.phase === 'deploy')) : false;
 /** The "how do you want to play" screen: first launch and every new game. */
 let choosing = !saved;
+/** The campaign list, shown in place of the start screen (so the game behind stays paused). */
+let campaignOpen = false;
 let aiTimer: number | null = null;
 const aiTurn = (s: GameState) => mode === 'ai' && s.current === AI_SIDE && s.phase !== 'over' && setupPhase(s) === false;
 // ---------- online ----------
 let net: Net | null = mode === 'online' ? saved!.net! : null;
+/** The piece that last answered when picked (so a redraw doesn't make it speak again). */
+let voicedSel: string | null = null;
 /** The state both phones agree on: a different one on screen means this phone has something to send. */
 let netState: GameState | null = net ? sess.state : null;
 const roleKey = (id: string) => `boc-net-${id}`;
@@ -323,6 +333,12 @@ function saveCam() {
   }
 }
 const clampPitch = (p: number) => Math.min(1, Math.max(0, p));
+/** smart camera: on selecting a piece, glide just enough that its targets show (menu switch, on by default). */
+const SMART_KEY = 'boc-smartcam';
+let smartCam = (() => { try { return localStorage.getItem(SMART_KEY) !== '0'; } catch { return true; } })();
+/** smart camera: the selection it last looked at, and the glide it started (cancelled by any wheel or touch). */
+let smartFor: string | null = null;
+let leanGlide = -1;
 
 /** The camera turn that puts this side's army at the bottom of the screen, enemy at the top. */
 function yawFor(p: Player): number {
@@ -413,7 +429,7 @@ const [ZOOM_MIN, ZOOM_MAX] = [0.7, 18]; // close enough to see the carving on a 
 type Buyable = keyof ArmyCounts;
 /** The side to move's faction decides what it can buy and what the pieces list shows. */
 const buyOrder = () => rosterOf(sess.state.current) as Buyable[];
-const TRAY_ORDER: UnitTypeId[] = ['king', 'heavyCavalry', 'lightCavalry', 'horseArcher', 'chariot', 'heavyInfantry', 'lineInfantry', 'samurai', 'lightInfantry', 'berserker', 'boarder', 'deputy', 'ashigaru', 'axeThrower', 'bomber', 'skirmisher', 'archer', 'ballista', 'cannon'];
+const TRAY_ORDER: UnitTypeId[] = ['king', 'championRider', 'champion', 'championGun', 'heavyCavalry', 'lightCavalry', 'horseArcher', 'chariot', 'heavyInfantry', 'lineInfantry', 'samurai', 'lightInfantry', 'berserker', 'boarder', 'jaguar', 'impi', 'deputy', 'ashigaru', 'axeThrower', 'bomber', 'atlatl', 'thrower', 'skirmisher', 'archer', 'ballista', 'cannon'];
 
 // ---------- view helpers ----------
 
@@ -453,7 +469,30 @@ function statKey(): string {
 function unitInfo(s: GameState, id: string): string {
   const u = getUnit(s, id);
   if (!u) return '';
-  return `<b class="${u.owner}">${unitName(lang, u.type, u.owner)}</b> ${stats(u.type, u.hp)}`;
+  // Into the Breach's unit panel: the carved portrait, the name, the numbers.
+  const pic = figurePic(settings.sides[u.owner], u.type, 'front-left') || unitIcon(u.type, u.owner);
+  return `<span class="uport" aria-hidden="true">${pic}</span><span class="ubody"><b class="${u.owner}">${unitName(lang, u.type, u.owner)}</b>${stats(u.type, u.hp)}</span>`;
+}
+
+/** Captured pieces, as chess.com shows them: the enemy pieces each side has taken, by type, read from the
+ *  battle log (so it follows undo, online games and saved games without any extra data). */
+function tally(s: GameState): string {
+  const took: Record<Player, UnitTypeId[]> = { red: [], blue: [] };
+  for (const e of s.log) {
+    if (e.kind !== 'attack' && e.kind !== 'shoot') continue;
+    if (e.killed) took[e.player].push(e.target);
+    if (e.attackerKilled) took[other(e.player)].push(e.unit);
+  }
+  if (!took.red.length && !took.blue.length) return '';
+  const worth = (p: Player) => took[p].reduce((a, ty) => a + (ty === 'king' ? 0 : CONFIG.army.cost[ty] ?? 0), 0);
+  const side = (p: Player) => {
+    const counts = new Map<UnitTypeId, number>();
+    for (const ty of took[p]) counts.set(ty, (counts.get(ty) ?? 0) + 1);
+    const lead = worth(p) - worth(other(p));
+    const icons = [...counts].map(([ty, n]) => `<span class="tk">${unitIcon(ty, other(p))}${n > 1 ? `<i>×${n}</i>` : ''}</span>`).join('');
+    return `<span class="tside" title="${playerName(lang, p)}"><span class="fdot" style="background:${factionOf(p).color}"></span>${icons || '<i class="tnone">–</i>'}${lead > 0 ? `<b>+${lead}</b>` : ''}</span>`;
+  };
+  return `<div class="tally" aria-label="${t(lang, 'statKills')}">${side('red')}${side('blue')}</div>`;
 }
 
 function previewText(s: GameState, targetId: string, p: AttackPreview): string {
@@ -542,6 +581,13 @@ function nextPiece() {
 }
 
 /** The side to move's pieces with no move and no hit left for the points remaining. */
+/** Nothing left to do this turn: no points, or every own piece is spent (End turn then glows). */
+function allSpent(s: GameState): boolean {
+  if (s.phase !== 'act') return false;
+  const mine = s.units.filter((u) => u.owner === s.current).length;
+  return s.points <= 0 || (mine > 0 && spentUnits(s).size >= mine);
+}
+
 function spentUnits(s: GameState): Set<string> {
   const out = new Set<string>();
   for (const u of s.units) {
@@ -604,13 +650,16 @@ function armyPreview(owner: Player): string {
   return `<div class="army-head"><b>${t(lang, 'yourArmy')}</b><span>${total} ${t(lang, 'piecesN')}</span></div><div class="army-pieces">${groups}</div>`;
 }
 
+/** Most of this piece an army may buy (Champions: one). */
+const capOf = (type: Buyable) => CONFIG.army.max?.[type] ?? Infinity;
+
 /** Points the side now building its army may spend (on the siege map Red gets more). */
 const budgetNow = () => budgetOf(sess.state.current);
 
 /** Slider track: gold up to the value, pale up to what the budget still allows. */
 function sliderFill(type: Buyable): string {
   const price = CONFIG.army.cost[type];
-  const max = Math.floor(budgetNow() / price);
+  const max = Math.min(capOf(type), Math.floor(budgetNow() / price));
   const n = draft[type] ?? 0;
   const reach = n + Math.floor((budgetNow() - armyCost(draft)) / price);
   return `--v:${(n / max) * 100}%;--r:${(Math.min(reach, max) / max) * 100}%`;
@@ -621,7 +670,7 @@ function onSlide(input: HTMLInputElement) {
   const type = input.dataset.type as Buyable;
   const price = CONFIG.army.cost[type];
   const others = armyCost({ ...draft, [type]: 0 });
-  const n = Math.min(Number(input.value), Math.floor((budgetNow() - others) / price));
+  const n = Math.min(Number(input.value), capOf(type), Math.floor((budgetNow() - others) / price));
   if (Number(input.value) !== n) input.value = String(n);
   if ((draft[type] ?? 0) === n) return;
   draft = { ...draft, [type]: n };
@@ -636,7 +685,7 @@ function onSlide(input: HTMLInputElement) {
     const r = app.querySelector(`[data-row="${t2}"]`)!;
     (r.querySelector('input') as HTMLInputElement).style.cssText = sliderFill(t2);
     (r.querySelector('[data-act="less"]') as HTMLButtonElement).disabled = !(draft[t2] ?? 0);
-    (r.querySelector('[data-act="more"]') as HTMLButtonElement).disabled = CONFIG.army.cost[t2] > left;
+    (r.querySelector('[data-act="more"]') as HTMLButtonElement).disabled = CONFIG.army.cost[t2] > left || (draft[t2] ?? 0) >= capOf(t2);
   }
   sound('tick');
 }
@@ -659,7 +708,7 @@ function draftSheet(s: GameState): string {
   const rows = buyOrder().map((type) => {
     const n = draft[type] ?? 0;
     const price = CONFIG.army.cost[type];
-    const can = price <= left;
+    const can = price <= left && n < capOf(type);
     return `<li class="ucard ${n ? 'has' : ''}" data-row="${type}">
       <span class="price" title="${t(lang, 'power')}">${price}<small>${t(lang, 'pts')}</small></span>
       <button class="ufig" data-act="more" data-type="${type}" ${can ? '' : 'disabled'} aria-label="${unitName(lang, type, s.current)} +">${figurePic(fac, type) || unitIcon(type, s.current)}</button>
@@ -721,6 +770,9 @@ const RULES: { key: keyof Settings['options']; on: Settings['options'][keyof Set
   { key: 'carryMax', on: 3 },
   { key: 'rerolls', on: 1 },
   { key: 'firstTurnBonus', on: 2 },
+  { key: 'rainRange', on: true },
+  { key: 'snowCavalry', on: true },
+  { key: 'fogCap', on: true },
 ];
 
 /** Which side's army the New battle screen is choosing, and whether the detailed rules are open. */
@@ -746,6 +798,9 @@ const RULE_ICON: Record<keyof Settings['options'], string> = {
   stepMoves: '<path d="M5 19h4v-4h4v-4h4V7h3" fill="none"/>',
   rerolls: '<path d="M19 8a8 8 0 1 0 1 6" fill="none"/><path d="M20 3v5h-5"/>',
   kingsGuard: '<path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z" fill="none"/><path d="M8.5 13.5V10l2 1.5L12 9l1.5 2.5 2-1.5v3.5z"/>',
+  rainRange: '<path d="M7 13a4 4 0 0 1-.5-8 5.5 5.5 0 0 1 10.6 1.5A3.3 3.3 0 0 1 17 13z"/><path d="M8 16l-1 4M12 16l-1 4M16 16l-1 4" fill="none"/>',
+  snowCavalry: '<path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9" fill="none"/>',
+  fogCap: '<path d="M3 8c3-2 6 2 9 0s6-2 9 0M3 13c3-2 6 2 9 0s6-2 9 0M3 18c3-2 6 2 9 0s6-2 9 0" fill="none"/>',
 };
 
 const RULE_GROUPS: { title: Key; color: string; keys: (keyof Settings['options'])[] }[] = [
@@ -753,25 +808,78 @@ const RULE_GROUPS: { title: Key; color: string; keys: (keyof Settings['options']
   { title: 'groupRanged', color: '#3f8f5a', keys: ['longShotFrom', 'volleys'] },
   { title: 'groupMove', color: '#3a6fb0', keys: ['stepMoves', 'unitSpeeds', 'zoneOfControl'] },
   { title: 'groupTurn', color: '#a8811a', keys: ['routAt', 'carryMax', 'rerolls', 'firstTurnBonus'] },
+  { title: 'groupWeather', color: '#5a7f9e', keys: ['rainRange', 'snowCavalry', 'fogCap'] },
 ];
 
-/** A tiny picture of each map type for the map tiles. */
-function mapThumb(m: MapId): string {
-  // Random: the map this seed and style grow into (a question mark until one is chosen).
+/** Map previews still to paint after this render: picture key -> how to grow the board and how wide to paint it. */
+const thumbJobs = new Map<string, { board: () => GameConfig['board']; px: number }>();
+/** An empty picture to hold a preview's place (and size) while it paints. */
+const BLANK = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEAAAAALAAAAAABAAEAAAIBAAA=';
+
+/** The map as a little picture of the real board (painted once, then kept). `px` is the picture's width. */
+function mapThumb(m: MapId, px = 240): string {
+  // Random: the map this seed and land grow into (a question mark until one is chosen).
   if (m === 'random' && settings.map !== 'random') return `<svg viewBox="0 0 72 44" width="72" height="44" aria-hidden="true"><rect width="72" height="44" rx="6" fill="#6f9a4a"/><text x="36" y="30" text-anchor="middle" font-size="22" font-weight="700" fill="#f1e8d2">?</text></svg>`;
-  // A little board: every hex drawn as a real hex, coloured by its ground, on a wooden frame.
-  const b = m === 'random' ? boardFor('random', { seed: settings.mapSeed, style: settings.mapStyle, size: settings.size === 'large' ? 'large' : 'standard' }) : boardFor(m);
-  return boardThumb(b);
+  const large = m === 'random' && settings.size === 'large';
+  const key = m === 'random' ? `random|${settings.mapSeed}|${settings.mapStyle ?? 'valley'}|${settings.mapKnobs ? KNOB_IDS.map((id) => settings.mapKnobs![id]).join('') : 'preset'}|${large ? 'L' : 'S'}|${px}` : `${m}|${px}`;
+  const done = cachedThumb(key);
+  if (!done) {
+    const gen = { seed: settings.mapSeed, style: settings.mapStyle, size: large ? ('large' as const) : ('standard' as const), knobs: settings.mapKnobs };
+    thumbJobs.set(key, { board: () => (m === 'random' ? boardFor('random', gen) : boardFor(m)), px });
+  }
+  const aspect = thumbAspect(large ? { cols: 33, rows: 19 } : { cols: 25, rows: 15 });
+  return `<img class="mthumb" data-thumb="${key}" src="${done ?? BLANK}" alt="" draggable="false" style="aspect-ratio:${aspect.toFixed(4)}">`;
 }
 
-/** Random map: the kind of land to grow, a bigger look at the map, and a button for a different one. */
+/** Paints the previews the last render asked for, one at a time so the menu stays smooth, and puts each in place. */
+let thumbsBusy = false;
+async function fillThumbs() {
+  if (thumbsBusy) return;
+  thumbsBusy = true;
+  try {
+    while (thumbJobs.size) {
+      const [key, job] = thumbJobs.entries().next().value as [string, { board: () => GameConfig['board']; px: number }];
+      thumbJobs.delete(key);
+      // Only what is on screen now (a re-roll may have replaced it already).
+      if (!app.querySelector(`img[data-thumb="${CSS.escape(key)}"]`)) continue;
+      const url = await paintThumb(key, job.board(), job.px * Math.min(2, Math.max(1, devicePixelRatio || 1)));
+      if (url) app.querySelectorAll<HTMLImageElement>(`img[data-thumb="${CSS.escape(key)}"]`).forEach((im) => (im.src = url));
+      await new Promise((ok) => setTimeout(ok, 0));
+    }
+  } finally {
+    thumbsBusy = false;
+  }
+}
+
+/** "Customize land" is open on the random map panel. */
+let landOpen = false;
+
+/** Random map: the kind of land to grow, rough amounts of each thing (Minecraft-style), a bigger look at the map,
+ *  and a button for a different one. A preset sets the amounts; moving one makes the land "Custom". */
 function randomMapPanel(): string {
   const style = settings.mapStyle ?? 'valley';
-  const chips = MAP_STYLES.map((st) => `<button role="radio" data-act="map-style" data-value="${st}" class="${st === style ? 'on' : ''}" aria-checked="${st === style}" style="font-size:12.5px;padding:8px 2px">${t(lang, `style${st[0].toUpperCase()}${st.slice(1)}` as Key)}</button>`).join('');
+  const custom = !!settings.mapKnobs;
+  const knobs: MapKnobs = settings.mapKnobs ?? PRESET_KNOBS[style];
+  const chips = MAP_STYLES.map((st) => {
+    const on = !custom && st === style;
+    return `<button role="radio" data-act="map-style" data-value="${st}" class="${on ? 'on' : ''}" aria-checked="${on}" style="font-size:12.5px;padding:8px 2px">${t(lang, `style${st[0].toUpperCase()}${st.slice(1)}` as Key)}</button>`;
+  }).join('');
+  const cap = (k: string) => k[0].toUpperCase() + k.slice(1);
+  const rows = KNOB_IDS.map((id: KnobId) => {
+    const steps = Array.from({ length: KNOB_STEPS[id] }, (_, i) => {
+      const on = knobs[id] === i;
+      return `<button role="radio" data-act="map-knob" data-knob="${id}" data-value="${i}" class="${on ? 'on' : ''}" aria-checked="${on}">${t(lang, `knob${cap(id)}${i}` as Key)}</button>`;
+    }).join('');
+    return `<div class="knob"><span>${t(lang, `knob${cap(id)}` as Key)}</span><div class="seg" role="radiogroup" aria-label="${t(lang, `knob${cap(id)}` as Key)}">${steps}</div></div>`;
+  }).join('');
   return `<div class="mgen" style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
     <div class="seg" role="radiogroup" aria-label="${t(lang, 'mapStyle')}">${chips}</div>
+    <button data-act="land-open" class="disclose ${landOpen ? 'open' : ''}" aria-expanded="${landOpen}" style="margin-top:0">
+      <span>${t(lang, 'customizeLand')}</span><small>${custom ? t(lang, 'presetCustom') : t(lang, `style${cap(style)}` as Key)}</small><i aria-hidden="true">›</i>
+    </button>
+    ${landOpen ? `<div class="knobs">${rows}</div>` : ''}
     <div style="display:flex;gap:10px;align-items:center">
-      <div style="flex:1;min-width:0;border-radius:10px;overflow:hidden;line-height:0">${mapThumb('random').replace(/width="72" height="\d+"/, 'width="100%" style="display:block;width:100%;height:auto"')}</div>
+      <div class="mbig">${mapThumb('random', 480)}</div>
       <button data-act="map-reroll" style="flex:none;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 12px"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.2" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1.2" fill="currentColor"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/></svg>${t(lang, 'rerollMap')}</button>
     </div>
   </div>`;
@@ -820,7 +928,7 @@ function setupScreen(): string {
         .map((k) => {
           const on = settings.options[k] !== DADS_RULES[k];
           return `<button data-act="opt" data-key="${k}" class="rule ${on ? 'on' : ''}" role="switch" aria-checked="${on}">
-            <span class="ricon" style="background:${g.color}" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18">${RULE_ICON[k]}</svg></span>
+            <span class="ricon" style="--ic:${g.color}" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18">${RULE_ICON[k]}</svg></span>
             <span class="what"><b>${t(lang, `rule_${k}` as Key)}</b><small>${t(lang, `ruleHelp_${k}` as Key)}</small></span>
             <span class="switch" aria-hidden="true"><i></i></span>
           </button>`;
@@ -835,8 +943,10 @@ function setupScreen(): string {
         ${mode === 'online' ? `<span class="vs-mid">${t(lang, 'vs')}</span>` : `<button data-act="swap-sides" class="vs-swap" title="${t(lang, 'swapSides')}" aria-label="${t(lang, 'swapSides')}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h15M15 4l4 4-4 4M20 16H5M9 12l-4 4 4 4"/></svg></button>`}
         ${mode === 'online' ? `<div class="vs-card" style="--fc:#6b6b6b"><span class="vs-who">${t(lang, 'sideOpponent')}</span><b style="font-size:34px;line-height:48px">?</b><b>${t(lang, 'theyPick')}</b></div>` : side('blue', mode === 'ai' ? t(lang, 'sideComputer') : t(lang, 'sideSecond'))}
       </div>
+      ${mode === 'ai' ? `<h3>${t(lang, 'difficulty')}</h3>${seg('difficulty', [['easy', t(lang, 'diffEasy')], ['normal', t(lang, 'diffNormal')], ['hard', t(lang, 'diffHard')]], settings.difficulty ?? 'normal')}` : ''}
       ${tiles}
       <p class="blurb">${FACTIONS[settings.sides[pickSide]].blurb[lang]}</p>
+      ${FACTIONS[settings.sides[pickSide]].champion ? `<p class="blurb champ">${FACTIONS[settings.sides[pickSide]].champion![lang]}</p>` : ''}
 
       <h3>${t(lang, 'map')}</h3>
       <div class="mtiles">${mapTiles}</div>
@@ -850,6 +960,8 @@ function setupScreen(): string {
 
       <h3>${t(lang, 'pointsEachTurn')}</h3>
       ${seg('dice', [['1d6', t(lang, 'dice1')], ['2d6', t(lang, 'dice2')], ['3d6', t(lang, 'dice3')], ['fixed', `${t(lang, 'always')} ${fixedPoints(settings)}`]], settings.dice)}
+
+      ${weatherPanel(settings, lang)}
 
       <h3>${t(lang, 'rules')}</h3>
       <div class="presets">
@@ -883,13 +995,14 @@ function startScreen(): string {
   return `<div class="cover"><div class="card start">
     <div class="seg langs" role="radiogroup">${pick('en', 'English')}${pick('ru', 'Русский')}</div>
     <div class="hero">
-      <div class="logo">${LOGO}</div>
+      <div class="duel">${figurePic(settings.sides.red, 'king', 'front-right')}<div class="logo">${LOGO}</div>${figurePic(settings.sides.blue, 'king', 'front-left')}</div>
       <h2>${t(lang, 'title')}</h2>
       <p>${t(lang, 'chooseMode')}</p>
     </div>
     <button data-act="mode" data-mode="pvp" class="choice">${icon(people)}<span class="ctext"><b>${t(lang, 'twoPlayers')}</b><span>${t(lang, 'twoPlayersSub')}</span></span><i aria-hidden="true">›</i></button>
     <button data-act="mode" data-mode="ai" class="choice">${icon(robot)}<span class="ctext"><b>${t(lang, 'vsComputer')}</b><span>${t(lang, 'vsComputerSub')}</span></span><i aria-hidden="true">›</i></button>
     <button data-act="mode" data-mode="online" class="choice">${icon('<circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3.5 12h17M12 3.5c3 3 3 14 0 17M12 3.5c-3 3-3 14 0 17" fill="none" stroke="currentColor" stroke-width="2"/>')}<span class="ctext"><b>${t(lang, 'playOnline')}</b><span>${t(lang, 'playOnlineSub')}</span></span><i aria-hidden="true">›</i></button>
+    <button data-act="campaign" class="choice">${icon('<path d="M5 3v18M5 4h11l-2.5 4L16 12H5" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>')}<span class="ctext"><b>${campaignText(lang).campaign}</b><span>${campaignText(lang).campaignSub}</span></span><i aria-hidden="true">›</i></button>
   </div></div>`;
 }
 
@@ -946,7 +1059,9 @@ function victory(s: GameState, w: Player): string {
       ${row(t(lang, 'statLeft'), left)}
     </div>
     ${best ? `<p class="vbest">${t(lang, 'bestFighter')}: <b>${unitName(lang, best[0], w)}</b> · ${best[1]} ${t(lang, best[1] === 1 ? 'killOne' : 'killMany')}</p>` : ''}
-    <button data-act="restart" class="primary wide">${t(lang, 'newGame')}</button>
+    ${resultButtons(s)}
+    ${mode === 'ai' && scenarioById(settings.scenario) ? scenarioResult(lang, scenarioById(settings.scenario)!, s) : ''}
+    <button data-act="restart" class="${mode === 'ai' && scenarioById(settings.scenario) ? '' : 'primary '}wide">${t(lang, 'newGame')}</button>
     <button data-act="see-board" class="ghost wide">${t(lang, 'seeBoard')}</button>
   </div></div>`;
 }
@@ -983,7 +1098,7 @@ function menuBody(s: GameState): string {
   // iOS-style settings rows: a coloured icon, a name, and the current value or a switch.
   const row = (act: string, color: string, glyph: string, title: string, value = '', sw?: boolean, cls = '') =>
     `<button data-act="${act}" class="mrow ${cls}"${sw === undefined ? '' : ` role="switch" aria-checked="${sw}"`}>
-      <span class="ricon" style="background:${color}" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18">${glyph}</svg></span>
+      <span class="ricon" style="--ic:${color}" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18">${glyph}</svg></span>
       <span class="mtitle">${title}</span>
       ${sw === undefined ? `<span class="mval">${value}</span><i aria-hidden="true">›</i>` : `<span class="switch ${sw ? 'is-on' : ''}" aria-hidden="true"><i></i></span>`}
     </button>`;
@@ -1002,14 +1117,18 @@ function menuBody(s: GameState): string {
       ${row('view', '#7a5bb0', G.cube, t(lang, 'rowView'), tilt ? t(lang, 'view25') : t(lang, 'viewFlatShort'))}
       ${row('labels', '#5b7a4a', '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z" fill="none"/><path d="M9 10l3-1.5v7" fill="none"/>', t(lang, 'rowLabels'), '', showLabels)}
       ${row('cube', '#7a5bb0', G.cube, t(lang, 'rowCube'), '', showCube)}
+      ${row('smartcam', '#5b6b7a', G.target, t(lang, 'rowSmartCam'), '', smartCam)}
       ${row('cam-reset', '#5b6b7a', G.target, t(lang, 'camResetMenu'))}
       ${mode === 'pvp' ? row('table', '#a8811a', G.seats, t(lang, 'rowSeating'), table === 'pass' ? t(lang, 'seatPass') : t(lang, 'seatAcross')) : ''}
       ${mode === 'online' && net ? row('share', '#3a6fb0', G.globe, t(lang, 'inviteLink')) : ''}
       ${row('mute', '#3f8f5a', G.sound, t(lang, 'rowSound'), '', !isMuted())}
       ${row('music', '#8a5fb0', G.note, t(lang, 'rowMusic'), '', musicOn())}
+      ${row('voices', '#b0703a', '<path d="M5 5h14v10H10l-4 4v-4H5z" fill="none"/>', t(lang, 'rowVoices'), voiceMode() === 'native' ? t(lang, 'voicesNative') : t(lang, 'voicesOff'))}
+      ${mixerHtml({ fx: t(lang, 'mixFx'), voice: t(lang, 'mixVoices'), music: t(lang, 'mixMusic') })}
     </div>
     <div class="mgroup">
       ${row('quick', '#c2453a', G.bolt, t(lang, 'quick'))}
+      ${row('tutorial', '#3a8f8a', '<circle cx="12" cy="12" r="8.5" fill="none"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .8-1 1.5v.7M12 16.5v.5" fill="none"/>', tutorialLabel(lang))}
       ${row('new', '#c2453a', G.plus, confirmNew ? t(lang, 'confirmNew') : t(lang, 'newGame'), '', undefined, confirmNew ? 'danger' : '')}
     </div>
     <section><h3>${t(lang, 'pieces')}</h3><ul class="legend">${legendList(s.current)}</ul>${statKey()}<p class="note">${t(lang, 'legendNote')}</p></section>
@@ -1020,7 +1139,7 @@ function menuBody(s: GameState): string {
 function menu(s: GameState): string {
   return `<div class="drawer-bg" data-act="menu"></div>
   <aside class="drawer">
-    <div class="drawer-head"><b>${t(lang, 'title')}</b><button data-act="menu" class="ghost">${t(lang, 'close')}</button></div>
+    <div class="drawer-head"><b>${t(lang, 'title')}</b><button data-act="menu" class="close" aria-label="${t(lang, 'close')}" title="${t(lang, 'close')}">${icon('close')}</button></div>
     ${menuBody(s)}
   </aside>`;
 }
@@ -1036,6 +1155,7 @@ const ICON = {
   expand: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
   reroll: '<path d="M19 8a8 8 0 1 0 1 6"/><path d="M20 3v5h-5"/>',
   panel: '<rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M14.5 4.5v15"/>',
+  close: '<path d="M6 6l12 12M18 6L6 18"/>',
 };
 const icon = (name: keyof typeof ICON) =>
   `<svg class="ic" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[name]}</svg>`;
@@ -1065,7 +1185,7 @@ function bar(s: GameState): string {
     return `${take}<div class="row">
       ${canReroll(s) ? `<button data-act="reroll" class="withicon" ${rolling ? 'disabled' : ''}>${icon('reroll')}<span>${t(lang, 'reroll')}</span></button>` : ''}
       <button data-act="undo" class="withicon" ${canUndo(sess) ? '' : 'disabled'}>${icon('undo')}<span>${t(lang, 'undo')}</span></button>
-      <button data-act="end" class="${s.advance ? '' : 'primary'} ${confirmEnd ? 'warn' : ''}">${confirmEnd ? t(lang, 'endAnyway') : t(lang, 'endTurn')}</button>
+      <button data-act="end" class="${s.advance ? '' : 'primary'} ${confirmEnd ? 'warn' : ''} ${!s.advance && !confirmEnd && allSpent(s) ? 'ready' : ''}">${confirmEnd ? t(lang, 'endAnyway') : t(lang, 'endTurn')}</button>
     </div>`;
   }
   return '';
@@ -1132,6 +1252,8 @@ function placeGround() {
     }
   }
   clip.querySelectorAll<HTMLElement>('.gpart').forEach((im, i) => (im.style.transform = `${T} translate(${parts[i].x}px, ${parts[i].y}px)`));
+  // Weather and light: tints, puddles, rain, snow and fog around the board.
+  placeWeather(wrap, clip, T, view());
 }
 
 /** Re-rendering replaces the board, so keep where the player had scrolled the zoomed map to. */
@@ -1143,11 +1265,12 @@ function render() {
   const stage = app.querySelector<HTMLElement>('.stage');
   if (stage && stage.clientWidth > 0 && (stage.clientWidth !== stageSize[0] || stage.clientHeight !== stageSize[1])) {
     stageSize = [stage.clientWidth, stage.clientHeight];
-    morphInto(stage, renderBoard(sess.state, overlay(sess.state), view(), NO_EFFECTS));
+    morphInto(stage, renderBoard(replayState() ?? sess.state, overlay(replayState() ?? sess.state), view(), NO_EFFECTS));
     placeGround();
   }
   const sheet = app.querySelector<HTMLElement>('.sheet-scroll');
   if (sheet) sheet.scrollTop = list;
+  smartCameraCheck();
 }
 
 /** Zoom by a factor about a screen point (pixels inside the stage), keeping the ground under it still. */
@@ -1190,7 +1313,10 @@ function setZoom(factor: number) {
 }
 
 /** Pieces that fire guns, and which gunshot they make. */
-const GUN_SOUND: Partial<Record<UnitTypeId, 'pistol' | 'rifle' | 'cannon' | 'boom'>> = { gunslinger: 'pistol', cowboy: 'pistol', rifleman: 'rifle', deputy: 'rifle', lineInfantry: 'rifle', skirmisher: 'rifle', cannon: 'cannon', bomber: 'boom' };
+const GUN_SOUND: Partial<Record<UnitTypeId, 'pistol' | 'rifle' | 'musket' | 'cannon' | 'boom'>> = { gunslinger: 'pistol', championGun: 'pistol', cowboy: 'pistol', rifleman: 'rifle', deputy: 'rifle', lineInfantry: 'musket', skirmisher: 'musket', cannon: 'cannon', bomber: 'boom' };
+
+/** Your own side's sounds play close and full, the other side's from across the field (both sides are yours when two share a phone). */
+const nearSide = (p: Player) => (mode === 'ai' ? p !== AI_SIDE : mode === 'online' && net ? p === net.me : true);
 
 /** When the animations now on the board are over (ms clock); the computer waits for it before redrawing. */
 let fxUntil = 0;
@@ -1209,21 +1335,26 @@ function effects(s: GameState): Effects {
       fx.hits.push({ at: e.at, damage: e.damage, killed: e.killed, type: e.target, owner: other(e.player), shotFrom: e.kind === 'shoot' ? e.from : null, by: e.unit, from: e.from, advanced: !!e.advanced });
       // Timed to the board's animation: the blow lands at the same moment the hit flashes.
       const gun = e.kind === 'shoot' && GUN_SOUND[e.unit];
-      let lands = 0.14;
-      if (gun) (sound(gun), (lands = 0.22));
-      else if (e.kind === 'shoot') (sound('bow'), sound('thunk', ARROW_S), (lands = ARROW_S));
-      else sound('clash', 0.1);
-      if (e.killed) sound('death', lands + 0.15);
+      const lands = gun ? 0.22 : e.kind === 'shoot' ? ARROW_S : 0.14;
+      fightSounds(e, sides[e.player], sides[other(e.player)], nearSide(e.player), nearSide(other(e.player)), lands, gun || null);
       fxUntil = Math.max(fxUntil, Date.now() + lands * 1000 + 900);
     } else if (e.kind === 'move') {
-      // A footstep (or hoofbeat) for every hex walked, in time with the piece.
-      const hoof = !!CONFIG.units[e.unit]?.mounted;
-      const steps = Math.max(1, e.path?.length ?? 1);
-      for (let i = 0; i < steps; i++) sound(hoof ? 'hoof' : 'step', (i * STEP_MS) / 1000);
-    } else if (e.kind === 'win') setTimeout(() => sound(mode === 'ai' && e.player === AI_SIDE ? 'lose' : 'win'), 400);
+      // A footstep (or hoofbeat, splash, thud on a bridge) for every hex walked, in time with the piece; and its "Moving!".
+      const ground = (e.path?.length ? e.path : [e.to]).map((h) => s.board[h.row]?.[h.col] ?? 'plain');
+      marchSounds(sides[e.player], e.unit, ground, STEP_MS, nearSide(e.player), !!e.path?.length);
+    } else if (e.kind === 'win') {
+      setTimeout(() => sound(mode === 'ai' && e.player === AI_SIDE ? 'lose' : 'win'), 400);
+      victoryVoice(sides[e.player], s.units.filter((u) => u.owner === e.player).map((u) => u.type), nearSide(e.player));
+    }
   }
   prevLog = s.log.length;
   prevPos = new Map(s.units.map((u) => [u.id, u.pos]));
+  // A piece you just picked answers you.
+  if (selected !== voicedSel) {
+    voicedSel = selected;
+    const u = selected ? getUnit(s, selected) : undefined;
+    if (u && s.phase === 'act' && u.owner === s.current && !notMine(s) && !replaying()) selectVoice(sides[u.owner], u.type, u.id);
+  }
   return fx;
 }
 
@@ -1232,24 +1363,30 @@ function score(s: GameState) {
   if (setupPhase(s) || s.phase === 'over') return setMusic([], null, false);
   const danger = s.units.some((k) => k.type === 'king' && s.units.some((e) => e.owner !== k.owner && distance(e.pos, k.pos) <= 2));
   setMusic([sides.red, sides.blue], sides[s.current], danger);
+  prepareVoices([sides.red, sides.blue]);
 }
 
 let drawnPortrait = portrait;
 function draw() {
-  const s = sess.state;
+  // A campaign battle whose turn limit has run out ends here.
+  const held = checkHold(sess.state, scenarioById(settings.scenario));
+  if (held) sess = { ...sess, state: held };
+  // While a replay is open its state is drawn instead of the live game (which stays untouched).
+  const s = replayState() ?? sess.state;
+  thumbJobs.clear();
   if (isPortrait() !== drawnPortrait) {
     // The flat map turns with the screen, so aim back at the middle of the board.
     drawnPortrait = isPortrait();
     cam = { ...cam, x: null, y: null };
   }
   // Across the table: tip the camera over to the player whose turn it now is.
-  if (acrossTable() && sideShown !== s.current && !tilting) {
+  if (acrossTable() && sideShown !== s.current && !tilting && !replaying()) {
     if (setupPhase(s) || !tilt) sideShown = s.current;
     else setTimeout(() => tiltOver(s.current), 0);
   }
   if (!acrossTable()) sideShown = s.current;
   // Two players passing the phone: swing the board round when the turn changes hands.
-  if (mode === 'pvp' && table === 'pass' && !setupPhase(s) && facedFor !== s.current) {
+  if (mode === 'pvp' && table === 'pass' && !setupPhase(s) && facedFor !== s.current && !replaying()) {
     facedFor = s.current;
     cam = { ...cam, yaw: yawFor(s.current) };
     saveCam();
@@ -1264,13 +1401,18 @@ function draw() {
   const battle = !setupPhase(s);
 
   let info = message ?? '';
+  let unitCard = false;
   if (!info) {
     if (s.phase === 'deploy') info = t(lang, 'deployHint');
     else if (s.advance) info = `${t(lang, 'takeHex')}, ${t(lang, 'orKeep')}`;
     else if (s.phase === 'roll') info = `${playerName(lang, s.current)}: ${t(lang, 'rollFirst')}`;
-    else if (selected) info = unitInfo(s, selected);
+    else if (selected) (info = unitInfo(s, selected)), (unitCard = !!info);
     else if (s.phase === 'act') info = `${t(lang, 'pickUnit')}. ${t(lang, 'help')}`;
   }
+  // A campaign battle with a turn limit shows how far along it is.
+  const scen = scenarioById(settings.scenario);
+  const goal = scen?.hold ? campaignText(lang).turnOf(s.turn, scen.hold.turns) : scen && s.turn === 1 ? goalText(lang, scen) : '';
+  if (!message && !unitCard && goal && battle && s.phase !== 'over') info = `${goal} · ${info}`;
 
   const right = battle
     ? `<div class="points ${bump}"><b>${s.points}</b><span>${t(lang, 'points')}</span></div>`
@@ -1280,17 +1422,18 @@ function draw() {
 
   if (s.phase !== 'over') overHidden = false;
   // The result stays put while a new battle is being set up on top of the finished one.
-  const over = s.phase === 'over' && s.winner && !overHidden && !choosing && !setupOpen ? victory(s, s.winner) : '';
+  const over = s.phase === 'over' && s.winner && !overHidden && !choosing && !setupOpen && !replaying() ? victory(s, s.winner) : '';
 
   const html = `
     <div class="screen ${portrait ? 'portrait' : 'landscape'} ${withPanel() ? 'desktop' : desktop ? 'full' : portrait ? '' : 'phone'} ${message ? 'has-msg' : ''} ${s.current} ${upsideDown() ? 'flipped' : ''}">
-      <header class="hud">
+      <header class="hud" style="--fc:${factionOf(s.current).color}">
         <div class="who"><span class="crest">${factionOf(s.current).emblem}</span><span>${playerName(lang, s.current)}<small>${battle ? `${t(lang, 'turn')} ${s.turn}` : t(lang, 'setup')}</small></span></div>
         <div class="dice">${battle ? [0, 1, 2].slice(0, CONFIG.dice.count).map((i) => die(faces?.[i] ?? null, rolling)).join('') : ''}</div>
         ${right}
         ${desktop ? `<button data-act="fullscreen" class="ghost icon" title="${t(lang, 'fullscreen')}" aria-label="${t(lang, 'fullscreen')}">${icon('expand')}</button>
           <button data-act="panel" class="ghost icon" title="${panelOpen ? t(lang, 'hidePanel') : t(lang, 'showPanel')}" aria-label="${panelOpen ? t(lang, 'hidePanel') : t(lang, 'showPanel')}">${icon('panel')}</button>` : ''}
         ${withPanel() ? '' : `<button data-act="menu" class="ghost icon" aria-label="${t(lang, 'menu')}">${icon('menu')}</button>`}
+        ${battle ? tally(s) : ''}
       </header>
       <div class="stage-wrap">
         <div class="stage">${renderBoard(s, overlay(s), view(), fx)}</div>
@@ -1303,19 +1446,21 @@ function draw() {
           <button data-act="zoom-out" aria-label="Zoom out" ${cam.zoom <= ZOOM_MIN + 0.01 ? 'disabled' : ''}>${icon('minus')}</button>
         </div>
       </div>
-      <p class="info" id="info">${info}</p>
+      <p class="info ${unitCard ? 'unit' : ''}" id="info">${info}</p>
       <footer class="bar">${bar(s)}</footer>
       ${withPanel() ? `<aside class="side">${menuBody(s)}</aside>` : ''}
     </div>
     ${s.phase === 'draft' && !cover && !choosing && !setupOpen && !theirTurn(s) && !inviting && !pickingArmy ? draftSheet(s) : ''}
     ${inviting && net && !choosing && !setupOpen ? inviteScreen() : ''}
     ${pickingArmy && net && !choosing && !setupOpen ? armyPickScreen() : ''}
-    ${cover && s.phase !== 'over' && !choosing && !setupOpen ? passScreen(s) : ''}
-    ${choosing ? startScreen() : ''}
+    ${cover && s.phase !== 'over' && !choosing && !setupOpen && !replaying() ? passScreen(s) : ''}
+    ${choosing ? (campaignOpen ? campaignScreen(lang) : startScreen()) : ''}
     ${setupOpen ? setupScreen() : ''}
     ${over}
+    ${replayControls()}
     ${menuOpen && !withPanel() ? menu(s) : ''}`;
   morphInto(app, html, fx.from.size > 0 || fx.hits.length > 0 || fx.walks.size > 0);
+  if (thumbJobs.size) void fillThumbs();
   app.classList.toggle('upside', upsideDown());
   document.documentElement.lang = lang;
   document.title = t(lang, 'title');
@@ -1369,7 +1514,7 @@ function scheduleAi() {
   if (aiTimer !== null || rolling || cover || choosing || !aiTurn(s)) return;
   // Each computer attack gets its own beat: the target is marked first, then the hit lands,
   // so a volley never looks like one click doing several attacks at once.
-  const next = s.phase === 'act' ? aiNextAction(s) : null;
+  const next = s.phase === 'act' ? (tutorialOn() ? tutorialEnemy(s) : aiNextAction(s, undefined, settings.difficulty ?? 'normal')) : null;
   const strike = next && (next.kind === 'attack' || next.kind === 'shoot');
   // Let the last blow finish playing before the board is drawn again, or its arrow would be wiped mid-flight.
   let wait = Math.max(0, fxUntil - Date.now());
@@ -1388,7 +1533,7 @@ function scheduleAi() {
     const st = sess.state;
     if (rolling || cover || choosing || !aiTurn(st)) return;
     if (st.phase === 'roll') return roll();
-    const a = aiNextAction(st);
+    const a = tutorialOn() ? tutorialEnemy(st) : aiNextAction(st, undefined, settings.difficulty ?? 'normal');
     if (a) {
       run((x) => applyAi(x, a));
       if (a.kind === 'attack' || a.kind === 'shoot') selected = null;
@@ -1402,9 +1547,9 @@ function scheduleAi() {
 let camHome: Camera | null = null;
 let glideId = 0;
 /** Glides the camera smoothly to a spot and zoom. A touch or drag from the player takes over at once. */
-function glideTo(to: { x: number; y: number; zoom: number }, ms: number) {
+function glideTo(to: { x: number; y: number; zoom: number; pitch?: number }, ms: number) {
   const [fw, fh] = mapSize(portrait);
-  const from = { x: cam.x ?? fw / 2, y: cam.y ?? fh / 2, zoom: cam.zoom };
+  const from = { x: cam.x ?? fw / 2, y: cam.y ?? fh / 2, zoom: cam.zoom, pitch: cam.pitch };
   const id = ++glideId;
   const t0 = performance.now();
   const step = () => {
@@ -1414,6 +1559,7 @@ function glideTo(to: { x: number; y: number; zoom: number }, ms: number) {
     const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; // slow start, slow stop
     // Zoom glides evenly in "how many times bigger", so it doesn't rush at one end.
     cam = { ...cam, x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e, zoom: from.zoom * Math.pow(to.zoom / from.zoom, e) };
+    if (to.pitch !== undefined) cam = { ...cam, pitch: from.pitch + (to.pitch - from.pitch) * e };
     if (t < 1) {
       camFrame();
       requestAnimationFrame(step);
@@ -1525,7 +1671,7 @@ function roll(keep: string | null = null) {
     clearInterval(timer);
     rolling = false;
     rolledAt = Date.now();
-    run((s) => rollDice(s), true);
+    run((s) => rollDice(s, tutorialRng()), true);
   }, 700);
 }
 
@@ -1647,7 +1793,7 @@ app.addEventListener('click', (e) => {
     case 'more':
     case 'less': {
       const b = type as Buyable;
-      const n = Math.max(0, (draft[b] ?? 0) + (act === 'more' ? 1 : -1));
+      const n = Math.min(capOf(b), Math.max(0, (draft[b] ?? 0) + (act === 'more' ? 1 : -1)));
       const next = { ...draft, [b]: n };
       if (armyCost(next) <= budgetNow()) draft = next;
       message = null;
@@ -1711,6 +1857,10 @@ app.addEventListener('click', (e) => {
       if (field === 'map' && value === 'random') settings = { ...settings, mapSeed: settings.mapSeed && !wasRandom ? settings.mapSeed : newSeed(), mapStyle: settings.mapStyle ?? 'valley' };
       if (field === 'size') settings = { ...settings, size: value === 'large' ? 'large' : 'standard' };
       if (field === 'dice') settings = { ...settings, dice: value as DiceId };
+      // Weather and light: a new choice is rolled afresh when the battle starts.
+      if (field === 'time') settings = { ...settings, time: value as Settings['time'], sky: undefined };
+      if (field === 'weather') settings = { ...settings, weather: value as Settings['weather'], sky: undefined };
+      if (field === 'difficulty') settings = { ...settings, difficulty: value === 'easy' || value === 'hard' ? value : 'normal' };
       return render();
     }
     case 'faction': {
@@ -1725,9 +1875,22 @@ app.addEventListener('click', (e) => {
       if (side === 'red' && mode !== 'online') pickSide = 'blue';
       return render();
     }
-    case 'map-style':
-      settings = { ...settings, mapStyle: btn!.getAttribute('data-value') as MapStyle, mapSeed: settings.mapSeed ?? newSeed() };
+    case 'map-style': {
+      // A preset sets every knob back to its own amounts.
+      const { mapKnobs: _, ...rest } = settings;
+      settings = { ...rest, mapStyle: btn!.getAttribute('data-value') as MapStyle, mapSeed: settings.mapSeed ?? newSeed() };
       return render();
+    }
+    case 'land-open':
+      landOpen = !landOpen;
+      return render();
+    case 'map-knob': {
+      // Moving a knob starts from what is shown (the preset's amounts) and makes the land Custom.
+      const id = btn!.getAttribute('data-knob') as KnobId;
+      const base = settings.mapKnobs ?? PRESET_KNOBS[settings.mapStyle ?? 'valley'];
+      settings = { ...settings, mapKnobs: { ...base, [id]: Number(btn!.getAttribute('data-value')) } as MapKnobs, mapSeed: settings.mapSeed ?? newSeed() };
+      return render();
+    }
     case 'map-reroll':
       settings = { ...settings, mapSeed: newSeed() };
       return render();
@@ -1770,7 +1933,7 @@ app.addEventListener('click', (e) => {
       // Ending with points left that could still be used asks once before ending.
       const s = sess.state;
       const canStillAct = s.units.some((u) => u.owner === s.current) && spentUnits(s).size < s.units.filter((u) => u.owner === s.current).length;
-      if (!confirmEnd && s.points > 0 && canStillAct) {
+      if (!confirmEnd && !tutorialOn() && s.points > 0 && canStillAct) {
         confirmEnd = true;
         message = `${t(lang, 'pointsLeftWarn').replace('{n}', String(s.points))}`;
         sound('tick');
@@ -1852,15 +2015,47 @@ app.addEventListener('click', (e) => {
       showCube = !showCube;
       setFlag('boc-cube', showCube);
       return render();
+    case 'smartcam':
+      smartCam = !smartCam;
+      setFlag(SMART_KEY, smartCam);
+      return render();
     case 'music':
       toggleMusic();
+      return render();
+    case 'voices':
+      toggleVoices();
       return render();
     case 'mute':
       toggleMute();
       sound('tick');
       return render();
     case 'quick':
+      if (settings.scenario) delete settings.scenario; // a quick battle is never a campaign battle
       return restart(quickBattle());
+    case 'campaign':
+      choosing = true;
+      campaignOpen = true;
+      overHidden = false;
+      return render();
+    case 'campaign-back':
+      campaignOpen = false;
+      return render();
+    case 'scenario': {
+      // Starting a campaign battle: it replaces the current game, against the computer.
+      const sc = scenarioById(btn!.getAttribute('data-value') ?? '');
+      if (!sc) return;
+      if (net) leaveNet();
+      mode = 'ai';
+      campaignOpen = false;
+      setupOpen = false;
+      overHidden = false;
+      settings = scenarioSettings(sc);
+      applySettings(settings);
+      return restart(buildScenario(sc));
+    }
+    case 'tutorial':
+      menuOpen = false;
+      return startTutorial();
     case 'new':
       if (!confirmNew && sess.state.log.length + sess.state.units.length > 0) {
         confirmNew = true;
@@ -1899,6 +2094,143 @@ app.addEventListener('mouseover', (e) => {
   if (u && p) info.innerHTML = previewText(s, u.id, p);
 });
 
+// ---------- ground picking ----------
+// A tap on the board means the hex under the finger by the camera's own projection (raised hill tops included),
+// never the element hit: a tall figure or tree in front can't swallow it. Runs first (window, capture): when the
+// picked hex differs from the element tapped, the tap is sent on to that hex's own shape instead, so everything
+// after it (the tutorial's gate, the game's click handler) sees the right hex.
+let lastTouchAt = 0;
+app.addEventListener('touchstart', () => (lastTouchAt = Date.now()), { passive: true });
+const picked = new WeakSet<Event>();
+window.addEventListener(
+  'click',
+  (e) => {
+    if (picked.has(e)) return;
+    const el = e.target as Element;
+    const stage = el.closest?.('.stage');
+    if (!stage || !sess) return;
+    const [x, y] = stagePoint(e.clientX, e.clientY);
+    const touchTap = (e as PointerEvent).pointerType === 'touch' || Date.now() - lastTouchAt < 800;
+    const h = pickHex(sess.state, overlay(sess.state), view(), x, y, touchTap ? 22 : 0);
+    const was = el.closest('[data-col]');
+    if (h && was && Number(was.getAttribute('data-col')) === h.col && Number(was.getAttribute('data-row')) === h.row) return;
+    if (!h && !was) return;
+    // The hex's own shape on the board the finger touched (during a camera move that is the invisible anchor).
+    const board = stage.querySelector('svg.board.anchor') ?? stage.querySelector('svg.board:not(.live)') ?? stage.querySelector('svg.board');
+    const dest = h ? board?.querySelector(`.hex[data-col="${h.col}"][data-row="${h.row}"]`) : stage;
+    if (!dest) return;
+    e.stopImmediatePropagation();
+    e.preventDefault();
+    const again = new MouseEvent('click', { bubbles: true, cancelable: true, clientX: e.clientX, clientY: e.clientY, button: e.button });
+    picked.add(again);
+    dest.dispatchEvent(again);
+  },
+  true,
+);
+
+// ---------- smart camera ----------
+// On selecting a piece whose moves or targets are off screen or hidden behind things, the camera glides by the
+// smallest change that shows them: a pan, then zooming out, then up to 20° more top-down (yaw is kept). It never
+// moves during a drag or pinch, any touch or wheel cancels it, and it does not come back afterwards.
+
+/** Margins kept clear on screen: the zoom buttons sit bottom right, the camera button bottom left. */
+const LEAN_M = { l: 22, r: 54, t: 22, b: 34 };
+/** Tilt steps tried, as camera pitch (1 = 76°): 0, 5°, 10°, 15°, 20° towards top-down. */
+const LEAN_TILTS = [0, 5, 10, 15, 20].map((d) => d / 76);
+
+function smartCameraCheck() {
+  const sel = selected;
+  if (sel === smartFor) return;
+  smartFor = sel;
+  if (!sel || !smartCam) return;
+  // After the tap's own render has settled.
+  setTimeout(() => {
+    if (selected === sel) leanIn();
+  }, 30);
+}
+
+/** Runs `fn` with the camera set to `c`, then puts the real camera back. */
+function withCam<T>(c: Camera, fn: () => T): T {
+  const keep = cam;
+  cam = c;
+  try {
+    return fn();
+  } finally {
+    cam = keep;
+  }
+}
+
+function leanFits(b: number[]): boolean {
+  const [vw, vh] = stageSize;
+  return b[0] >= LEAN_M.l - 1 && b[2] <= vw - LEAN_M.r + 1 && b[1] >= LEAN_M.t - 1 && b[3] <= vh - LEAN_M.b + 1;
+}
+
+/** The smallest zoom-out and pan that bring the targets inside the margins, starting from camera `c`. */
+function leanFit(s: GameState, o: Overlay, c: Camera): Camera | null {
+  const [vw, vh] = stageSize;
+  const [aw, ah] = [vw - LEAN_M.l - LEAN_M.r, vh - LEAN_M.t - LEAN_M.b];
+  let cur = c;
+  for (let i = 0; i < 10; i++) {
+    const b = withCam(cur, () => targetFrame(s, o, view(), false).box);
+    if (!b) return null;
+    const [bw, bh] = [b[2] - b[0], b[3] - b[1]];
+    if (bw > aw || bh > ah) {
+      const z = Math.max(ZOOM_MIN, cur.zoom * Math.min(aw / bw, ah / bh) * 0.96);
+      if (z >= cur.zoom - 1e-3) return cur; // already as far out as it goes
+      cur = withCam(cur, () => (zoomAt(z / cam.zoom, vw / 2, vh / 2), cam));
+      continue;
+    }
+    const dX = b[0] < LEAN_M.l ? LEAN_M.l - b[0] : b[2] > vw - LEAN_M.r ? vw - LEAN_M.r - b[2] : 0;
+    const dY = b[1] < LEAN_M.t ? LEAN_M.t - b[1] : b[3] > vh - LEAN_M.b ? vh - LEAN_M.b - b[3] : 0;
+    if (Math.abs(dX) < 1 && Math.abs(dY) < 1) return cur;
+    // A little beyond the edge so perspective doesn't leave the last hex just outside.
+    cur = withCam(cur, () => (panBy(dX * 1.05, dY * 1.05), cam));
+  }
+  return cur;
+}
+
+/** Where the camera should go for the selected piece, or null if everything already shows. */
+function leanPlan(s: GameState, o: Overlay): Camera | null {
+  const okCover = (f: { total: number; covered: number }) => f.covered <= Math.floor(f.total * 0.2);
+  const now = targetFrame(s, o, view(), true);
+  if (!now.box) return null;
+  const onScreen = leanFits(now.box);
+  if (onScreen && okCover(now)) return null;
+  let best: { c: Camera; covered: number } | null = null;
+  for (const dp of LEAN_TILTS) {
+    if (dp > 0 && (!tilt || cam.pitch - dp < -1e-6)) break;
+    const c = leanFit(s, o, { ...cam, pitch: clampPitch(cam.pitch - dp) });
+    if (!c) continue;
+    const f = withCam(c, () => targetFrame(s, o, view(), true));
+    if (!f.box || !leanFits(f.box)) {
+      if (!best && !onScreen) best = { c, covered: f.covered };
+      continue;
+    }
+    if (okCover(f)) return c;
+    if (!best || f.covered < best.covered) best = { c, covered: f.covered };
+  }
+  // Nothing clears the view entirely: move only if it is clearly better than now.
+  if (!best) return null;
+  if (onScreen && best.covered >= now.covered) return null;
+  return best.c;
+}
+
+function leanIn() {
+  const s = sess.state;
+  if (!smartCam || drag || touch || tilting || camOverlay || cubeDrag || replaying() || aiTurn(s) || notMine(s) || s.phase !== 'act') return;
+  const o = overlay(s);
+  if (!o.reach.size && !o.targets.size) return;
+  const to = leanPlan(s, o);
+  if (!to) return;
+  const [fw, fh] = mapSize(portrait);
+  glideTo({ x: to.x ?? fw / 2, y: to.y ?? fh / 2, zoom: to.zoom, pitch: to.pitch }, 480);
+  leanGlide = glideId;
+}
+// A wheel or trackpad move takes over from a smart glide at once (touch and drag already stop any glide).
+app.addEventListener('wheel', () => {
+  if (leanGlide === glideId) ++glideId;
+}, { passive: true, capture: true });
+
 // ---------- camera moves without a full re-render ----------
 // While the camera moves only the board is redrawn, once per frame, with the highlights
 // frozen as they were when the move began.
@@ -1906,7 +2238,7 @@ app.addEventListener('mouseover', (e) => {
 let camOverlay: Overlay | null = null;
 let camQueued = false;
 function camFrame() {
-  if (!camOverlay) camOverlay = overlay(sess.state);
+  if (!camOverlay) camOverlay = overlay(replayState() ?? sess.state);
   if (camQueued) return;
   camQueued = true;
   requestAnimationFrame(() => {
@@ -1922,7 +2254,7 @@ function camFrame() {
       anchor?.classList.add('anchor');
     }
     const tmp = document.createElement('div');
-    tmp.innerHTML = renderBoard(sess.state, camOverlay, view(), NO_EFFECTS);
+    tmp.innerHTML = renderBoard(replayState() ?? sess.state, camOverlay, view(), NO_EFFECTS);
     const live = tmp.firstElementChild as SVGElement;
     live.classList.add('live');
     const old = st.querySelector('svg.board.live');
@@ -2224,6 +2556,82 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => undefined);
 }
 
+// ---------- end-of-battle replay (src/ui/replay.ts) ----------
+// The replay borrows this board, its effects and camera; the live game and its save are never changed.
+let camBeforeReplay: Camera | null = null;
+initReplay({
+  live: () => sess.state,
+  lang: () => lang,
+  render,
+  settle: (st) => {
+    prevLog = st.log.length;
+    prevPos = new Map(st.units.map((u) => [u.id, u.pos]));
+  },
+  follow: (hexes, ms) => {
+    const pts = hexes.map((h) => hexOnMap(h, { portrait }));
+    const x = pts.reduce((a, p) => a + p[0], 0) / pts.length;
+    const y = pts.reduce((a, p) => a + p[1], 0) / pts.length;
+    const [fw, fh] = mapSize(portrait);
+    const zoom = Math.min(ZOOM_MAX, Math.max(cam.zoom, 1.4));
+    // Gentle: only move when the action is away from the middle of what is on screen.
+    if (Math.abs(zoom - cam.zoom) < 0.02 && Math.hypot(x - (cam.x ?? fw / 2), y - (cam.y ?? fh / 2)) < Math.min(fw, fh) / (3.2 * zoom)) return;
+    glideTo({ x, y, zoom }, Math.max(250, ms));
+  },
+  begin: () => {
+    camBeforeReplay = { ...cam };
+    selected = null;
+    menuOpen = false;
+  },
+  end: () => {
+    ++glideId; // stop any glide still running
+    if (camBeforeReplay) cam = camBeforeReplay;
+    camBeforeReplay = null;
+    saveCam();
+    overHidden = false;
+  },
+});
+
+// ---------- first-battle tutorial (src/ui/tutorial.ts) ----------
+// A separate in-memory session against a scripted enemy; everything below is put back afterwards.
+initTutorial({
+  app,
+  fresh: !saved && !new URLSearchParams(location.search).has('g') && !new URLSearchParams(location.search).has('map'),
+  lang: () => lang,
+  state: () => sess.state,
+  selected: () => selected,
+  hadGame: () => !choosing && sess.state.log.length + sess.state.units.length > 0,
+  enter: (state) => {
+    const snap = { sess, settings, mode, cover, choosing, setupOpen, overHidden, cam: { ...cam } };
+    mode = 'ai';
+    cover = choosing = setupOpen = menuOpen = overHidden = confirmEnd = confirmNew = dangerOn = false;
+    selected = pending = null;
+    message = null;
+    cam = { ...CAM_DEFAULT };
+    sess = startSession(state);
+    prevLog = state.log.length;
+    prevPos = new Map(state.units.map((u) => [u.id, u.pos]));
+    render();
+    return () => {
+      ({ sess, settings, mode, cover, choosing, setupOpen, overHidden } = snap);
+      cam = snap.cam;
+      selected = pending = null;
+      message = null;
+      camHome = null;
+      applySettings(settings);
+      prevLog = sess.state.log.length;
+      prevPos = new Map(sess.state.units.map((u) => [u.id, u.pos]));
+      saveCam();
+      render();
+    };
+  },
+  quickBattle: () => {
+    // Straight into a real battle against the computer.
+    if (net) leaveNet();
+    mode = 'ai';
+    restart(quickBattle());
+  },
+});
+
 render();
 loadGround(() => render());
 
@@ -2253,6 +2661,11 @@ if (import.meta.env.DEV) {
   const q = new URLSearchParams(location.search);
   const qMap = q.get('map') as MapId | null;
   if (qMap) {
+    // Random maps: &seed=123&style=valley&knobs=woods,water,rivers,hills,villages,rocks (step numbers).
+    if (qMap === 'random') {
+      const kn = q.get('knobs')?.split(',').map(Number);
+      settings = { ...settings, mapSeed: Number(q.get('seed') ?? 1), mapStyle: (q.get('style') as MapStyle) ?? 'valley', mapKnobs: kn ? (Object.fromEntries(KNOB_IDS.map((id, i) => [id, kn[i] ?? 0])) as unknown as MapKnobs) : undefined };
+    }
     const dev = (window as unknown as { boc: { loadMap: (m: MapId, size?: 'standard' | 'large') => void } }).boc;
     dev.loadMap(qMap, q.get('size') === 'large' ? 'large' : 'standard');
     const moves = (q.get('put') ?? '').split(',').filter(Boolean).map((t) => t.split(':'));

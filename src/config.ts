@@ -29,9 +29,22 @@ export type UnitTypeId =
   | 'cannon'
   // Egypt: a two-horse war chariot with an archer aboard.
   | 'chariot'
+  // Champions: each army's one elite warrior (foot, mounted, and the Cowboys' gunfighter), 3 hits to kill.
+  | 'champion'
+  | 'championRider'
+  | 'championGun'
   // Pirates: cutlass boarders hit hard and fall fast; bombers throw powder kegs and grenades a short way.
   | 'boarder'
-  | 'bomber';
+  | 'bomber'
+  // Aztecs: jaguar warriors hit hard and take two blows; atlatl men throw darts 2-4 hexes.
+  | 'jaguar'
+  | 'atlatl'
+  // Zulus: impi with the stabbing spear hit hard and stop cavalry; throwers hurl assegais 2-3 hexes.
+  | 'impi'
+  | 'thrower';
+
+export type TimeOfDay = 'day' | 'dusk' | 'night';
+export type WeatherKind = 'clear' | 'rain' | 'snow' | 'fog';
 
 export type TerrainId = 'plain' | 'forest' | 'river' | 'bridge' | 'ford' | 'hill' | 'swamp' | 'lake' | 'wall' | 'tower' | 'gate' | 'house';
 
@@ -113,6 +126,12 @@ export interface GameConfig {
     boulders?: [number, number][];
     /** Extra army points for one side on this map, as a share of the budget (0.3 = 30% more). */
     budgetBonus?: Partial<Record<'red' | 'blue', number>>;
+    /** biomes: the land this map lies in (src/ui/biomes.ts; none = the meadow). Only the pictures change. */
+    biome?: string;
+    /** biomes: the carved piece a house or boulder hex shows, by "col,row" (a saloon is still a house). */
+    art?: Record<string, string>;
+    /** biomes: tree kinds for this map's forests (default: the biome's). */
+    trees?: string[];
   };
   terrain: Record<TerrainId, TerrainRules>;
   /** Points each turn: roll `count` dice of `sides` sides, or a fixed number when `fixed` is set (no luck). */
@@ -146,6 +165,8 @@ export interface GameConfig {
     budget: number;
     /** Price of each piece ("power"). The King is not bought: every army gets exactly one. */
     cost: Record<Exclude<UnitTypeId, 'king'>, number>;
+    /** Most of one kind of piece an army may buy (none listed = no limit). */
+    max?: Partial<Record<Exclude<UnitTypeId, 'king'>, number>>;
   };
   deploy: {
     /** How many columns from your own edge you may set up in. */
@@ -189,7 +210,18 @@ export interface GameConfig {
     unitSpeeds: boolean;
     /** Top speed: hexes a foot piece may move in one turn (riders: one less, x2 heavy / x3 light). null = no limit. */
     runLimit: number | null;
+    /** Weather rules (only matter when the battle has that weather; off = the weather is only a look).
+     *  Rain: shooters reach `weatherRules.rainRangeLoss` hexes less. */
+    rainRange: boolean;
+    /** Snow: riders are slower (one hex less per point, or +1 point a hex with "different speeds"). */
+    snowCavalry: boolean;
+    /** Fog: no shot reaches further than `weatherRules.fogMaxRange` hexes. */
+    fogCap: boolean;
   };
+  /** The battle's light and weather (set from the battle settings; none = a clear day). */
+  weather?: { time: TimeOfDay; kind: WeatherKind };
+  /** Numbers for the weather rules above. */
+  weatherRules?: { rainRangeLoss: number; fogMaxRange: number; snowRiderSlow: number };
   /** Quick-battle army for Red (and tests). Blue gets the mirror image (col -> cols - 1 - col). */
   setup: Placement[];
 }
@@ -258,6 +290,16 @@ export const CONFIG: GameConfig = {
     // Pirates: boarders fight like berserkers; bombers throw a grenade a short way that hits for 2.
     boarder: { moveCost: 3, attack: 2, hp: 1, ranged: null, heavy: false },
     bomber: { moveCost: 3, attack: 0, hp: 1, ranged: { cost: 1, minRange: 2, maxRange: 3, damage: 2 }, heavy: false },
+    // Champions (one per army): a towering elite warrior on foot, on horseback, and the Cowboys' bounty hunter.
+    champion: { moveCost: 3, attack: 2, hp: 3, ranged: null, heavy: true },
+    championRider: { moveCost: 1, speed: 3, attack: 2, hp: 3, ranged: null, heavy: true, mounted: true },
+    championGun: { moveCost: 3, attack: 1, hp: 3, ranged: { cost: 1, minRange: 2, maxRange: 4, damage: 2 }, heavy: false },
+    // Aztecs: jaguar warriors with the obsidian club; atlatl men throw darts.
+    jaguar: { moveCost: 3, attack: 2, hp: 2, ranged: null, heavy: true },
+    atlatl: { moveCost: 3, attack: 1, hp: 1, ranged: { cost: 1, minRange: 2, maxRange: 4, damage: 1 }, heavy: false },
+    // Zulus: impi with the short stabbing spear (double damage against riders); throwers hurl assegais.
+    impi: { moveCost: 3, attack: 2, hp: 1, ranged: null, heavy: false, antiCavalry: true },
+    thrower: { moveCost: 3, attack: 1, hp: 1, ranged: { cost: 1, minRange: 2, maxRange: 3, damage: 1 }, heavy: false },
     cowboy: { moveCost: 1, speed: 3, attack: 1, hp: 1, ranged: { cost: 1, minRange: 2, maxRange: 3, damage: 1 }, heavy: false, mounted: true },
     // Melee for archers is an open question; 0 = they only shoot.
     archer: {
@@ -289,10 +331,15 @@ export const CONFIG: GameConfig = {
     toughness: 1,
     unitSpeeds: false,
     runLimit: 6, // 6 per David, 2026-11-17 (3, then 4, felt too strict)
+    rainRange: false,
+    snowCavalry: false,
+    fogCap: false,
   },
+  weatherRules: { rainRangeLoss: 1, fogMaxRange: 4, snowRiderSlow: 1 },
   army: {
     budget: 50,
-    cost: { lightInfantry: 1, heavyInfantry: 2, archer: 3, lightCavalry: 3, heavyCavalry: 4, horseArcher: 4, samurai: 4, ashigaru: 1, gunslinger: 3, rifleman: 3, cowboy: 4, deputy: 2, berserker: 3, axeThrower: 3, ballista: 5, lineInfantry: 3, skirmisher: 3, cannon: 5, chariot: 5, boarder: 3, bomber: 4 },
+    cost: { lightInfantry: 1, heavyInfantry: 2, archer: 3, lightCavalry: 3, heavyCavalry: 4, horseArcher: 4, samurai: 4, ashigaru: 1, gunslinger: 3, rifleman: 3, cowboy: 4, deputy: 2, berserker: 3, axeThrower: 3, ballista: 5, lineInfantry: 3, skirmisher: 3, cannon: 5, chariot: 5, boarder: 3, bomber: 4, jaguar: 4, atlatl: 3, impi: 3, thrower: 3, champion: 6, championRider: 7, championGun: 7 },
+    max: { champion: 1, championRider: 1, championGun: 1 },
   },
   // 5 columns leave room for the largest possible army (50 light infantry and the King).
   deploy: { depth: 5 },

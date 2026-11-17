@@ -22,7 +22,8 @@ export interface Unit {
 /** draft = buying an army, deploy = placing it in secret, then the battle: roll / act. */
 export type Phase = 'draft' | 'deploy' | 'roll' | 'act' | 'over';
 
-export type WinReason = 'kingKilled' | 'kingCaptured' | 'routed';
+/** 'held': a campaign battle's turn limit ran out and the holding side wins. */
+export type WinReason = 'kingKilled' | 'kingCaptured' | 'routed' | 'held';
 
 export type LogEntry =
   | { kind: 'roll'; turn: number; player: Player; dice: number[]; total: number; reroll?: boolean }
@@ -71,8 +72,13 @@ export interface GameState {
   startValue?: Record<Player, number>;
   /** Set right after a melee kill when advancing is optional: who may step where. */
   advance: { unitId: string; to: Hex } | null;
+  /** The battle as it stood just before its first roll (board and log left out), so it can be replayed. */
+  start?: BattleStart;
   log: LogEntry[];
 }
+
+/** A battle's opening position; `logAt` is how long the log was then. Replay = this + the log after it. */
+export type BattleStart = Omit<GameState, 'board' | 'log' | 'start'> & { logAt: number };
 
 export type ErrorCode =
   | 'wrongPhase'

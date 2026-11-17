@@ -32,6 +32,63 @@ interface StyleWeights {
   fords: number;
 }
 
+/** "Customize land": rough amounts the player can pick, Minecraft world-settings style. Each is a step index. */
+export interface MapKnobs {
+  /** few / some / many / dense */
+  woods: 0 | 1 | 2 | 3;
+  /** dry / ponds / lakes */
+  water: 0 | 1 | 2;
+  /** none / one / two */
+  rivers: 0 | 1 | 2;
+  /** none / some / many: raised ridges and plateaus */
+  hills: 0 | 1 | 2;
+  /** none / few / many */
+  villages: 0 | 1 | 2;
+  /** few / many */
+  rocks: 0 | 1;
+}
+export type KnobId = keyof MapKnobs;
+/** How many steps each knob has (in order). */
+export const KNOB_STEPS: Record<KnobId, number> = { woods: 4, water: 3, rivers: 3, hills: 3, villages: 3, rocks: 2 };
+export const KNOB_IDS = Object.keys(KNOB_STEPS) as KnobId[];
+/** Where each preset sits on the knobs (roughly: a preset still rolls some things, like whether the forest has a river). */
+export const PRESET_KNOBS: Record<MapStyle, MapKnobs> = {
+  valley: { woods: 1, water: 1, rivers: 1, hills: 0, villages: 0, rocks: 0 },
+  forest: { woods: 3, water: 0, rivers: 1, hills: 0, villages: 0, rocks: 0 },
+  lakes: { woods: 0, water: 2, rivers: 0, hills: 0, villages: 0, rocks: 0 },
+  plains: { woods: 0, water: 0, rivers: 0, hills: 0, villages: 0, rocks: 1 },
+  hamlets: { woods: 1, water: 0, rivers: 1, hills: 0, villages: 1, rocks: 0 },
+};
+/** A saved or received set of knobs, checked; anything unknown or out of range means "no knobs" (the preset). */
+export function cleanKnobs(k: unknown): MapKnobs | undefined {
+  if (!k || typeof k !== 'object') return undefined;
+  const o = k as Record<string, unknown>;
+  const out = {} as Record<KnobId, number>;
+  for (const id of KNOB_IDS) {
+    const v = o[id];
+    if (typeof v !== 'number' || !Number.isInteger(v) || v < 0 || v >= KNOB_STEPS[id]) return undefined;
+    out[id] = v;
+  }
+  return out as unknown as MapKnobs;
+}
+
+/** The generator's weights for a set of knobs. */
+function weightsOf(k: MapKnobs): StyleWeights & { hills: [number, number] } {
+  return {
+    rivers: k.rivers === 0 ? [1, 0, 0] : k.rivers === 1 ? [0, 1, 0] : [0, 0, 1],
+    forest: [0.05, 0.12, 0.25, 0.46][k.woods],
+    grain: [0.3, 0.25, 0.3, 0.42][k.woods],
+    lanes: [0, 0, 1, 3][k.woods],
+    lakes: ([[0, 0], [1, 2], [2, 3]] as [number, number][])[k.water],
+    lakeSize: ([[0, 0], [2, 4], [4, 8]] as [number, number][])[k.water],
+    villages: ([[0, 0], [1, 1], [2, 3]] as [number, number][])[k.villages],
+    boulders: ([[0, 2], [3, 5]] as [number, number][])[k.rocks],
+    crossings: [2, 3],
+    fords: 0.35,
+    hills: ([[0, 0], [1, 2], [3, 4]] as [number, number][])[k.hills],
+  };
+}
+
 const STYLES: Record<MapStyle, StyleWeights> = {
   // Meadow, a river, a few copses.
   valley: { rivers: [0, 0.85, 0.15], forest: 0.13, grain: 0.24, lanes: 0, lakes: [0, 1], lakeSize: [2, 4], villages: [0, 0], boulders: [1, 2], crossings: [2, 3], fords: 0.35 },
@@ -102,27 +159,28 @@ const styleSalt = (s: MapStyle) => [...s].reduce((h, ch) => Math.imul(h ^ ch.cha
 
 // ---------- the generator ----------
 
-type Cell = 'plain' | 'forest' | 'river' | 'bridge' | 'ford' | 'lake' | 'house';
+type Cell = 'plain' | 'forest' | 'river' | 'bridge' | 'ford' | 'lake' | 'house' | 'hill';
 
 /** Deploy depth for a board size (the same as applySettings uses). */
 export const deployDepth = (size: BoardSize) => (size === 'large' ? 7 : 5);
 
 /** A fair random map: one half generated from the seed, the other half its mirror image.
  *  If a roll leaves some deploy hex cut off from the enemy side, the next seed is tried. */
-export function generateMap(seed: number, style: MapStyle, size: BoardSize = 'standard'): Board {
+export function generateMap(seed: number, style: MapStyle, size: BoardSize = 'standard', knobs?: MapKnobs): Board {
   for (let i = 0; i < 40; i++) {
-    const b = attempt((seed + i) >>> 0, style, size);
+    const b = attempt((seed + i) >>> 0, style, size, false, knobs);
     if (b) return b;
   }
   // Practically unreachable: an open field always works.
   return attempt(seed >>> 0, 'plains', size, true)!;
 }
 
-function attempt(seed: number, style: MapStyle, size: BoardSize, bare = false): Board | null {
+function attempt(seed: number, style: MapStyle, size: BoardSize, bare = false, knobs?: MapKnobs): Board | null {
   const [cols, rows] = size === 'large' ? [33, 19] : [25, 15];
   const mid = (cols - 1) / 2;
   const depth = deployDepth(size);
-  const W = STYLES[style];
+  // Without knobs a style keeps its own weights exactly, so saved games rebuild the very same map.
+  const W: StyleWeights & { hills?: [number, number] } = knobs ? weightsOf(knobs) : STYLES[style];
   const rng = mulberry(seed ^ styleSalt(style));
   const between = (lo: number, hi: number) => lo + Math.floor(rng() * (hi - lo + 1));
   const ns = (seed * 7919) ^ styleSalt(style);
@@ -244,6 +302,55 @@ function attempt(seed: number, style: MapStyle, size: BoardSize, bare = false): 
     for (const h of all)
       if (at(h) === 'plain' && h.col >= depth + 1 && h.row >= 2 && h.row <= rows - 3 && !keepOpen.has(key(h)) && !nearRiver(h, 2) && near(h).filter((n) => at(n) === 'lake').length >= 3) set(h, 'lake');
 
+  // 2b. Hills (custom land only): ridges that follow the high ground of the height noise, each a winding spine a
+  //     few hexes long, then thickened where the ground is high into a plateau. Never on a river or a crossing's
+  //     banks, never in a deploy zone, never touching a lake (a raised edge straight into water looks wrong).
+  const ridgeCount = bare || !W.hills ? 0 : between(W.hills[0], W.hills[1]) + (size === 'large' && W.hills[1] > 0 ? 1 : 0);
+  const spines: Hex[] = [];
+  const hillOk = (h: Hex) =>
+    h.col >= depth + 1 && at(h) === 'plain' && !keepOpen.has(key(h)) && !nearRiver(h, 1) && !near(h).some((n) => at(n) === 'lake' || riverAt(n));
+  for (let i = 0; i < ridgeCount; i++) {
+    const options = all.filter((h) => h.col >= depth + 2 && h.row >= 1 && h.row <= rows - 2 && hillOk(h) && spines.every((o) => hexDist(o, h) >= 5));
+    if (!options.length) break;
+    options.sort((a, b) => height(b.col, b.row) - height(a.col, a.row));
+    let cur = options[Math.floor(rng() * Math.min(5, options.length))];
+    spines.push(cur);
+    const ridge = [cur];
+    set(cur, 'hill');
+    // The spine keeps roughly one heading (ridges run, they don't curl up), drifting towards higher ground.
+    let heading = Math.floor(rng() * 6);
+    const length = between(3, 6) + (size === 'large' ? 1 : 0);
+    for (let step = 1; step < length; step++) {
+      const ns = neighbors(cur);
+      let best: Hex | null = null;
+      let bestScore = -Infinity;
+      for (let d = 0; d < 6; d++) {
+        const n = ns[d];
+        if (!inHalf(n) || !hillOk(n)) continue;
+        const turn = Math.min((d - heading + 6) % 6, (heading - d + 6) % 6);
+        if (turn > 1) continue;
+        const score = height(n.col, n.row) - turn * 0.08 + rng() * 0.1;
+        if (score > bestScore) [best, bestScore] = [n, score];
+      }
+      if (!best) break;
+      heading = ns.findIndex((n) => n.col === best!.col && n.row === best!.row);
+      cur = best;
+      set(cur, 'hill');
+      ridge.push(cur);
+    }
+    // Shoulders: the higher neighbours of the spine join it, so the ridge is one to three hexes wide.
+    const want = Math.round(ridge.length * (0.6 + rng() * 0.6));
+    const shoulders = [...new Map(ridge.flatMap((h) => near(h)).filter(hillOk).map((h) => [key(h), h])).values()].sort((a, b) => height(b.col, b.row) - height(a.col, a.row));
+    for (const h of shoulders.slice(0, want)) set(h, 'hill');
+  }
+  // Tidy: a lone hill hex reads as a mistake (it joins the meadow); a meadow hex mostly ringed by hill joins the hill.
+  if (ridgeCount)
+    for (const h of all) {
+      const n = near(h).filter((m) => at(m) === 'hill').length;
+      if (at(h) === 'hill' && n === 0) set(h, 'plain');
+      else if (at(h) === 'plain' && n >= 4 && hillOk(h)) set(h, 'hill');
+    }
+
   // 3. Woods: the leafiest part of the open ground, so trees gather into copses instead of salt and pepper.
   // Woods thin out right at the deploy line, so the armies don't set up against a wall of trees.
   const wooded = (h: Hex) => leafy(h.col, h.row) * 0.75 + moist(h.col, h.row) * 0.25 - (h.col === depth ? 0.12 : 0);
@@ -292,12 +399,12 @@ function attempt(seed: number, style: MapStyle, size: BoardSize, bare = false): 
   const houses: Hex[] = [];
   const greens: Hex[] = [];
   for (let i = 0; i < villages; i++) {
-    const options = all.filter((h) => h.col >= depth + 2 && h.col <= mid - 1 && h.row >= 2 && h.row <= rows - 3 && at(h) !== 'lake' && !riverAt(h) && !nearRiver(h, 2) && !keepOpen.has(key(h)) && greens.every((g) => hexDist(g, h) >= 6));
+    const options = all.filter((h) => h.col >= depth + 2 && h.col <= mid - 1 && h.row >= 2 && h.row <= rows - 3 && at(h) !== 'lake' && at(h) !== 'hill' && !riverAt(h) && !nearRiver(h, 2) && !keepOpen.has(key(h)) && greens.every((g) => hexDist(g, h) >= 6));
     if (!options.length) break;
     const green = options[Math.floor(rng() * options.length)];
     greens.push(green);
     // The houses stand on the second ring around the green, never next to each other.
-    const spots = ring(green, 2).filter((h) => hexDist(h, green) === 2 && field(h) && h.col < mid && h.row >= 1 && h.row <= rows - 2 && !riverAt(h) && at(h) !== 'lake' && !keepOpen.has(key(h)));
+    const spots = ring(green, 2).filter((h) => hexDist(h, green) === 2 && field(h) && h.col < mid && h.row >= 1 && h.row <= rows - 2 && !riverAt(h) && at(h) !== 'lake' && at(h) !== 'hill' && !keepOpen.has(key(h)));
     const want = between(3, 4);
     for (const h of shuffle(spots, rng)) {
       if (houses.filter((x) => hexDist(x, green) <= 2).length >= want) break;
@@ -311,7 +418,7 @@ function attempt(seed: number, style: MapStyle, size: BoardSize, bare = false): 
 
   // 5. Pockets of open ground nobody can walk to: a bigger one (or one holding a crossing) gets a lane cut to it
   //    through the trees, a tiny one is filled in (it would look like a mistake).
-  const passable = (t: Cell) => t === 'plain' || t === 'bridge' || t === 'ford';
+  const passable = (t: Cell) => t === 'plain' || t === 'bridge' || t === 'ford' || t === 'hill';
   for (let pass = 0; pass < 12; pass++) {
     const reach = new Set<string>();
     const todo: Hex[] = [];
@@ -330,7 +437,7 @@ function attempt(seed: number, style: MapStyle, size: BoardSize, bare = false): 
       const path = lane(lost, (h) => reach.has(key(h)), near, at, (h) => wooded(h) * 3);
       if (!path.length) return null;
       for (const h of path) if (at(h) === 'forest') set(h, 'plain');
-    } else for (const h of pocket) set(h, near(h).some((n) => at(n) === 'lake') ? 'lake' : 'forest');
+    } else for (const h of pocket) set(h, near(h).some((n) => at(n) === 'lake') && h.row > 0 && h.row < rows - 1 ? 'lake' : 'forest');
   }
 
   // 6. Boulder fields: scenery only, a few hexes of stones on open ground.
@@ -366,6 +473,7 @@ function attempt(seed: number, style: MapStyle, size: BoardSize, bare = false): 
     forests: list('forest'),
     lakes: list('lake'),
     houses: list('house'),
+    ...(list('hill').length ? { hills: list('hill') } : {}),
     boulders: stones,
   };
 }
@@ -415,7 +523,7 @@ function lane(from: Hex, done: (h: Hex) => boolean, near: (h: Hex) => Hex[], at:
 
 /** Every open hex of each deploy zone can walk to the enemy's deploy zone, and each zone has room for an army. */
 function fair(full: Cell[][], cols: number, rows: number, depth: number): boolean {
-  const passable = (t: Cell) => t === 'plain' || t === 'bridge' || t === 'ford';
+  const passable = (t: Cell) => t === 'plain' || t === 'bridge' || t === 'ford' || t === 'hill';
   const inB = (h: Hex) => h.col >= 0 && h.col < cols && h.row >= 0 && h.row < rows;
   // Flood from one corner of Red's zone: the whole of both zones must be reached.
   if (!passable(full[0][0])) return false;

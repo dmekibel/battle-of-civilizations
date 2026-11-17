@@ -3,7 +3,7 @@
 // In 2.5D the map is then turned and tilted by the camera like a table seen from a chair:
 // far rows are squashed and smaller, and pieces, trees and bridges stand up from the ground.
 
-import { CONFIG, type GameConfig, type TerrainId, type UnitTypeId } from '../config';
+import { CONFIG, type GameConfig, type TerrainId, type TimeOfDay, type UnitTypeId, type WeatherKind } from '../config';
 import type { AttackPreview, GameState, Hex, Player, Reach } from '../engine';
 import { maxHp, neighbors } from '../engine';
 import { sides } from './factions';
@@ -147,21 +147,23 @@ function lens(v: View, T: Terraces | null = null): Lens {
 // ---------- the painted ground ----------
 // One picture of the whole board (grass, river, bridges, forest shade, the table around it), made by _art/map_build.py.
 // It covers the flat map plus GROUND_M units all round and is laid under the hexes with the camera's own projection.
-const GROUND_M = 70;
-export const groundUrl = () => `${import.meta.env.BASE_URL}map/ground${SUF()}.webp?v=11`;
+export const GROUND_M = 70;
+export const groundUrlFor = (large: boolean) => `${import.meta.env.BASE_URL}map/ground${large ? '-large' : ''}.webp?v=11`;
+export const groundUrl = () => weatherPic(groundUrlFor(LARGE()));
 /** Close-up grass (grass-detail.webp, one seamless tile): where the field lies in the ground picture, in map units. */
 export const DETAIL_URL = `${import.meta.env.BASE_URL}map/grass-detail.webp?v=1`;
 export const detailBox = (): number[] => (syncSize(), [GROUND_M - 12, GROUND_M - 12, W + 24, H + 24]);
 /** The river, each bridge and each ford are their own pictures laid over the ground, so every map places its own.
  *  Positions and sizes are in the ground picture's own units (map units, origin at the picture's top left). */
 export interface GroundPart { key: string; src: string; x: number; y: number; w: number; h: number }
-const PART = (name: string) => `${import.meta.env.BASE_URL}map/${name}.webp?v=1`;
+export const PART = (name: string) => `${import.meta.env.BASE_URL}map/${name}.webp?v=2`;
 export function groundParts(b: GameConfig['board']): GroundPart[] {
   const out: GroundPart[] = [];
   // Hills, swamps and lakes are painted per map as one see-through picture the size of the ground.
   syncSize();
   const [gw, gh] = groundSize();
-  if (b.overlay && !raisedHills(b)) out.push({ key: `over-${b.overlay}${SUF()}`, src: PART(`over-${b.overlay}${SUF()}`), x: 0, y: 0, w: gw, h: gh });
+  // Lakes alone are always painted on the fly: the old painted lake layer showed sand between its hexes.
+  if (b.overlay && !raisedHills(b) && (b.hills?.length || b.swamps?.length)) out.push({ key: `over-${b.overlay}${SUF()}`, src: PART(`over-${b.overlay}${SUF()}`), x: 0, y: 0, w: gw, h: gh });
   // Random maps have no painted overlay: their lakes are painted here, in the same style.
   else if (b.lakes?.length) {
     const lp = lakePart(b.lakes);
@@ -187,7 +189,7 @@ export function groundParts(b: GameConfig['board']): GroundPart[] {
 // The same recipe as _art/map_build.py: the lake hexes as one shape, softened into a rounded outline with a gently
 // wavy edge, a sandy shore, and water darker towards the banks with painted ripples. Painted once per lake layout.
 const lakeCache = new Map<string, GroundPart | null>();
-function lakePart(lakes: [number, number][]): GroundPart | null {
+export function lakePart(lakes: [number, number][]): GroundPart | null {
   if (typeof document === 'undefined') return null;
   const id = `lake${SUF()}-${lakes.map(([c, r]) => `${c}.${r}`).join('_')}`;
   if (lakeCache.has(id)) return lakeCache.get(id)!;
@@ -288,9 +290,9 @@ function lakePart(lakes: [number, number][]): GroundPart | null {
 /** The picture's size in map units (its CSS size before the camera's transform). */
 export const groundSize = (): Pt => (syncSize(), [W + 2 * GROUND_M, H + 2 * GROUND_M]);
 /** Carved trees, each drawn from 8 directions (tree-<kind>-<direction>.webp); picture size in pixels, trunk foot at bottom centre. */
-const TREE_KINDS: [string, Pt][] = [['pine', [150, 301]], ['spruce', [126, 285]], ['oak', [198, 251]]];
+export const TREE_KINDS: [string, Pt][] = [['pine', [150, 301]], ['spruce', [126, 285]], ['oak', [198, 251]]];
 const DIRS8 = ['front', 'front-left', 'left', 'back-left', 'back', 'back-right', 'right', 'front-right'];
-const TREE_URL = (kind: string, dir: string) => `${import.meta.env.BASE_URL}map/tree-${kind}-${dir}.webp?v=4`;
+export const TREE_URL = (kind: string, dir: string) => `${import.meta.env.BASE_URL}map/tree-${kind}-${dir}.webp?v=4`;
 /** Small standing scenery (prop-N.webp): picture size in pixels and how tall it stands in map units.
  *  Grass tufts and flowers reach a soldier's knee; the bush his waist. */
 const PROPS: [Pt, number][] = [[[100, 135], 9], [[160, 117], 8], [[116, 128], 9], [[123, 127], 9], [[134, 115], 17], [[148, 99], 11], [[144, 70], 6], [[135, 150], 6]];
@@ -299,9 +301,9 @@ const PROP_MIX = [0, 1, 0, 1, 0, 2, 1, 3, 0, 4, 1, 6, 0, 5, 2, 7];
 const PROP_URL = (i: number) => `${import.meta.env.BASE_URL}map/prop-${i + 1}.webp?v=2`;
 /** Carved castle and village pieces, each drawn from 8 directions (sc-<name>-<direction>.webp).
  *  Picture size in pixels (_art/scenery-manifest.json), foot at bottom centre. */
-const SCENERY = { wall: [250, 311], gate: [258, 316], tower: [270, 502], house: [296, 311], house2: [296, 310], reeds: [110, 153], boulder: [166, 94] } as const satisfies Record<string, Pt>;
-type SceneryId = keyof typeof SCENERY;
-const SC_URL = (name: SceneryId, dir: string) => `${import.meta.env.BASE_URL}map/sc-${name}-${dir}.webp?v=1`;
+export const SCENERY = { wall: [250, 311], gate: [258, 316], tower: [270, 502], house: [296, 311], house2: [296, 310], reeds: [110, 153], boulder: [166, 94] } as const satisfies Record<string, Pt>;
+export type SceneryId = keyof typeof SCENERY;
+export const SC_URL = (name: SceneryId, dir: string) => `${import.meta.env.BASE_URL}map/sc-${name}-${dir}.webp?v=1`;
 // ---------- pictures ----------
 // Every picture on the board (pieces, trees, scenery) is loaded once into a hidden sheet that stays in the page,
 // and the board only points at it. Turning a piece to another view is then instant: nothing is loaded, so nothing blinks.
@@ -333,6 +335,8 @@ function sheetId(url: string, w: number, h: number): string | null {
 }
 /** A picture `nat` pixels big, drawn w x h with its top left at (x, y); `flip` mirrors it left to right about x = 0. */
 function pic(url: string, nat: Pt, x: number, y: number, w: number, h: number, flip = false): string {
+  // see-through: remember where this picture lands, so the sprite that drew it knows its screen box.
+  lastPic = flip ? [-x - w, y, -x, y + h] : [x, y, x + w, y + h];
   const id = sheetId(url, nat[0], nat[1]);
   if (!id) return `<image decoding="sync" href="${url}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"${flip ? ' transform="scale(-1 1)"' : ''}/>`;
   return `<use href="#${id}" transform="${flip ? 'scale(-1 1) ' : ''}translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${(w / nat[0]).toFixed(4)} ${(h / nat[1]).toFixed(4)})"/>`;
@@ -413,6 +417,12 @@ function fill(t: TerrainId, h: Hex): string {
 interface Standing {
   depth: number;
   svg: string;
+  /** see-through: the drawn picture's screen box [x0, y0, x1, y1], if it can hide what is behind it. */
+  box?: number[] | null;
+  /** see-through: a raised hex's outline on screen (its top and sides), instead of a box. */
+  hull?: Pt[];
+  /** see-through: the hex it stands on ("col,row"), so it never hides its own hex. */
+  on?: string;
 }
 
 /** A pine: trunk and three stacked tiers, dark on the shaded side and lighter in the sun. */
@@ -466,14 +476,16 @@ function scenery(h: Hex, v: View, L: Lens): Standing[] {
   const a = (seed * 2.399) % (Math.PI * 2);
   const [px, py] = [x + Math.cos(a) * S * 0.62, y + Math.sin(a) * S * 0.62];
   // Now and then a boulder on maps without a river.
-  if (seed % 29 === 3 && openMap()) return [{ depth: L.depth(px, py), svg: carved('boulder', px, py, seed, v, L, 0.55).svg }];
+  if (seed % 29 === 3 && openMap()) return [{ depth: L.depth(px, py), svg: carved('boulder', px, py, seed, v, L, 0.55).svg, box: lastPic, on: `${h.col},${h.row}` }];
   if (seed % 5 > 1) return [];
   const pi = PROP_MIX[seed % PROP_MIX.length];
+  // Flowers and mushrooms don't come up through snow.
+  if (skyNow().kind === 'snow' && (pi === 2 || pi === 3 || pi === 7)) return [];
   const [[pw, ph], tall] = PROPS[pi];
   const k = L.size(px, py);
   const [sx, sy] = L.pt(px, py);
   const [w, hh] = [(pw / ph) * tall * k, tall * k];
-  return [{ depth: L.depth(px, py), svg: pic(PROP_URL(pi), [pw, ph], sx - w / 2, sy - hh + 0.8 * k, w, hh) }];
+  return [{ depth: L.depth(px, py), svg: pic(PROP_URL(pi), [pw, ph], sx - w / 2, sy - hh + 0.8 * k, w, hh), box: lastPic, on: `${h.col},${h.row}` }];
 }
 
 /** A hex's own fixed number, so its scenery never changes between redraws. */
@@ -506,16 +518,16 @@ function building(t: TerrainId, h: Hex, v: View, L: Lens): Standing[] {
   const d = L.depth(x, y);
   // A soft shadow on the ground keeps the block standing on the grass.
   const shade = `<polygon points="${corners(h, v, L, S * 0.92)}" fill="#1b1a12" fill-opacity=".22"/>`;
-  if (t === 'wall') return [{ depth: d, svg: shade + carved('wall', x, y, 0, v, L, 1.04, S * 0.5).svg }];
-  if (t === 'tower') return [{ depth: d, svg: shade + carved('tower', x, y, seed % 8, v, L, 1, S * 0.45).svg }];
+  if (t === 'wall') return [{ depth: d, svg: shade + carved('wall', x, y, 0, v, L, 1.04, S * 0.5).svg, box: lastPic, on: `${h.col},${h.row}` }];
+  if (t === 'tower') return [{ depth: d, svg: shade + carved('tower', x, y, seed % 8, v, L, 1, S * 0.45).svg, box: lastPic, on: `${h.col},${h.row}` }];
   if (t === 'gate') {
     // The door faces along the way through: front and back of the gatehouse are the two doorways.
     const g = CONFIG.board.gates?.find((q) => q.col === h.col && q.row === h.row);
     const across = (g?.facing === 'ns') !== v.portrait;
     // Drawn just before a piece standing in the gateway, so the piece shows in the doorway, not behind the stone.
-    return [{ depth: d - 1, svg: shade + carved('gate', x, y, across ? 2 : 0, v, L, 1.04, S * 0.5).svg }];
+    return [{ depth: d - 1, svg: shade + carved('gate', x, y, across ? 2 : 0, v, L, 1.04, S * 0.5).svg, box: lastPic, on: `${h.col},${h.row}` }];
   }
-  if (t === 'house') return [{ depth: d, svg: shade + carved(seed % 2 ? 'house2' : 'house', x, y, seed % 8, v, L, 0.9, S * 0.45).svg }];
+  if (t === 'house') return [{ depth: d, svg: shade + carved(seed % 2 ? 'house2' : 'house', x, y, seed % 8, v, L, 0.9, S * 0.45).svg, box: lastPic, on: `${h.col},${h.row}` }];
   return [];
 }
 
@@ -532,7 +544,7 @@ function joints(s: GameState, v: View, L: Lens): Standing[] {
         if (n.col < c || (n.col === c && n.row < r) || s.board[n.row]?.[n.col] === undefined || !STONE.has(s.board[n.row][n.col])) continue;
         const b = flat(n, v);
         const [mx, my] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-        out.push({ depth: L.depth(mx, my), svg: carved('wall', mx, my, 0, v, L, 0.92, S * 0.4).svg });
+        out.push({ depth: L.depth(mx, my), svg: carved('wall', mx, my, 0, v, L, 0.92, S * 0.4).svg, box: lastPic });
       }
     }
   return out;
@@ -545,6 +557,8 @@ function boulders(h: Hex, v: View, L: Lens): Standing[] {
   return ([[-12, -8, 0.8], [13, 4, 0.6], [-4, 14, 0.5]] as const).map(([dx, dy, sc], i) => ({
     depth: L.depth(x + dx, y + dy),
     svg: carved('boulder', x + dx, y + dy, seed + i * 3, v, L, sc).svg,
+    box: lastPic,
+    on: `${h.col},${h.row}`,
   }));
 }
 
@@ -579,7 +593,7 @@ function trees(h: Hex, v: View, L: Lens): Standing[] {
       const dir = L.tilt ? DIRS8[(seenFrom(v) + (seed % 8)) % 8] : 'front';
       const f = (L.tilt ? 0.27 : 0.12) * k; // the tallest tree stands about one and a half soldiers high
       const [w, hh] = [size[0] * f, size[1] * f];
-      return { depth: L.depth(x + dx, y + dy), svg: shadow + pic(TREE_URL(kind, dir), size, tx - w / 2, ty - hh + 2 * k, w, hh) };
+      return { depth: L.depth(x + dx, y + dy), svg: shadow + pic(weatherPic(TREE_URL(kind, dir)), size, tx - w / 2, ty - hh + 2 * k, w, hh), box: lastPic, on: `${h.col},${h.row}` };
     }
     return { depth: L.depth(x + dx, y + dy), svg: shadow + (leafy ? oak(tx, ty, k, L.tilt) : pine(tx, ty, k, L.tilt)) };
   });
@@ -644,7 +658,7 @@ export const NO_EFFECTS: Effects = { from: new Map(), hits: [], walks: new Map()
 /** Time for one step of a walk, in ms. */
 export const STEP_MS = 130;
 /** Pieces that fire guns: a quick tracer and smoke instead of an arrow in flight. */
-const GUNS = new Set<UnitTypeId>(['gunslinger', 'rifleman', 'cowboy', 'deputy', 'lineInfantry', 'skirmisher', 'cannon', 'bomber']);
+const GUNS = new Set<UnitTypeId>(['gunslinger', 'championGun', 'rifleman', 'cowboy', 'deputy', 'lineInfantry', 'skirmisher', 'cannon', 'bomber']);
 /** When the blow lands after the attack starts (seconds): arrows fly, bullets and blades are quick. */
 /** How long an arrow is in the air (seconds): slow enough to follow with the eye. */
 export const ARROW_S = 0.65;
@@ -713,7 +727,7 @@ function figure(type: UnitTypeId, owner: Player, hp: number, k: number, look: Lo
     const [w8, h8] = [true8[0] * ART_SCALE * k, true8[1] * ART_SCALE * k];
     const full8 = maxHp(type);
     const bar8 = hp > 0 && hp < full8 ? `<g transform="translate(0 ${(7 * k).toFixed(1)}) scale(${(0.7 * k).toFixed(3)}) translate(0 -16)">${healthBar(hp, full8)}</g>` : '';
-    return `<ellipse cx="${(SHADOW[0] * 11 * k).toFixed(1)}" cy="${(k + SHADOW[1] * 5 * k).toFixed(1)}" rx="${(21 * k).toFixed(1)}" ry="${(6.5 * k).toFixed(1)}" fill="#1b2410" opacity=".32" class="cast"/><ellipse cx="0" cy="${k.toFixed(1)}" rx="${(13 * k).toFixed(1)}" ry="${(4 * k).toFixed(1)}" fill="#000" opacity=".35"/>
+    return `${castShadow(k)}<ellipse cx="0" cy="${k.toFixed(1)}" rx="${(13 * k).toFixed(1)}" ry="${(4 * k).toFixed(1)}" fill="#000" opacity=".35"/>
     <ellipse cx="0" cy="${k.toFixed(1)}" rx="${(17 * k).toFixed(1)}" ry="${(5.6 * k).toFixed(1)}" fill="none" stroke="${armyColor(owner)}" stroke-width="${(2 * k).toFixed(1)}" opacity=".9"/>
     ${pic(SPRITE_URL(fac, type, look.dir), true8, -w8 / 2, -h8 + 4 * k, w8, h8)}${bar8}`;
   }
@@ -726,7 +740,7 @@ function figure(type: UnitTypeId, owner: Player, hp: number, k: number, look: Lo
   const full = maxHp(type);
   const bar = hp > 0 && hp < full ? `<g transform="translate(0 ${(7 * k).toFixed(1)}) scale(${(0.7 * k).toFixed(3)}) translate(0 -16)">${healthBar(hp, full)}</g>` : '';
   const flip = view !== 'front' && view !== 'back' && look.flip ? ' transform="scale(-1 1)"' : '';
-  return `<ellipse cx="${(SHADOW[0] * 11 * k).toFixed(1)}" cy="${(k + SHADOW[1] * 5 * k).toFixed(1)}" rx="${(21 * k).toFixed(1)}" ry="${(6.5 * k).toFixed(1)}" fill="#1b2410" opacity=".32" class="cast"/><ellipse cx="0" cy="${k.toFixed(1)}" rx="${(13 * k).toFixed(1)}" ry="${(4 * k).toFixed(1)}" fill="#000" opacity=".35"/>
+  return `${castShadow(k)}<ellipse cx="0" cy="${k.toFixed(1)}" rx="${(13 * k).toFixed(1)}" ry="${(4 * k).toFixed(1)}" fill="#000" opacity=".35"/>
     <ellipse cx="0" cy="${k.toFixed(1)}" rx="${(17 * k).toFixed(1)}" ry="${(5.6 * k).toFixed(1)}" fill="none" stroke="${armyColor(owner)}" stroke-width="${(2 * k).toFixed(1)}" opacity=".9"/>
     ${pic(SPRITE_URL(fac, type, view), size, -w / 2, -h + 4 * k, w, h, flip !== '')}${bar}`;
 }
@@ -753,9 +767,9 @@ export function preloadFigures() {
  *  piece without one, the counter itself standing upright, with a thin edge underneath and a shadow). */
 function piece(type: UnitTypeId, owner: Player, hp: number, L: Lens, [sx, sy]: Pt, k: number, cls = '', look?: Look): string {
   const fig = L.tilt && look ? figure(type, owner, hp, k, look) : null;
-  if (fig) return `<g transform="translate(${sx} ${sy})"><g class="${cls}">${fig}</g></g>`;
+  if (fig) return `<g transform="translate(${sx} ${sy})">${baseGlow(k)}<g class="${cls}">${fig}</g></g>`;
   const counter = unitSymbol(type, owner, hp);
-  if (!L.tilt) return `<g transform="translate(${sx} ${sy}) scale(${k.toFixed(3)})"><g class="${cls}">${counter}</g></g>`;
+  if (!L.tilt) return `<g transform="translate(${sx} ${sy}) scale(${k.toFixed(3)})">${baseGlow(1, true)}<g class="${cls}">${counter}</g></g>`;
   return `<g transform="translate(${sx} ${sy})"><g class="${cls}">
     <ellipse cx="${5 * k}" cy="${1 * k}" rx="${19 * k}" ry="${5.5 * k}" fill="#000" opacity=".35"/>
     <rect x="${-16.4 * k}" y="${-4 * k}" width="${32.8 * k}" height="${4 * k}" rx="${1.5 * k}" fill="${armyColor(owner)}" filter="brightness(.6)" opacity=".9"/>
@@ -765,6 +779,55 @@ function piece(type: UnitTypeId, owner: Player, hp: number, L: Lens, [sx, sy]: P
 
 /** Height of a piece's middle above its hex, for badges, numbers and arrows. */
 const lift = (L: Lens, k: number) => (L.tilt ? 20 * k : 3 * k);
+
+// ---------- weather & light ----------
+// The battle's time of day and weather (CONFIG.weather, set from the battle settings). The drawing changes only a
+// little for them: the sun layer's colours, longer shadows at dusk, a soft glow under each piece at night, and
+// snowy pictures of the ground and trees. Tints, puddles, falling rain and snow and fog are page layers around the
+// board (weather.ts), so nothing here costs a filter per piece.
+export const skyNow = (): { time: TimeOfDay; kind: WeatherKind } => CONFIG.weather ?? { time: 'day', kind: 'clear' };
+/** The snowy picture (name-snow.webp, made by _art/snow_build.py) of a ground, close-up grass or tree picture when it snows. */
+export const weatherPic = (url: string) => (skyNow().kind === 'snow' ? url.replace(/\.webp(\?|$)/, '-snow.webp$1') : url);
+/** The pictures a battle in this weather needs, to fetch ahead (the setup screen asks for them as snow is picked). */
+export const weatherPicsFor = (kind: WeatherKind, large: boolean): string[] =>
+  kind !== 'snow' ? [] : [groundUrlFor(large), DETAIL_URL, ...TREE_KINDS.flatMap(([k]) => DIRS8.map((d) => TREE_URL(k, d)))].map((u) => u.replace(/\.webp(\?|$)/, '-snow.webp$1'));
+/** The shadow a standing piece throws: the usual one by day, long and thin away from a low sun at dusk, faint by moonlight. */
+function castShadow(k: number): string {
+  const { time, kind } = skyNow();
+  const soft = kind === 'fog' || kind === 'rain' ? 0.55 : 1; // no sun to speak of
+  if (time !== 'dusk') {
+    const op = (time === 'night' ? 0.16 : 0.32) * soft;
+    return `<ellipse cx="${(SHADOW[0] * 11 * k).toFixed(1)}" cy="${(k + SHADOW[1] * 5 * k).toFixed(1)}" rx="${(21 * k).toFixed(1)}" ry="${(6.5 * k).toFixed(1)}" fill="#1b2410" opacity="${op.toFixed(2)}" class="cast"/>`;
+  }
+  // Dusk: stretched along the way shadows fall, reaching about two pieces' width.
+  const deg = (Math.atan2(SHADOW[1] * 0.45, SHADOW[0]) * 180) / Math.PI;
+  const len = 30 * k;
+  return `<ellipse transform="translate(${(SHADOW[0] * len).toFixed(1)} ${(k + SHADOW[1] * 0.45 * len).toFixed(1)}) rotate(${deg.toFixed(1)})" rx="${(36 * k).toFixed(1)}" ry="${(6 * k).toFixed(1)}" fill="#2a1630" opacity="${(0.36 * soft).toFixed(2)}" class="cast"/>`;
+}
+/** Night: a soft warm glow on the ground round each piece's base (like a lantern at its feet), so pieces stay easy to find. */
+function baseGlow(k: number, flat = false): string {
+  if (skyNow().time !== 'night') return '';
+  return flat
+    ? `<circle r="24" fill="url(#wxglow)"/>`
+    : `<ellipse cx="0" cy="${k.toFixed(1)}" rx="${(40 * k).toFixed(1)}" ry="${(14 * k).toFixed(1)}" fill="url(#wxglow)"/>`;
+}
+/** Paint servers for the weather: the glow's gradient (one id shared by every board drawing). */
+function weatherDefs(): string {
+  return skyNow().time === 'night' ? `<radialGradient id="wxglow"><stop offset="0" stop-color="#ffe2a0" stop-opacity=".95"/><stop offset=".5" stop-color="#ffcc78" stop-opacity=".5"/><stop offset="1" stop-color="#ffb860" stop-opacity="0"/></radialGradient>` : '';
+}
+/** The sun layer's colours: warm sun from the far-left corner and cool shade opposite; golden and stronger at dusk,
+ *  silver moonlight at night, flat and grey under cloud. */
+function sunStops(): string {
+  const { time, kind } = skyNow();
+  const st = (a: [string, number], b: [string, number], c: [string, number], d: [string, number]) =>
+    ([[0, a], [0.45, b], [0.75, c], [1, d]] as [number, [string, number]][]).map(([o, [col, op]]) => `<stop offset="${o}" stop-color="${col}" stop-opacity="${op}"/>`).join('');
+  const overcast = kind === 'rain' || kind === 'fog';
+  if (time === 'dusk') return overcast ? st(['#f0a860', 0.14], ['#e89858', 0.05], ['#3a2a50', 0.12], ['#24163e', 0.3]) : st(['#ff8a6a', 0.08], ['#ffb080', 0.02], ['#3c2a64', 0.16], ['#1c1440', 0.42]);
+  if (time === 'night') return st(['#d8e4ff', overcast ? 0.04 : 0.12], ['#a8c0ff', 0.03], ['#0a1430', 0.14], ['#050a1e', 0.34]);
+  if (overcast) return st(['#e0e6ea', 0.06], ['#e0e6ea', 0.02], ['#1e2c3a', 0.08], ['#14202c', 0.22]);
+  if (kind === 'snow') return st(['#fff2d8', 0.12], ['#fff2d8', 0.03], ['#30466e', 0.1], ['#1e2e52', 0.26]);
+  return st(['#e8a948', 0.13], ['#e8a948', 0.03], ['#1e2c4a', 0.1], ['#14203a', 0.3]);
+}
 
 // ---------- raised high ground ----------
 // Hill hexes stand up off the table as carved terraces: the meadow on top, lifted by one step (two for a summit
@@ -778,7 +841,9 @@ const RISE = [0, 15, 26];
 const SUMMITS = true;
 
 /** The map's hills are drawn raised (instead of the painted overlay) once the ground pictures are loaded. */
-export const raisedHills = (b: GameConfig['board']): boolean => !!b.hills?.length && !b.swamps?.length && !b.lakes?.length;
+// A drawn map paints its lakes into its overlay along with the hills, so raising them would leave painted hills
+// behind; a random map's lakes are painted separately (lakePart), so its hills can rise next to them.
+export const raisedHills = (b: GameConfig['board']): boolean => !!b.hills?.length && !b.swamps?.length && !(b.overlay && b.lakes?.length);
 
 /** Heights of the raised hexes for one render. */
 interface Terraces {
@@ -932,7 +997,9 @@ function raisedHex(h: Hex, T: Terraces, v: View, L: Lens, u: string, groundId: s
   } else surface = `<polygon points="${clip}" fill="${fill('hill', h)}"/>`;
   // The light and shade the rest of the board gets from the sun layer; higher ground a touch brighter.
   surface += `<polygon points="${clip}" fill="url(#${u}sun)"/><polygon points="${clip}" fill="#fff4cc" fill-opacity="${(0.07 * (z / RISE[1])).toFixed(3)}"/>`;
-  return { depth: L.depth(x, y) - 0.65 * S, svg: `<g>${faces}${surface}${rim}${extra}</g>` };
+  // see-through: the hex's whole outline on screen (top and sides), and its body apart from what lies on its top.
+  const hull = convexHull([...top, ...cornerPts(h, v, L, S, 0)]);
+  return { depth: L.depth(x, y) - 0.65 * S, svg: `<g><g class="rbody">${faces}${surface}${rim}</g>${extra}</g>`, hull, on: `${h.col},${h.row}` };
 }
 
 /** The grass close-up for the raised tops, in the ground picture's units, as the .gdetail layer tiles it (150 wide). */
@@ -1100,7 +1167,9 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
     const p = o.targets.get(u.id);
     if (p) onHex(u.pos, `<polygon points="${corners(u.pos, v, L, S - 3)}" fill="#e53935" fill-opacity=".2" stroke="#d32f2f" stroke-width="3" stroke-dasharray="6 4"/>`);
     const hit = fx.hits.find((h) => !h.killed && same(h.at, u.pos));
+    lastPic = null;
     let svg = piece(u.type, u.owner, u.hp, L, at, k, o.spent.has(u.id) ? 'spent' : '', looks[u.owner]);
+    const figBox = figureBoxAt(L, at, k);
     if (hit) svg = `<g class="hit" style="animation-delay:${impact(hit)}s">${svg}</g>`;
     // A melee attacker lunges at its target and comes back.
     const blow = fx.hits.find((h) => !h.shotFrom && !h.advanced && same(h.from, u.pos) && u.owner !== h.owner);
@@ -1121,7 +1190,7 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
     }
     // In 2.5D a standing piece can cover the hex behind it, so the piece itself is tappable too.
     if (L.tilt) svg = `<g class="tap" data-col="${u.pos.col}" data-row="${u.pos.row}">${svg}</g>`;
-    standing.push({ depth: L.depth(x, y), svg });
+    standing.push({ depth: L.depth(x, y), svg, box: u.id === o.selected ? null : figBox, on: `${u.pos.col},${u.pos.row}` });
     if (p) {
       const by = at[1] - lift(L, k) - 17 * k;
       top.push(`<g transform="translate(${(at[0] + 17 * k).toFixed(1)} ${by.toFixed(1)})" class="badge"><circle r="10" fill="#d32f2f"/><text y="4">${p.kills ? '✕' : `−${p.damage}`}</text></g>`);
@@ -1184,6 +1253,8 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
 
   // Paint from the back of the board to the front so nearer things overlap farther ones.
   standing.sort((a, b) => a.depth - b.depth);
+  // see-through: what stands in front of a hex the selected piece can reach or strike fades, so the hex shows.
+  const seen = seeThrough(s, o, v, L, standing);
   // Atmosphere: warm sun from the board's far-left corner and cool shade opposite (turns with the board),
   // slow cloud shadows (the animation is offset by the clock, so a redrawn board carries on from the same spot
   // instead of jumping back, which flickered while panning), and haze over the far edge when the board is tilted.
@@ -1197,18 +1268,17 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
   const W = L.width.toFixed(0), H = L.height.toFixed(0);
   const light = `<defs>
       <radialGradient id="${u}sun" gradientUnits="userSpaceOnUse" cx="${sunX.toFixed(0)}" cy="${sunY.toFixed(0)}" r="${reach.toFixed(0)}">
-        <stop offset="0" stop-color="#e8a948" stop-opacity=".13"/><stop offset=".45" stop-color="#e8a948" stop-opacity=".03"/>
-        <stop offset=".75" stop-color="#1e2c4a" stop-opacity=".10"/><stop offset="1" stop-color="#14203a" stop-opacity=".30"/>
+        ${sunStops()}
       </radialGradient>
       <linearGradient id="${u}haze" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#dfe8f0" stop-opacity=".34"/><stop offset=".42" stop-color="#dfe8f0" stop-opacity="0"/></linearGradient>
       <clipPath id="${u}clip"><polygon points="${[[-20, -20], [fw + 20, -20], [fw + 20, fh + 20], [-20, fh + 20]].map(([x, y]) => L.pt(x, y).map((c) => c.toFixed(0)).join(',')).join(' ')}"/></clipPath>
-      <radialGradient id="${u}cloud"><stop offset="0" stop-color="#0c1408" stop-opacity=".2"/><stop offset="1" stop-color="#0c1408" stop-opacity="0"/></radialGradient>
+      ${weatherDefs()}<radialGradient id="${u}cloud"><stop offset="0" stop-color="#0c1408" stop-opacity=".2"/><stop offset="1" stop-color="#0c1408" stop-opacity="0"/></radialGradient>
     </defs>
     <rect class="light" width="${W}" height="${H}" fill="url(#${u}sun)" clip-path="url(#${u}clip)"/>
     <g clip-path="url(#${u}clip)"><g class="clouds" fill="url(#${u}cloud)" style="animation-delay:-${((performance.now() / 1000) % 180).toFixed(2)}s"><ellipse cx="${(+W * 0.2).toFixed(0)}" cy="${(+H * 0.35).toFixed(0)}" rx="${(+W * 0.16).toFixed(0)}" ry="${(+H * 0.09).toFixed(0)}"/><ellipse cx="${(+W * 0.75).toFixed(0)}" cy="${(+H * 0.7).toFixed(0)}" rx="${(+W * 0.2).toFixed(0)}" ry="${(+H * 0.1).toFixed(0)}"/></g></g>`;
   const haze = ''; // a pale haze read as glare on the board, so it's off
-  const body = ground.join('') + light + standing.map((x) => x.svg).join('') + haze + top.join('');
-  return `<svg class="board ${L.tilt ? 'tilted' : ''}" viewBox="0 0 ${L.width.toFixed(0)} ${L.height.toFixed(0)}" role="img">${body}</svg>`;
+  const body = ground.join('') + light + standing.map((x, i) => `<g class="bst${x.hull ? ' rz' : ''}${seen.has(i) ? ' see' : ''}">${x.svg}</g>`).join('') + haze + top.join('');
+  return `<svg class="board ${L.tilt ? 'tilted' : ''} wx-${skyNow().time}" viewBox="0 0 ${L.width.toFixed(0)} ${L.height.toFixed(0)}" role="img">${body}</svg>`;
 }
 
 /** A small orientation cube, like a 3D program's view cube: it turns and tilts with the camera.
@@ -1248,4 +1318,254 @@ export function viewCube(v: View, size = 64): string {
     .map((f) => `<polygon points="${f.pts.map(([x, y, z]) => fmt(proj(x, y, z))).join(' ')}" fill="${f.fill}" stroke="#f1e8d2" stroke-opacity=".55" stroke-width="1.2" stroke-linejoin="round"/>`)
     .join('');
   return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" aria-hidden="true">${polys}</svg>`;
+}
+
+// ---------- see-through, ground picking and smart camera helpers ----------
+// While a piece is selected, scenery and pieces standing in front of a hex it can reach or strike fade (class "see"
+// on the sprite's wrapper; CSS eases the opacity), so the hex shows. Taps are worked out from the camera's own
+// projection (ground picking), never from the element under the finger, so a tall figure can't swallow a tap.
+
+/** The screen box of the last picture pic() drew (see-through and ground picking read it right after). */
+let lastPic: number[] | null = null;
+
+type Box = number[];
+
+/** Convex outline of a few screen points (a raised hex's top and foot together). */
+function convexHull(pts: Pt[]): Pt[] {
+  const p = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  if (p.length < 3) return p;
+  const cross = (o: Pt, a: Pt, b: Pt) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower: Pt[] = [];
+  for (const q of p) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], q) <= 0) lower.pop();
+    lower.push(q);
+  }
+  const upper: Pt[] = [];
+  for (let i = p.length - 1; i >= 0; i--) {
+    const q = p[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], q) <= 0) upper.pop();
+    upper.push(q);
+  }
+  return [...lower.slice(0, -1), ...upper.slice(0, -1)];
+}
+
+function inPoly(X: number, Y: number, poly: Pt[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i];
+    const [xj, yj] = poly[j];
+    if (yi > Y !== yj > Y && X < ((xj - xi) * (Y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/** Distance from a point to a polygon's edge (0 inside). */
+function polyDist(X: number, Y: number, poly: Pt[]): number {
+  if (inPoly(X, Y, poly)) return 0;
+  let best = Infinity;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [ax, ay] = poly[j];
+    const [bx, by] = poly[i];
+    const [dx, dy] = [bx - ax, by - ay];
+    const t = Math.max(0, Math.min(1, ((X - ax) * dx + (Y - ay) * dy) / (dx * dx + dy * dy || 1)));
+    best = Math.min(best, Math.hypot(X - ax - t * dx, Y - ay - t * dy));
+  }
+  return best;
+}
+
+/** The screen box of the piece just drawn by piece() (call with lastPic cleared first). */
+function figureBoxAt(L: Lens, [sx, sy]: Pt, k: number): Box | null {
+  if (!L.tilt) return null;
+  if (lastPic) return [sx + lastPic[0], sy + lastPic[1], sx + lastPic[2], sy + lastPic[3]];
+  return [sx - 17 * k, sy - 36 * k, sx + 17 * k, sy + 2 * k]; // a counter standing upright
+}
+
+/** A picture's painted part: carved pictures have empty margins at the sides and a little on top. */
+const inner = (b: Box, side = 0.16): Box => {
+  const w = b[2] - b[0];
+  return [b[0] + w * side, b[1] + (b[3] - b[1]) * 0.06, b[2] - w * side, b[3]];
+};
+
+/** Hexes the selected piece can move to or strike. */
+function targetHexes(s: GameState, o: Overlay): Hex[] {
+  if (!o.selected) return [];
+  const out = [...o.reach.values()].map((r) => r.hex);
+  for (const id of o.targets.keys()) {
+    const u = s.units.find((x) => x.id === id);
+    if (u) out.push(u.pos);
+  }
+  return out;
+}
+
+/** How many target hexes the last render found hidden behind something (smart camera reads it). */
+let lastCover = { total: 0, covered: 0 };
+/** Depth margin: an occluder must stand clearly nearer the camera than the hex it hides. */
+const COVER_EPS = 4;
+
+/** Which standing sprites (by index) hide a target hex behind them. Cheap: a few sample points per target
+ *  against each sprite's box; most sprites are rejected by one bounding-box test. */
+function seeThrough(s: GameState, o: Overlay, v: View, L: Lens, standing: Standing[]): Set<number> {
+  const seen = new Set<number>();
+  lastCover = { total: 0, covered: 0 };
+  const hexes = L.tilt ? targetHexes(s, o) : [];
+  if (!hexes.length) return seen;
+  // The selected piece itself must show too, or its moves read as coming from nowhere.
+  const sel = s.units.find((u) => u.id === o.selected);
+  if (sel) hexes.push(sel.pos);
+  const turn = v.portrait ? Math.PI / 2 : 0;
+  let [mnx, mny, mxx, mxy] = [Infinity, Infinity, -Infinity, -Infinity];
+  const tg = hexes.map((h) => {
+    const [x, y] = flat(h, v);
+    const z = L.hexZ(h);
+    const pts: Pt[] = [L.pt3(x, y, z)];
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI / 3) * (i + 0.5) + turn;
+      pts.push(L.pt3(x + 0.5 * S * Math.cos(a), y + 0.5 * S * Math.sin(a), z));
+    }
+    for (const [px, py] of pts) {
+      mnx = Math.min(mnx, px); mny = Math.min(mny, py); mxx = Math.max(mxx, px); mxy = Math.max(mxy, py);
+    }
+    return { key: `${h.col},${h.row}`, depth: L.depth(x, y), pts, hit: new Uint8Array(7) };
+  });
+  for (let i = 0; i < standing.length; i++) {
+    const st = standing[i];
+    if (!st.box && !st.hull) continue;
+    const b = st.box ? inner(st.box) : null;
+    const hull = st.hull;
+    let bb: Box;
+    if (b) bb = b;
+    else {
+      bb = [Infinity, Infinity, -Infinity, -Infinity];
+      for (const [px, py] of hull!) bb = [Math.min(bb[0], px), Math.min(bb[1], py), Math.max(bb[2], px), Math.max(bb[3], py)];
+    }
+    if (bb[2] < mnx || bb[0] > mxx || bb[3] < mny || bb[1] > mxy) continue;
+    // A raised hex is sorted a little behind its centre; compare from the centre itself.
+    const depth = hull ? st.depth + 0.65 * S : st.depth;
+    for (const t of tg) {
+      if (st.on === t.key || depth <= t.depth + COVER_EPS) continue;
+      let n = 0;
+      let centre = false;
+      for (let j = 0; j < 7; j++) {
+        const [px, py] = t.pts[j];
+        if (px < bb[0] || px > bb[2] || py < bb[1] || py > bb[3]) continue;
+        if (hull && !inPoly(px, py, hull)) continue;
+        t.hit[j] = 1;
+        n++;
+        if (j === 0) centre = true;
+      }
+      if (centre || n >= 2) seen.add(i);
+    }
+  }
+  lastCover = { total: tg.length, covered: tg.filter((t) => t.hit[0] || t.hit.reduce((a, b) => a + b, 0) >= 3).length };
+  return seen;
+}
+
+/** The hex whose centre is nearest a flat map point (hexes are exactly those cells), or null off the board. */
+function hexAtFlat(s: GameState, v: View, px: number, py: number): Hex | null {
+  if (!Number.isFinite(px) || !Number.isFinite(py)) return null;
+  syncSize();
+  const [x, y] = v.portrait ? [W - py, px] : [px, py];
+  const rows = s.board.length;
+  const cols = s.board[0]?.length ?? 0;
+  const c0 = Math.round((x - S) / (1.5 * S));
+  let best = Infinity;
+  let out: Hex | null = null;
+  for (let c = c0 - 1; c <= c0 + 1; c++) {
+    const r0 = Math.round((y - (R3 / 2) * S) / (R3 * S) - 0.5 * (c & 1));
+    for (let r = r0 - 1; r <= r0 + 1; r++) {
+      const d = (x - (S * 1.5 * c + S)) ** 2 + (y - (R3 * S * (r + 0.5 * (c & 1)) + (R3 / 2) * S)) ** 2;
+      if (d < best) {
+        best = d;
+        out = c >= 0 && r >= 0 && c < cols && r < rows ? { col: c, row: r } : null;
+      }
+    }
+  }
+  return best <= S * S ? out : null;
+}
+
+/** The hex drawn under a screen point: the nearest raised hex whose top or side covers it, else the ground there. */
+function groundHexesAt(s: GameState, v: View, L: Lens, T: Terraces | null, X: number, Y: number): Hex[] {
+  // Every hex drawn under the point, nearest the camera first: raised hexes whose top or side covers it, then the
+  // ground there (which a faded hill in front may be hiding).
+  const out: [number, Hex][] = [];
+  if (T)
+    for (const h of T.list) {
+      const hull = convexHull([...cornerPts(h, v, L, S, T.hex(h)), ...cornerPts(h, v, L, S, 0)]);
+      if (inPoly(X, Y, hull)) out.push([L.depth(...flat(h, v)), h]);
+    }
+  out.sort((a, b) => b[0] - a[0]);
+  const [gx, gy] = L.ground(X, Y);
+  const g = hexAtFlat(s, v, gx, gy);
+  const all = out.map((e) => e[1]);
+  if (g && !all.some((h) => h.col === g.col && h.row === g.row)) all.push(g);
+  return all;
+}
+
+/** Ground picking: which hex a tap at screen point (X, Y) means. A highlighted target hex under the finger wins,
+ *  then a piece whose figure (which rises over the hexes behind it) is under the finger, then (on touch) the
+ *  nearest highlighted hex within `snap` pixels, then the plain hex under the finger. */
+export function pickHex(s: GameState, o: Overlay, v: View, X: number, Y: number, snap = 0): Hex | null {
+  const T = terraces(s, v);
+  const L = lens(v, T);
+  const under = groundHexesAt(s, v, L, T, X, Y);
+  const ground = under[0] ?? null;
+  const targets = targetHexes(s, o);
+  const tkeys = new Set(targets.map((h) => `${h.col},${h.row}`));
+  const hit = under.find((h) => tkeys.has(`${h.col},${h.row}`));
+  if (hit) return hit;
+  if (L.tilt) {
+    const looks: Record<Player, Look> = { red: lookFor('red', v, s), blue: lookFor('blue', v, s) };
+    let best: Hex | null = null;
+    let bd = -Infinity;
+    for (const u of s.units) {
+      if (u.owner === o.hide) continue;
+      const [x, y] = flat(u.pos, v);
+      const at = L.pt(x, y);
+      const k = L.size(x, y);
+      lastPic = null;
+      piece(u.type, u.owner, u.hp, L, at, k, '', looks[u.owner]);
+      const b = figureBoxAt(L, at, k);
+      if (!b) continue;
+      const [x0, y0, x1, y1] = inner(b, 0.22);
+      if (X < x0 || X > x1 || Y < y0 || Y > y1) continue;
+      const d = L.depth(x, y);
+      if (d > bd) [bd, best] = [d, u.pos];
+    }
+    if (best) return best;
+  }
+  if (snap > 0 && targets.length) {
+    let best: Hex | null = null;
+    let bd = snap;
+    for (const h of targets) {
+      const d = polyDist(X, Y, cornerPts(h, v, L));
+      if (d <= bd) [bd, best] = [d, h];
+    }
+    if (best) return best;
+  }
+  return ground;
+}
+
+/** Smart camera: where the selected piece's targets (and the piece) lie on screen, and how many are hidden. */
+export function targetFrame(s: GameState, o: Overlay, v: View, withCover: boolean): { box: Box | null; total: number; covered: number } {
+  const T = terraces(s, v);
+  const L = lens(v, T);
+  const hexes = targetHexes(s, o);
+  const sel = o.selected ? s.units.find((u) => u.id === o.selected) : undefined;
+  if (sel) hexes.push(sel.pos);
+  if (!hexes.length) return { box: null, total: 0, covered: 0 };
+  const b = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const h of hexes)
+    for (const [px, py] of cornerPts(h, v, L, S * 0.8)) {
+      if (!Number.isFinite(px) || !Number.isFinite(py)) return { box: null, total: 0, covered: 0 };
+      b[0] = Math.min(b[0], px); b[1] = Math.min(b[1], py); b[2] = Math.max(b[2], px); b[3] = Math.max(b[3], py);
+    }
+  // The selected piece's own figure rises above its hex: keep its head on screen too.
+  if (sel && L.tilt) {
+    const [x, y] = flat(sel.pos, v);
+    const [, sy] = L.pt(x, y);
+    b[1] = Math.min(b[1], sy - 45 * L.size(x, y));
+  }
+  if (!withCover) return { box: b, total: 0, covered: 0 };
+  renderBoard(s, o, v);
+  return { box: b, ...lastCover };
 }

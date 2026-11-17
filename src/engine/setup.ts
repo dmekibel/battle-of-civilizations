@@ -35,6 +35,7 @@ export function draftArmy(s: GameState, counts: ArmyCounts, cfg: GameConfig = CO
   if (s.phase !== 'draft') return fail('wrongPhase');
   const types = Object.keys(counts) as (keyof ArmyCounts)[];
   if (types.some((t) => !(t in cfg.army.cost) || !Number.isInteger(counts[t]) || counts[t]! < 0)) return fail('badArmy');
+  if (types.some((t) => counts[t]! > (cfg.army.max?.[t] ?? Infinity))) return fail('badArmy');
   if (armyCost(counts, cfg) > cfg.army.budget) return fail('overBudget');
   const reserve: UnitTypeId[] = ['king'];
   for (const t of types) for (let i = 0; i < counts[t]!; i++) reserve.push(t);
@@ -75,13 +76,14 @@ export function liftUnit(s: GameState, unitId: string): Result {
 // heavy infantry holds the front centre, light infantry extends the line, archers stand
 // one rank behind the infantry, cavalry guards the wings (light cavalry furthest out),
 // and the King stays at the back in the middle.
-const DEPLOY_ORDER: UnitTypeId[] = ['king', 'heavyInfantry', 'lineInfantry', 'samurai', 'archer', 'rifleman', 'gunslinger', 'deputy', 'lightInfantry', 'berserker', 'boarder', 'ashigaru', 'axeThrower', 'bomber', 'skirmisher', 'ballista', 'cannon', 'heavyCavalry', 'lightCavalry', 'horseArcher', 'chariot', 'cowboy'];
+const DEPLOY_ORDER: UnitTypeId[] = ['king', 'champion', 'championGun', 'championRider', 'heavyInfantry', 'lineInfantry', 'samurai', 'archer', 'rifleman', 'gunslinger', 'deputy', 'lightInfantry', 'berserker', 'boarder', 'jaguar', 'impi', 'ashigaru', 'axeThrower', 'bomber', 'atlatl', 'thrower', 'skirmisher', 'ballista', 'cannon', 'heavyCavalry', 'lightCavalry', 'horseArcher', 'chariot', 'cowboy'];
 
 function formationScore(type: UnitTypeId, depth: number, front: number, lateral: number, maxLateral: number): number {
   const wing = maxLateral - lateral; // 0 at the very edge of the board
   switch (type) {
     case 'king':
       return depth * 10 + lateral;
+    case 'champion':
     case 'heavyInfantry':
     case 'lineInfantry':
     case 'samurai':
@@ -89,18 +91,24 @@ function formationScore(type: UnitTypeId, depth: number, front: number, lateral:
     case 'deputy':
     case 'berserker':
     case 'boarder':
+    case 'jaguar':
+    case 'impi':
     case 'ashigaru':
       return (front - depth) * 10 + lateral;
     case 'archer':
     case 'rifleman':
     case 'axeThrower':
     case 'bomber':
+    case 'atlatl':
+    case 'thrower':
     case 'ballista':
     case 'skirmisher':
     case 'cannon':
     case 'gunslinger':
+    case 'championGun':
       return Math.abs(front - 1 - depth) * 10 + lateral;
     case 'heavyCavalry':
+    case 'championRider':
       return Math.abs(front - 1 - depth) * 3 + Math.max(0, wing - 2) * 6;
     case 'lightCavalry':
     case 'horseArcher':
@@ -166,6 +174,13 @@ const ARMY_MIX: Record<keyof ArmyCounts, number> = {
   chariot: 0.25,
   boarder: 0.25,
   bomber: 0.15,
+  champion: 0.15,
+  championRider: 0.15,
+  championGun: 0.15,
+  jaguar: 0.25,
+  atlatl: 0.15,
+  impi: 0.3,
+  thrower: 0.15,
 };
 
 /** The pieces most armies can buy (factions add or swap some). */
@@ -181,7 +196,7 @@ export function suggestArmy(rng: Rng = Math.random, cfg: GameConfig = CONFIG, ro
   for (;;) {
     const spent = armyCost(counts, cfg);
     const left = cfg.army.budget - spent;
-    const affordable = types.filter((t) => cfg.army.cost[t] <= left);
+    const affordable = types.filter((t) => cfg.army.cost[t] <= left && (counts[t] ?? 0) < (cfg.army.max?.[t] ?? Infinity));
     if (!affordable.length) return counts;
     const gap = (t: keyof ArmyCounts) => (want[t] / total) * cfg.army.budget - (counts[t] ?? 0) * cfg.army.cost[t];
     const pick = affordable.reduce((a, b) => (gap(b) > gap(a) ? b : a));

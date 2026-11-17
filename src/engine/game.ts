@@ -57,9 +57,11 @@ export function newGame(cfg: GameConfig = CONFIG): GameState {
 }
 
 /** Points one step costs: 1 for everyone, or the piece's own cost when "different speeds" is on. */
-export const stepCost = (type: Unit['type'], cfg: GameConfig = CONFIG) => (cfg.options.unitSpeeds ? cfg.units[type].moveCost : 1);
+export const stepCost = (type: Unit['type'], cfg: GameConfig = CONFIG) => (cfg.options.unitSpeeds ? cfg.units[type].moveCost + (snowSlows(type, cfg) ? (cfg.weatherRules?.snowRiderSlow ?? 1) : 0) : 1);
 /** Hexes one point buys: horses go 2 (heavy) or 3 (light) when every step costs 1. */
-export const hexesPerPoint = (type: Unit['type'], cfg: GameConfig = CONFIG) => (cfg.options.unitSpeeds ? 1 : (cfg.units[type].speed ?? 1));
+export const hexesPerPoint = (type: Unit['type'], cfg: GameConfig = CONFIG) => (cfg.options.unitSpeeds ? 1 : Math.max(1, (cfg.units[type].speed ?? 1) - (snowSlows(type, cfg) ? (cfg.weatherRules?.snowRiderSlow ?? 1) : 0)));
+/** Weather rule "snow": riders wade through the snow (only when the battle is snowy and the rule is on). */
+const snowSlows = (type: Unit['type'], cfg: GameConfig) => !!cfg.options.snowCavalry && cfg.weather?.kind === 'snow' && !!cfg.units[type].mounted;
 /** Points a walk of this many hexes costs, rounded up: a light rider pays 1 point for 1 to 3 hexes. */
 export const walkCost = (type: Unit['type'], steps: number, cfg: GameConfig = CONFIG) => Math.ceil((steps * stepCost(type, cfg)) / hexesPerPoint(type, cfg));
 
@@ -166,7 +168,7 @@ function search(s: GameState, unitId: string, cfg: GameConfig): { out: Map<strin
 const enemyNext = (s: GameState, h: Hex, owner: Player) => s.units.some((e) => e.owner !== owner && distance(e.pos, h) === 1);
 
 const mounted = (u: Unit, cfg: GameConfig) => !!cfg.units[u.type].mounted;
-const INFANTRY = new Set(['heavyInfantry', 'lightInfantry', 'deputy', 'samurai', 'ashigaru', 'berserker', 'axeThrower', 'lineInfantry', 'skirmisher', 'boarder', 'bomber']);
+const INFANTRY = new Set(['champion', 'championGun', 'heavyInfantry', 'lightInfantry', 'deputy', 'samurai', 'ashigaru', 'berserker', 'axeThrower', 'lineInfantry', 'skirmisher', 'boarder', 'bomber', 'jaguar', 'atlatl', 'impi', 'thrower']);
 
 /** Points value of an army (its King not counted), for the morale rule. */
 export function armyValue(s: GameState, p: Player, cfg: GameConfig = CONFIG): number {
@@ -174,7 +176,14 @@ export function armyValue(s: GameState, p: Player, cfg: GameConfig = CONFIG): nu
 }
 
 /** How far a shooter standing on this hex reaches: one hex further from high ground. */
-export const maxRangeAt = (s: GameState, at: Hex, base: number, cfg: GameConfig = CONFIG): number => base + (cfg.terrain[terrainAt(s, at)].highGround ? 1 : 0);
+export const maxRangeAt = (s: GameState, at: Hex, base: number, cfg: GameConfig = CONFIG): number => weatherRange(base + (cfg.terrain[terrainAt(s, at)].highGround ? 1 : 0), cfg);
+/** Weather rules on a shot's reach: rain shortens it (never below 2 hexes), fog caps it. Off or clear = unchanged. */
+export function weatherRange(reach: number, cfg: GameConfig = CONFIG): number {
+  const kind = cfg.weather?.kind;
+  if (kind === 'rain' && cfg.options.rainRange) reach = Math.max(2, reach - (cfg.weatherRules?.rainRangeLoss ?? 1));
+  if (kind === 'fog' && cfg.options.fogCap) reach = Math.min(reach, cfg.weatherRules?.fogMaxRange ?? 4);
+  return reach;
+}
 
 export function hasLineOfSight(s: GameState, a: Hex, b: Hex, cfg: GameConfig = CONFIG): boolean {
   if (cfg.terrain[terrainAt(s, a)].highGround) return true; // from a hill you see over the trees
@@ -300,6 +309,11 @@ function withLog(s: GameState, e: LogEntry): GameState {
   return { ...s, log: [...s.log, e] };
 }
 
+function battleStart(s: GameState): GameState['start'] {
+  const { board: _b, log: _l, start: _s, ...rest } = s;
+  return { ...rest, logAt: s.log.length };
+}
+
 export function rollDice(s: GameState, rng: Rng = Math.random, cfg: GameConfig = CONFIG): Result {
   if (s.phase !== 'roll') return fail('wrongPhase');
   const dice = cfg.dice.fixed ? [] : Array.from({ length: cfg.dice.count }, () => 1 + Math.floor(rng() * cfg.dice.sides));
@@ -309,7 +323,9 @@ export function rollDice(s: GameState, rng: Rng = Math.random, cfg: GameConfig =
   const total = (cfg.dice.fixed ?? dice.reduce((a, b) => a + b, 0)) + carried + bonus;
   // Remember both armies' size when the battle starts, for the morale rule.
   const startValue = s.startValue ?? { red: armyValue(s, 'red', cfg), blue: armyValue(s, 'blue', cfg) };
-  const next: GameState = { ...s, dice, points: total, phase: 'act', startValue, carry: { red: 0, blue: 0, ...s.carry, [s.current]: 0 } };
+  // The opening position, kept once for the end-of-battle replay (only when this is the battle's first roll).
+  const start = s.start ?? (s.log.some((e) => e.kind === 'roll') ? undefined : battleStart(s));
+  const next: GameState = { ...s, dice, points: total, phase: 'act', startValue, carry: { red: 0, blue: 0, ...s.carry, [s.current]: 0 }, ...(start ? { start } : {}) };
   return { ok: true, state: withLog(next, { kind: 'roll', turn: s.turn, player: s.current, dice, total }) };
 }
 

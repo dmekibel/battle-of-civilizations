@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Kurale&family=PT+Serif:wght@400;700&family=PT+Sans:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Forum&family=Alegreya+Sans:wght@400;500;700;800&family=PT+Sans:wght@400;700&family=PT+Serif:wght@400;700&display=swap');
 
 /* Full-screen table: the board takes every spare pixel; controls sit at the edges
    (top and bottom in portrait, a side column in landscape). */
@@ -126,7 +126,13 @@ body {
 .zoom button { width: 44px; height: 44px; padding: 0; font-size: 22px; line-height: 1; border-radius: 50%; background: rgba(43, 38, 30, .92); color: var(--ink); border-color: var(--line); box-shadow: 0 2px 6px rgba(0, 0, 0, .4); }
 .board .hex { cursor: pointer; pointer-events: auto; } /* also inside a raised hex's group */
 .board *:not(.hex) { pointer-events: none; }
-.board .tap, .board .tap * { pointer-events: auto; cursor: pointer; }
+/* ground picking: taps are worked out from the camera's projection, so sprites never catch them. */
+.board .tap, .board .tap * { pointer-events: none; }
+@media (hover: none) { .stage .board { cursor: pointer; } } /* iOS only sends taps on "clickable" things */
+/* see-through: while a piece is selected, what stands in front of a hex it can reach or strike fades. */
+.board .bst, .board .rbody { transition: opacity .15s ease; }
+.board .bst.see:not(.rz) { opacity: .3; }
+.board .bst.rz.see .rbody { opacity: .35; }
 /* Pieces that can't do anything with the points left fade a little (opacity works on SVG in every browser; filters don't). */
 .board .spent { opacity: .88; }
 .board .trail { stroke: #fff6c8; stroke-width: 3; stroke-dasharray: 7 6; stroke-linecap: round; opacity: .7; }
@@ -372,6 +378,7 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 .setup h2 .back { padding: 4px; margin: 0 2px 0 -8px; color: var(--muted); display: grid; place-items: center; }
 .setup h3 { margin: 22px 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); font-weight: 700; }
 .setup .blurb { margin: 10px 2px 0; font-size: 13px; line-height: 1.4; color: var(--muted); }
+.setup .blurb.champ { margin-top: 4px; color: #e8c770; }
 
 /* Face-off: the two armies side by side. */
 .vs { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
@@ -399,6 +406,15 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 .mtile { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 6px 4px 8px; border-radius: 12px; background: var(--panel-2); border: 2px solid transparent; font-size: 11.5px; font-weight: 700; line-height: 1.2; text-align: center; }
 .mtile svg { width: 100%; height: auto; display: block; border-radius: 8px; }
 .mtile.on { border-color: var(--gold); }
+/* A preview of the real board: wood-coloured while it paints, then the miniature itself. */
+.mthumb { width: 100%; height: auto; display: block; border-radius: 6px; background: #4a311d; box-shadow: 0 1px 3px rgba(0,0,0,.45); }
+.mbig { flex: 1; min-width: 0; line-height: 0; }
+.mbig .mthumb { border-radius: 8px; }
+/* Customize land: one row per knob, its name above its steps. */
+.knobs { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 14px; background: rgba(255,255,255,.03); }
+.knob { display: flex; flex-direction: column; gap: 4px; }
+.knob > span { font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .03em; padding-left: 4px; }
+.knob .seg button { padding: 7px 2px; font-size: 13px; }
 
 /* Segmented control, as in iOS. */
 .seg { display: flex; background: var(--panel-2); border-radius: 12px; padding: 3px; gap: 2px; }
@@ -514,3 +530,671 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 
 .vs-swap { width: 44px; height: 44px; padding: 0; border-radius: 50%; display: grid; place-items: center; color: var(--gold); background: var(--panel-2); border: 1px solid var(--line); flex: none; }
 .vs-swap:active { transform: rotate(180deg); transition: transform .2s; }
+
+/* ===== End-of-battle replay (src/ui/replay.ts) ===== */
+.rp-result { display: flex; gap: 8px; margin: 4px 0 8px; }
+.rp-result button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.rp-result .rp-watch { flex: 1; background: var(--panel-2); border-color: var(--gold); color: var(--ink); }
+.rp-result .rp-share { flex: none; border-color: var(--line); }
+/* While watching, the game's own controls step aside (kept in place so the board doesn't resize). */
+body.replaying .bar, body.replaying .info, body.replaying .side, body.replaying .hud [data-act="menu"], body.replaying .hud [data-act="panel"] { visibility: hidden; pointer-events: none; }
+.rp-bar {
+  position: fixed; left: 50%; bottom: max(10px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 40;
+  width: min(560px, calc(100vw - 16px)); background: color-mix(in srgb, var(--paper) 94%, transparent);
+  border: 1px solid var(--line); border-radius: 14px; padding: 8px 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+.rp-line { display: flex; align-items: center; gap: 8px; }
+.rp-bar button { padding: 0; width: 44px; height: 44px; display: grid; place-items: center; flex: none; }
+.rp-bar .rp-play { width: 52px; height: 52px; border-radius: 50%; background: var(--gold); border-color: #f1d27a; color: #2b2620; }
+.rp-bar .rp-speed { font: 700 16px/1 'PT Sans', sans-serif; font-variant-numeric: tabular-nums; border: 1.5px solid var(--line); border-radius: 10px; color: var(--gold); }
+.rp-scrub { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.rp-turn { display: flex; gap: 8px; align-items: baseline; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; }
+.rp-turn b { color: var(--ink); }
+.rp-what { overflow: hidden; text-overflow: ellipsis; color: var(--ink); }
+.rp-what b.red { color: var(--red-text); }
+.rp-what b.blue { color: var(--blue-text); }
+.rp-scrub input { width: 100%; margin: 0; height: 24px; background: transparent; -webkit-appearance: none; appearance: none; touch-action: pan-x; }
+.rp-scrub input::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--gold) var(--fill), var(--track) var(--fill)); }
+.rp-scrub input::-moz-range-track { height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--gold) var(--fill), var(--track) var(--fill)); }
+.rp-scrub input::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; margin-top: -7px; border-radius: 50%; background: var(--gold); border: 2px solid #f1d27a; }
+.rp-scrub input::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: var(--gold); border: 2px solid #f1d27a; }
+.rp-note { margin: 6px 0 0; font-size: 12px; color: var(--muted); text-align: center; }
+.rp-banner {
+  position: fixed; left: 50%; top: 22%; transform: translateX(-50%); z-index: 39; pointer-events: none;
+  display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 22px; border-radius: 12px;
+  width: max-content; max-width: calc(100vw - 32px); text-align: center; white-space: nowrap;
+  background: color-mix(in srgb, var(--panel-2) 88%, transparent); border-top: 3px solid var(--red);
+  animation: rp-banner 1.3s ease both;
+}
+.rp-banner.blue { border-top-color: var(--blue-text); }
+.rp-banner span { font-size: 13px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.rp-banner b { font: 400 24px/1.15 var(--title); color: var(--ink); overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+@keyframes rp-banner { 0% { opacity: 0; transform: translate(-50%, 8px); } 15%, 75% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .rp-banner { animation: none; } }
+/* ===== end replay ===== */
+
+/* ===== tutorial (src/ui/tutorial.ts) ===== */
+/* Coach card: one plain sentence at the top of the board; Skip always on it. */
+.tut-coach {
+  position: fixed; z-index: 30; left: 50%; transform: translateX(-50%);
+  top: calc(max(6px, env(safe-area-inset-top, 0px)) + 66px);
+  width: min(420px, calc(100% - 24px));
+  background: var(--paper); color: var(--ink);
+  border: 1.5px solid var(--gold); border-radius: 14px;
+  padding: 8px 10px 10px 14px; box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
+}
+.tut-coach.tut-shake { animation: tut-shake .4s ease; }
+@keyframes tut-shake { 20%, 60% { transform: translateX(calc(-50% - 6px)); } 40%, 80% { transform: translateX(calc(-50% + 6px)); } }
+.tut-head { display: flex; align-items: center; gap: 8px; }
+.tut-step { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.tut-dots { display: flex; gap: 4px; flex: 1; }
+.tut-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
+.tut-dots i.on { background: var(--gold); }
+.tut-coach .tut-skip { padding: 6px 8px; font-size: 13px; color: var(--muted); margin-right: -4px; }
+.tut-text { margin: 2px 0 0; font-size: 15px; line-height: 1.35; }
+.tut-nudge { margin: 6px 0 0; font-size: 13px; font-weight: 700; color: var(--gold); }
+.tut-next { margin-top: 8px; padding: 8px 16px; }
+/* Landscape and desktop: the card sits over the board's top left, clear of the side column. */
+@media (orientation: landscape) {
+  .tut-coach { left: max(12px, env(safe-area-inset-left, 0px)); transform: none; top: max(10px, env(safe-area-inset-top, 0px)); width: min(400px, 52vw); }
+  .tut-coach.tut-shake { animation-name: tut-shake-l; }
+  @keyframes tut-shake-l { 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
+}
+/* What to tap pulses: a hex (or the hex under a piece), a button, or the part of the screen to look at. */
+.board polygon.tut-glow {
+  fill: var(--gold) !important; stroke: #fff2b0 !important; stroke-width: 4 !important; stroke-opacity: 1 !important;
+  animation: tut-hex 1s ease-in-out infinite alternate;
+}
+@keyframes tut-hex { from { fill-opacity: .25; } to { fill-opacity: .65; } }
+.board g.tut-glow { animation: tut-piece 1s ease-in-out infinite alternate; }
+@keyframes tut-piece { from { filter: drop-shadow(0 0 0 rgba(255, 214, 90, 0)); } to { filter: drop-shadow(0 0 7px rgba(255, 214, 90, .95)); } }
+button.tut-glow, .points.tut-glow, .dice.tut-glow { position: relative; border-radius: 10px; animation: tut-ring 1s ease-in-out infinite alternate; }
+@keyframes tut-ring { from { box-shadow: 0 0 0 2px var(--gold); } to { box-shadow: 0 0 0 6px color-mix(in srgb, var(--gold) 35%, transparent), 0 0 18px var(--gold); } }
+/* A bouncing arrow over the piece or hex to tap. */
+.tut-pointer {
+  position: fixed; z-index: 25; pointer-events: none; width: 0; height: 0;
+  border-left: 13px solid transparent; border-right: 13px solid transparent; border-top: 20px solid var(--gold);
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .6));
+  transform: translate(-50%, -100%); animation: tut-bob .8s ease-in-out infinite alternate;
+}
+@keyframes tut-bob { from { transform: translate(-50%, calc(-100% - 2px)); } to { transform: translate(-50%, calc(-100% - 12px)); } }
+/* The end card ("You're ready") and the first-launch offer. */
+.tut-final {
+  position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; padding: 16px;
+  background: rgba(20, 17, 13, .7); animation: tut-fade .3s ease both;
+}
+@keyframes tut-fade { from { opacity: 0; } }
+.tut-final-card { background: var(--paper); border-radius: 16px; padding: 22px; width: min(400px, 100%); text-align: center; border-top: 4px solid var(--gold); display: flex; flex-direction: column; gap: 8px; }
+.tut-final-card h2 { font: 400 32px/1.1 var(--title); margin: 0; }
+.tut-final-card p { margin: 0 0 8px; color: var(--muted); }
+.tut-medal { width: 64px; height: 64px; margin: 0 auto 4px; border-radius: 50%; display: grid; place-items: center; font: 700 32px/1 var(--title); color: #2b2620; background: radial-gradient(circle at 35% 30%, #f6d77a, var(--gold)); }
+@media (prefers-reduced-motion: reduce) {
+  .tut-coach.tut-shake, .tut-pointer, .board polygon.tut-glow, .board g.tut-glow, button.tut-glow, .points.tut-glow, .dice.tut-glow, .tut-final { animation: none; }
+  .board polygon.tut-glow { fill-opacity: .45; }
+}
+/* ===== end tutorial ===== */
+
+/* =====================================================================================
+   DESIGN LAYER v2 — "Carved walnut & brass" (see _art/UI-DIRECTION.md).
+   Sits last so it wins the cascade; the rules above keep layout mechanics.
+   Brass is spent only on the next action and on what is selected.
+   Nothing that floats over the board uses filter or backdrop-filter (pan performance).
+   ===================================================================================== */
+:root {
+  --void: #0d0b08;
+  --wood-0: #15110c;
+  --wood-1: #1d1710;
+  --wood-2: #272016;
+  --wood-3: #322919;
+  --hair: rgba(232, 200, 140, .13);
+  --hair-2: rgba(232, 200, 140, .22);
+  --bevel: rgba(255, 232, 190, .07);
+  --ink: #f4ecda;
+  --ink-2: #c4b597;
+  --ink-3: #8e8167;
+  --brass: #d4ad62;
+  --brass-hi: #f0d697;
+  --brass-lo: #8c6a2e;
+  --on-brass: #20170a;
+  --danger: #d9583f;
+  --display: 'Forum', 'Alegreya Sans', Georgia, serif;
+  --ui: 'Alegreya Sans', 'PT Sans', system-ui, sans-serif;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 18px;
+  --r-xl: 26px;
+  --sh-1: inset 0 1px 0 var(--bevel), 0 1px 2px rgba(0, 0, 0, .45);
+  --sh-2: 0 6px 18px rgba(0, 0, 0, .45);
+  --sh-3: 0 24px 60px rgba(0, 0, 0, .6);
+  --brass-fill: linear-gradient(180deg, #f3dca2 0%, #d9b56c 42%, #b38841 100%);
+  --wood-fill: linear-gradient(180deg, #2b2318 0%, #221b13 100%);
+  /* Older rules read these names: point them at the new palette. */
+  --bg: var(--void);
+  --paper: var(--wood-1);
+  --panel-2: var(--wood-2);
+  --muted: var(--ink-2);
+  --line: var(--hair-2);
+  --btn: var(--wood-3);
+  --track: var(--wood-2);
+  --title: var(--display);
+  --gold: var(--brass);
+  --red-text: #f07a62;
+  --blue-text: #ece5d3;
+}
+
+body { background: var(--void); font: 400 15px/1.4 var(--ui); font-feature-settings: 'lnum' 1; }
+
+/* ---------- buttons ---------- */
+button {
+  font: 700 15.5px/1.15 var(--ui);
+  letter-spacing: .01em;
+  min-height: 44px;
+  padding: 12px 16px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--hair-2);
+  background: var(--wood-fill);
+  color: var(--ink);
+  box-shadow: var(--sh-1);
+  transition: transform .12s ease-out, box-shadow .15s, background-color .15s, opacity .15s;
+}
+button:active:not(:disabled) { transform: scale(.97); }
+button:disabled { opacity: .38; box-shadow: none; }
+button.primary {
+  background: var(--brass-fill);
+  border-color: #6e5222;
+  color: var(--on-brass);
+  font-weight: 800;
+  text-shadow: 0 1px 0 rgba(255, 244, 214, .45);
+  box-shadow: inset 0 1px 0 rgba(255, 250, 230, .65), inset 0 -2px 0 rgba(110, 76, 22, .35), 0 3px 10px rgba(0, 0, 0, .4);
+}
+button.warn {
+  background: linear-gradient(180deg, #d4634a 0%, #a8321f 100%);
+  border-color: #5e170c;
+  color: #fff4ea;
+  text-shadow: 0 1px 0 rgba(60, 10, 4, .5);
+  box-shadow: inset 0 1px 0 rgba(255, 210, 190, .4), 0 3px 10px rgba(0, 0, 0, .4);
+}
+button.ghost { background: transparent; border-color: transparent; box-shadow: none; color: var(--ink-2); }
+button:focus-visible { outline: 2px solid var(--brass-hi); outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) {
+  button:not(:disabled):hover { filter: none; background-color: var(--wood-3); border-color: rgba(232, 200, 140, .32); }
+  button.primary:not(:disabled):hover { filter: brightness(1.06); }
+  button.ghost:not(:disabled):hover { color: var(--ink); }
+}
+/* The end-turn button breathes once every piece has done what it can (Hearthstone's glowing End Turn). */
+button.primary.ready { animation: ready 2.2s ease-in-out infinite; }
+@keyframes ready {
+  50% { box-shadow: inset 0 1px 0 rgba(255, 250, 230, .65), inset 0 -2px 0 rgba(110, 76, 22, .35), 0 0 0 3px rgba(240, 214, 151, .28), 0 0 26px 4px rgba(240, 200, 110, .45); }
+}
+.ic { width: 22px; height: 22px; stroke-width: 2; }
+
+/* ---------- battle screen layout ---------- */
+.screen { gap: 0; }
+.screen.portrait { padding: 0; grid-template-columns: minmax(0, 1fr); }
+.bar, .info, .hud { min-width: 0; }
+.portrait .hud { margin: max(8px, env(safe-area-inset-top, 0px)) max(10px, env(safe-area-inset-right, 0px)) 8px max(10px, env(safe-area-inset-left, 0px)); }
+.stage-wrap { background: radial-gradient(ellipse 90% 70% at 50% 55%, #221b12 0%, #120f0b 60%, var(--void) 100%); }
+.stage-wrap::after { background: radial-gradient(ellipse at 50% 50%, transparent 60%, rgba(5, 4, 2, .5) 100%); }
+
+/* Player strip (chess.com's player bar): crest medallion, army, turn; dice and points on the right. */
+.hud {
+  min-height: 60px;
+  gap: 10px;
+  padding: 8px 8px 8px 8px;
+  border: 1px solid var(--hair);
+  border-left: 1px solid var(--hair);
+  border-radius: var(--r-lg);
+  background: linear-gradient(180deg, #221b13 0%, #18130d 100%);
+  box-shadow: inset 0 1px 0 var(--bevel), var(--sh-2);
+}
+.screen.blue .hud { border-left-color: var(--hair); }
+.who { flex: 1 1 0; gap: 10px; font: 400 19px/1.05 var(--display); letter-spacing: .01em; }
+.who > span:last-child { display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-bottom: 1px; }
+.who small { margin-top: 5px; }
+.who small { font: 700 10.5px/1 var(--ui); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.who .crest { flex: none; width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center;
+  background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--fc, #7a1d16) 55%, #2a2016) 0%, #17120c 78%);
+  box-shadow: inset 0 0 0 1.5px var(--brass-lo), inset 0 0 0 3px rgba(0, 0, 0, .35), 0 2px 6px rgba(0, 0, 0, .5); }
+.who .crest svg { width: 24px; height: 28px; filter: none; }
+.dice { gap: 6px; }
+.die { width: 28px; height: 28px; padding: 4px; border: 0; border-radius: 7px;
+  background: linear-gradient(160deg, #fffaf0 0%, #ece2cc 70%, #d6c8a8 100%);
+  box-shadow: inset 0 -2px 0 rgba(120, 96, 60, .35), 0 2px 4px rgba(0, 0, 0, .5); }
+.die i { width: 5px; height: 5px; }
+.die i.on { background: #2a1d10; box-shadow: inset 0 1px 1px rgba(0, 0, 0, .6); }
+.die.blank { opacity: .28; }
+.points { min-width: 52px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 0 4px; }
+.points b { font: 400 30px/1 var(--display); color: var(--brass-hi); text-shadow: 0 1px 0 rgba(0, 0, 0, .6); font-variant-numeric: lining-nums tabular-nums; }
+.points span { font: 700 9.5px/1.1 var(--ui); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); white-space: normal; text-align: center; max-width: 64px; }
+.hud .dice { margin-left: 0; }
+@media (max-width: 440px) {
+  .hud { gap: 8px; padding-right: 4px; }
+}
+.desktop .hud { gap: 8px; padding-right: 4px; }
+.desktop .who { gap: 8px; font-size: 18px; }
+.desktop .die { width: 24px; height: 24px; padding: 3px; border-radius: 6px; }
+.desktop .die i { width: 4.5px; height: 4.5px; }
+.desktop .dice { gap: 4px; }
+.desktop .points { min-width: 0; padding: 0; }
+.desktop .points span { max-width: 44px; font-size: 8.5px; }
+.desktop .hud .icon { width: 38px; height: 38px; min-height: 38px; }
+@media (max-width: 440px) {
+  .who { gap: 8px; font-size: 17.5px; }
+  .who .crest { width: 40px; height: 40px; }
+  .die { width: 24px; height: 24px; padding: 3px; border-radius: 6px; }
+  .die i { width: 4.5px; height: 4.5px; }
+  .dice { gap: 4px; }
+  .points { min-width: 0; padding: 0; }
+  .points b { font-size: 27px; }
+  .points span { max-width: 44px; font-size: 8.5px; }
+}
+@keyframes bump { 40% { transform: scale(1.22); color: #fff3c8; } }
+.hud .icon { width: 44px; height: 44px; min-height: 44px; padding: 0; border-radius: 50%; color: var(--ink-2); }
+.hud .dice + .points { margin-left: 2px; }
+
+/* The dock: the hint and the turn buttons sit on one wooden shelf at the bottom (Slay the Spire / Into the Breach). */
+.portrait .info {
+  margin: 0;
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+  padding: 14px 18px 8px;
+  min-height: 0;
+  background: var(--wood-0);
+  border-top: 1px solid var(--hair);
+  box-shadow: 0 -10px 24px rgba(0, 0, 0, .35);
+  position: relative;
+  z-index: 2;
+}
+.portrait .info:empty { padding: 0; min-height: 14px; }
+.portrait .bar { background: var(--wood-0); padding: 6px max(12px, env(safe-area-inset-right, 0px)) max(12px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)); position: relative; z-index: 2; }
+.info { font: 400 14px/1.4 var(--ui); color: var(--ink-2); }
+.info b { font-weight: 700; color: var(--ink); }
+.has-msg .info { color: var(--brass-hi); }
+.landscape .info, .desktop .info, .full .info { background: var(--wood-1); border: 1px solid var(--hair); border-radius: var(--r-lg); padding: 10px 14px; box-shadow: inset 0 1px 0 var(--bevel); }
+
+/* Selected piece: its carved portrait, name and numbers (Into the Breach's unit panel). */
+.info.unit { display: flex; align-items: center; gap: 12px; color: var(--ink); }
+.uport { flex: none; width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: end center; overflow: hidden;
+  background: radial-gradient(circle at 50% 70%, #3a2e1e 0%, #1a140d 75%); box-shadow: inset 0 0 0 1px var(--hair-2); }
+.uport .figpic { width: auto; height: 64px; margin-bottom: -8px; max-width: 100%; object-fit: contain; filter: none; }
+.uport svg { width: 40px; height: 30px; align-self: center; }
+.ubody { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.ubody > b { font: 400 19px/1.05 var(--display); letter-spacing: .01em; }
+.info.unit .stats { margin: 0; }
+
+/* Turn buttons: End turn is the big brass one on the right; reroll and undo are compact. */
+.bar { gap: 8px; }
+.row { gap: 8px; }
+.row button { min-height: 50px; border-radius: 14px; }
+.row button.withicon { flex: 0 0 auto; padding: 0 16px; gap: 7px; }
+.row button[data-act='end'], .row button[data-act='roll'], .row button[data-act='done'], .row button[data-act='take'] { flex: 1 1 auto; font-size: 16.5px; }
+.thinking { background: var(--wood-1); border: 1px solid var(--hair); border-radius: 14px; min-height: 50px; display: grid; place-items: center;
+  font: 400 17px/1.2 var(--display); color: var(--ink-2); letter-spacing: .02em; animation: think 1.8s ease-in-out infinite; }
+@keyframes think { 50% { opacity: .6; } }
+
+/* Deploy tray: one quiet row of wooden tokens with a count (Wingspan's hand, less crowded). */
+.tray { gap: 8px; padding: 2px 2px 4px; scrollbar-width: none; }
+.tray::-webkit-scrollbar { display: none; }
+.chip { min-height: 48px; padding: 4px 12px 4px 6px; gap: 4px; border-radius: 14px; font: 700 14px/1 var(--ui); color: var(--ink-2); }
+.chip svg { width: 40px; height: 30px; }
+.chip.on { background: linear-gradient(180deg, #3a2e1c, #2a2115); border-color: var(--brass); color: var(--ink); box-shadow: inset 0 0 0 1px var(--brass); }
+
+/* Map controls: small round tokens resting on the table (Monument Valley keeps chrome to a corner). */
+.cam, .zoom { gap: 8px; z-index: 2; }
+.cam { left: 10px; bottom: 12px; }
+.zoom { right: 10px; bottom: 12px; }
+.cam button, .zoom button {
+  width: 44px; height: 44px; min-height: 44px; padding: 0; border-radius: 50%;
+  background: rgba(21, 17, 12, .86); color: var(--ink); border: 1px solid var(--hair-2);
+  box-shadow: inset 0 1px 0 var(--bevel), 0 4px 12px rgba(0, 0, 0, .45);
+}
+.zoom button .ic, .cam button .ic { width: 20px; height: 20px; }
+.cam button.on { background: #6e2116; border-color: #ff8a70; }
+.viewcube { background: rgba(21, 17, 12, .7); border: 1px solid var(--hair); top: 10px; left: 10px; }
+
+/* Desktop: the board is a lit table; the right column is a stack of wooden cards. */
+.screen.desktop { gap: 12px; padding: 16px; grid-template-columns: minmax(0, 1fr) 388px; }
+.desktop .who .crest { width: 40px; height: 40px; }
+.desktop .stage-wrap, .full .stage-wrap { border-radius: var(--r-xl); overflow: hidden; box-shadow: inset 0 0 0 1px var(--hair), var(--sh-2); }
+.desktop .hud { padding: 10px 10px 10px 10px; }
+.screen.full { padding: 12px 16px 16px; gap: 12px; }
+.side { background: var(--wood-1); border: 1px solid var(--hair); border-radius: var(--r-lg); padding: 16px; gap: 18px; box-shadow: inset 0 1px 0 var(--bevel); }
+.side h3, .drawer h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; font: 700 11px/1 var(--ui); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); }
+.side h3::after, .drawer h3::after { content: ''; flex: 1; height: 1px; background: var(--hair); }
+.keys { font-size: 12.5px; color: var(--ink-3); }
+
+/* ---------- menu drawer ---------- */
+.drawer-bg { background: rgba(6, 5, 3, .62); }
+.drawer { background: var(--wood-0); border-left: 1px solid var(--hair); box-shadow: var(--sh-3); gap: 18px;
+  padding: max(14px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(18px, env(safe-area-inset-bottom, 0px)) 16px; }
+.drawer-head { font: 400 24px/1.1 var(--display); padding: 2px 0 2px 4px; }
+.drawer-head .close { width: 44px; height: 44px; padding: 0; border-radius: 50%; display: grid; place-items: center; color: var(--ink-2); background: var(--wood-2); border: 1px solid var(--hair); }
+.mgroup { background: var(--wood-1); border: 1px solid var(--hair); border-radius: var(--r-lg); box-shadow: inset 0 1px 0 var(--bevel); }
+.mrow { min-height: 52px; padding: 8px 14px; gap: 12px; background: transparent; border: 0; box-shadow: none; border-radius: 0; font: 500 15.5px/1.2 var(--ui); }
+.mrow + .mrow { border-top: 1px solid var(--hair); }
+.mrow .mval { color: var(--ink-3); font-size: 14px; }
+.mrow > i { color: var(--ink-3); }
+.mrow.danger .mtitle { color: #ff9a84; }
+@media (hover: hover) and (pointer: fine) { .mrow:not(:disabled):hover { background: rgba(255, 236, 200, .04); } }
+/* Icon medallions in lists: a tinted disc, not a loud square. */
+.ricon { width: 32px; height: 32px; border-radius: 10px; color: color-mix(in srgb, var(--ic, #c4b597) 45%, #fff3dc);
+  background: color-mix(in srgb, var(--ic, #c4b597) 30%, #18120b); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ic, #c4b597) 45%, transparent); }
+.ricon svg { fill: currentColor; stroke: currentColor; stroke-width: 2; }
+.switch { width: 46px; height: 28px; border-radius: 14px; background: #0f0c08; box-shadow: inset 0 0 0 1px var(--hair-2), inset 0 1px 3px rgba(0, 0, 0, .6); }
+.switch i { top: 3px; left: 3px; width: 22px; height: 22px; background: #d9ccb0; box-shadow: 0 1px 3px rgba(0, 0, 0, .5); }
+.switch.is-on, .rule.on .switch { background: linear-gradient(180deg, #c69d52, #9c7634); box-shadow: inset 0 0 0 1px #6e5222; }
+.switch.is-on i, .rule.on .switch i { transform: translateX(18px); background: #fff8e8; }
+.legend { gap: 8px; }
+.legend li { gap: 10px; }
+.legend li svg { flex: none; }
+.legend li div { font-size: 14px; gap: 2px; }
+.note { font-size: 12.5px; color: var(--ink-3); }
+.log { font-size: 13.5px; color: var(--ink-2); }
+.log li { padding: 6px 0; border-top: 1px solid var(--hair); gap: 8px; }
+.log .tn { color: var(--ink-3); font-weight: 700; }
+
+/* ---------- stat chips ---------- */
+.st { font: 800 13px/1 var(--ui); padding: 4px 8px; gap: 4px; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06); }
+.st i { font: 800 9.5px/1 var(--ui); letter-spacing: .1em; opacity: .8; }
+.st.atk { background: #3d1d13; color: #ff9f78; }
+.st.def { background: #142f3d; color: #8fd2ee; }
+.st.mov { background: #22321a; color: #bde187; }
+.st.rng { background: #2e1f40; color: #d3b1ff; }
+.key { font-size: 12.5px; color: var(--ink-3); }
+
+/* ---------- covers: title, hand-over, invite, victory ---------- */
+.sheet, .cover { background: rgba(8, 6, 4, .74); }
+.cover { background: radial-gradient(ellipse 120% 70% at 50% 30%, #2a2116 0%, #15110c 55%, var(--void) 100%); }
+.cover.red { background: radial-gradient(ellipse 120% 70% at 50% 30%, color-mix(in srgb, var(--red) 38%, #1a140d) 0%, #15110c 58%, var(--void) 100%); }
+.cover.blue { background: radial-gradient(ellipse 120% 70% at 50% 30%, #34302a 0%, #15110c 58%, var(--void) 100%); }
+.card, .sheet-body { background: linear-gradient(180deg, #211a12 0%, #18130d 100%); border: 1px solid var(--hair); border-radius: var(--r-xl); box-shadow: inset 0 1px 0 var(--bevel), var(--sh-3); padding: 26px 22px 22px; }
+.card { display: flex; flex-direction: column; align-items: stretch; gap: 10px; }
+.card h2 { font: 400 38px/1.05 var(--display); margin: 2px 0 2px; letter-spacing: .01em; }
+.card p { margin: 0 0 8px; color: var(--ink-2); font-size: 15px; line-height: 1.45; }
+.card .small { margin: 6px 0 0; font: 700 11px/1 var(--ui); letter-spacing: .2em; text-transform: uppercase; color: var(--brass); }
+.card .emblem { margin: 0 0 4px; gap: 16px; }
+.card .emblem svg { width: 64px; height: 75px; filter: drop-shadow(0 6px 10px rgba(0, 0, 0, .55)); }
+.card button.wide { min-height: 52px; font-size: 16.5px; }
+.card .ghost.wide { margin-top: 0; color: var(--ink-2); }
+.hero-vs { font: 400 18px var(--display); color: var(--brass); letter-spacing: .14em; }
+
+/* Title screen: the two kings face off over the shield (Root's title puts its characters first). */
+.card.start { gap: 12px; }
+.start .langs { align-self: flex-end; width: auto; padding: 3px; }
+.start .langs button { min-height: 36px; padding: 6px 12px; font-size: 13px; }
+.hero { padding: 6px 0 8px; }
+.duel { position: relative; display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; justify-items: center; height: 150px; margin: 0 -6px 2px; }
+.duel::before { content: ''; position: absolute; left: 8%; right: 8%; bottom: 2px; height: 34px; border-radius: 50%; background: radial-gradient(ellipse, rgba(240, 200, 120, .16), transparent 70%); }
+.duel .figpic { position: relative; height: 140px; max-width: 100%; object-fit: contain; filter: drop-shadow(0 10px 10px rgba(0, 0, 0, .6)); }
+.duel .logo { align-self: center; }
+.hero .logo svg { width: 66px; height: 77px; filter: drop-shadow(0 8px 14px rgba(0, 0, 0, .6)); }
+.hero h2 { font-size: 36px; margin: 14px 0 6px; line-height: 1.02; }
+.hero p { color: var(--ink-2); font-size: 15px; margin: 0; }
+.choice { min-height: 76px; gap: 14px; padding: 12px 16px 12px 12px; border-radius: var(--r-lg); background: var(--wood-fill); border: 1px solid var(--hair); box-shadow: var(--sh-1); font-weight: 400; }
+.cicon { width: 50px; height: 50px; border-radius: 50%; color: var(--brass-hi);
+  background: radial-gradient(circle at 50% 35%, #3b2e1b 0%, #1a140c 80%); box-shadow: inset 0 0 0 1.5px var(--brass-lo), 0 2px 6px rgba(0, 0, 0, .45); }
+.cicon svg { width: 26px; height: 26px; }
+.choice b { font: 400 21px/1.1 var(--display); color: var(--ink); }
+.ctext > span { font: 400 13.5px/1.3 var(--ui); color: var(--ink-3); }
+.choice > i { color: var(--brass-lo); font-size: 28px; }
+.invite-url { min-height: 50px; background: #100d09; border: 1px solid var(--hair-2); border-radius: var(--r-md); color: var(--brass-hi); font: 500 13.5px/1.3 ui-monospace, Menlo, monospace; box-shadow: inset 0 1px 3px rgba(0, 0, 0, .6); }
+
+/* Victory: crest on turning brass light, then the battle in numbers. */
+.victory .card { text-align: center; }
+.vbanner { height: 150px; margin: -8px 0 0; }
+.vrays { width: 210px; height: 210px; background: repeating-conic-gradient(rgba(240, 200, 120, .26) 0 7deg, transparent 7deg 22deg); }
+.vemblem { width: 104px; height: 104px; border-radius: 50%; display: grid; place-items: center;
+  background: radial-gradient(circle at 50% 35%, #3b2e1b 0%, #15100a 80%); box-shadow: inset 0 0 0 2px var(--brass), inset 0 0 0 5px rgba(0, 0, 0, .4), 0 10px 24px rgba(0, 0, 0, .6); }
+.vemblem svg { width: 56px; height: 66px; }
+.victory h2 { font-size: 42px; }
+.vstats { background: #110e0a; border: 1px solid var(--hair); border-radius: var(--r-lg); padding: 6px 14px; margin: 6px 0 4px; }
+.vrow { grid-template-columns: 64px 1fr 64px; font: 700 11px/1 var(--ui); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); padding: 9px 0; }
+.vrow b { font: 400 26px/1 var(--display); color: var(--ink); }
+.vrow + .vrow:not(.vhead) { border-top: 1px solid var(--hair); }
+.vcrest svg { width: 28px; height: 33px; }
+.card .vbest { font-size: 14.5px; color: var(--ink-2); margin: 4px 0 6px; }
+
+/* ---------- sheets: New battle and the army builder ---------- */
+.sheet { place-items: center; }
+.sheet-body { padding: 0 22px; }
+.sheet-body > h2 { position: relative; margin: 0 -22px; padding: 16px 22px 14px; font: 400 26px/1.1 var(--display); border-bottom: 1px solid var(--hair); gap: 10px; }
+.sheet-scroll { margin: 0 -22px; padding: 4px 22px 20px; scrollbar-width: thin; scrollbar-color: var(--wood-3) transparent; }
+.sheet-foot { background: var(--wood-0); border-top: 1px solid var(--hair); box-shadow: 0 -12px 22px -12px rgba(0, 0, 0, .7); padding: 12px 22px max(16px, env(safe-area-inset-bottom, 0px)); gap: 10px; margin: 0 -22px; }
+.sheet-foot .primary { min-height: 54px; font-size: 17px; }
+.setup h2 .back { width: 44px; height: 44px; margin: 0 0 0 -10px; padding: 0; border-radius: 50%; color: var(--ink-2); }
+/* Section labels engraved with a hairline (one style for every heading on the sheets). */
+.setup h3, .era { display: flex; align-items: center; gap: 10px; margin: 26px 0 12px; font: 700 11px/1 var(--ui); letter-spacing: .16em; text-transform: uppercase; color: var(--ink-3); }
+.era { margin: 20px 0 10px; }
+.setup h3::after, .era::after { content: ''; flex: 1; height: 1px; background: var(--hair); }
+.era + .ftiles { margin-top: 0; }
+.setup .blurb { font-size: 14px; color: var(--ink-2); margin: 14px 2px 0; line-height: 1.45; }
+.setup .blurb.champ { color: var(--brass-hi); font-size: 13.5px; }
+/* Phones: sheets take the whole screen, like a native page. */
+@media (max-width: 600px) {
+  .sheet { padding: 0; }
+  .sheet-body { width: 100%; height: 100%; max-height: 100%; border-radius: 0; border: 0; padding-top: env(safe-area-inset-top, 0px); }
+  .sheet-body > h2 { padding-top: 12px; }
+}
+
+/* Face-off: the two armies' kings on lit pedestals; the side being chosen wears the brass ring. */
+.vs { gap: 10px; margin-top: 16px; }
+.vs-card { min-height: 0; padding: 12px 8px 14px; gap: 6px; border-radius: var(--r-lg); border: 1px solid var(--hair); box-shadow: var(--sh-1);
+  background: radial-gradient(ellipse 80% 55% at 50% 72%, color-mix(in srgb, var(--fc) 34%, #1d1710) 0%, #1a140d 75%); }
+.vs-card.on { border-color: var(--brass); box-shadow: inset 0 0 0 1px var(--brass), 0 0 0 3px rgba(212, 173, 98, .18), 0 8px 20px rgba(0, 0, 0, .45); }
+.vs-card .figpic { height: 118px; }
+.vs-card b { font: 400 18px/1.1 var(--display); }
+.vs-who { font: 700 10.5px/1 var(--ui); letter-spacing: .16em; color: var(--ink-3); }
+.vs-card.on .vs-who { color: var(--brass); }
+.vs-swap { width: 44px; height: 44px; min-height: 44px; background: var(--wood-1); border: 1px solid var(--hair-2); color: var(--brass); }
+
+/* Army tiles: each army's leader, big (Root enlarged its faction pickers for phones). */
+.ftiles { gap: 8px; }
+.ftile { min-height: 0; padding: 10px 4px 10px; gap: 6px; border-radius: var(--r-md); border: 1px solid var(--hair); box-shadow: var(--sh-1);
+  background: radial-gradient(ellipse 80% 50% at 50% 62%, #2a2117 0%, #1a140d 80%); font: 700 13px/1.15 var(--ui); color: var(--ink-2); }
+.ftile.on { color: var(--ink); border-color: var(--brass); background: radial-gradient(ellipse 80% 55% at 50% 62%, color-mix(in srgb, var(--fc) 40%, #1d1710) 0%, #1a140d 80%);
+  box-shadow: inset 0 0 0 1px var(--brass), 0 0 16px rgba(212, 173, 98, .18); }
+.ftile.taken { opacity: .38; }
+.ftile .figpic { height: 74px; }
+
+/* Map tiles: only the frame is styled here (the preview inside belongs to thumb.ts). */
+.mtiles { gap: 8px; }
+.mtile { min-height: 0; padding: 6px 6px 9px; gap: 7px; border-radius: var(--r-md); border: 1px solid var(--hair); background: var(--wood-1); box-shadow: var(--sh-1); font: 700 12.5px/1.15 var(--ui); color: var(--ink-2); }
+.mtile.on { color: var(--ink); border-color: var(--brass); box-shadow: inset 0 0 0 1px var(--brass), 0 0 14px rgba(212, 173, 98, .18); }
+.mgen { margin-top: 12px !important; }
+.mgen > div > button[data-act='map-reroll'], .mgen button[data-act='map-reroll'] { min-height: 52px; }
+
+/* Segmented control. */
+.seg { background: #110e0a; border: 1px solid var(--hair); border-radius: 14px; padding: 3px; gap: 3px; box-shadow: inset 0 1px 3px rgba(0, 0, 0, .5); }
+.seg button { min-height: 42px; border: 0; border-radius: 11px; background: transparent; box-shadow: none; color: var(--ink-3); font: 700 14.5px/1.1 var(--ui); padding: 8px 4px; }
+.seg button small { font: 700 9.5px/1.1 var(--ui); letter-spacing: .1em; margin-top: 2px; }
+.seg button.on { background: var(--wood-fill); color: var(--ink); box-shadow: inset 0 1px 0 var(--bevel), inset 0 0 0 1px var(--hair-2), 0 2px 6px rgba(0, 0, 0, .45); }
+@media (hover: hover) and (pointer: fine) { .seg button:not(.on):not(:disabled):hover { background: rgba(255, 236, 200, .04); color: var(--ink-2); } }
+
+/* Rule presets and the grouped rule list. */
+.presets { gap: 10px; }
+.preset { min-height: 0; padding: 14px; gap: 4px; border-radius: var(--r-lg); background: var(--wood-fill); border: 1px solid var(--hair); box-shadow: var(--sh-1); }
+.preset b { font: 400 18px/1.15 var(--display); color: var(--ink); }
+.preset small { font-size: 12.5px; line-height: 1.4; color: var(--ink-3); }
+.picon { width: 38px; height: 38px; border-radius: 50%; background: #110e0a; color: var(--ink-3); box-shadow: inset 0 0 0 1px var(--hair-2); margin-bottom: 6px; }
+.preset.on { border-color: var(--brass); box-shadow: inset 0 0 0 1px var(--brass), 0 0 16px rgba(212, 173, 98, .16); }
+.preset.on .picon { background: var(--brass-fill); color: var(--on-brass); box-shadow: inset 0 0 0 1px #6e5222; }
+.disclose { min-height: 54px; margin-top: 10px; padding: 12px 16px; border-radius: var(--r-lg); background: var(--wood-1); border: 1px solid var(--hair); box-shadow: var(--sh-1); font: 700 15px/1.2 var(--ui); }
+.disclose small { color: var(--ink-3); font-weight: 500; }
+.disclose i { color: var(--brass-lo); }
+.rgroups { gap: 18px; margin: 18px 0 8px; }
+.rgroup h4 { margin: 0 4px 8px; font: 700 11px/1 var(--ui); letter-spacing: .14em; color: var(--ink-3); }
+.rlist { background: var(--wood-1); border: 1px solid var(--hair); border-radius: var(--r-lg); box-shadow: inset 0 1px 0 var(--bevel); }
+.rule { min-height: 60px; padding: 10px 14px; gap: 12px; border: 0; border-radius: 0; background: transparent; box-shadow: none; font-weight: 400; }
+.rule + .rule { border-top: 1px solid var(--hair); }
+.rule .what b { font: 700 15px/1.2 var(--ui); color: var(--ink); }
+.rule .what small { font-size: 12.5px; color: var(--ink-3); line-height: 1.4; }
+
+/* Army builder: Slay the Spire's card anatomy — cost coin top-left, the carved figure, name, numbers, then the stepper. */
+.budget { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 6px; margin: 14px 0 0; padding-bottom: 14px; font: 700 11px/1 var(--ui); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); }
+.budget b { font: 400 36px/1 var(--display); letter-spacing: 0; color: var(--brass-hi); }
+.meter { flex-basis: 100%; height: 6px; margin-top: 10px; border-radius: 3px; background: #0f0c08; box-shadow: inset 0 0 0 1px var(--hair); }
+.meter i { background: var(--brass-fill); border-radius: 3px; }
+.buy { gap: 10px; margin: 6px 0 14px; }
+.buy li.ucard { padding: 12px 10px 10px; gap: 6px; border: 1px solid var(--hair); border-radius: var(--r-lg); box-shadow: var(--sh-1);
+  background: radial-gradient(ellipse 85% 55% at 50% 40%, #2d2318 0%, #1a140d 78%); }
+.buy li.ucard.has { border-color: rgba(212, 173, 98, .55); box-shadow: inset 0 0 0 1px rgba(212, 173, 98, .35), var(--sh-1); }
+.ucard .price { left: 10px; right: auto; top: 10px; width: 36px; height: 36px; border: 0; color: var(--on-brass); font: 400 17px/1 var(--display);
+  background: radial-gradient(circle at 40% 30%, #f6e2ac 0%, #d4ad62 55%, #9c7634 100%); box-shadow: inset 0 0 0 1px #6e5222, inset 0 1px 0 rgba(255, 250, 230, .6), 0 2px 5px rgba(0, 0, 0, .5); }
+.ucard .price small { font: 800 7.5px/1 var(--ui); letter-spacing: .08em; }
+.ucard .price.free-badge { opacity: 1; background: #2a2116; color: var(--ink-3); box-shadow: inset 0 0 0 1px var(--hair-2); }
+.ucard .ufig { min-height: 0; height: 108px; box-shadow: none; border: 0; background: transparent; }
+.ucard .figpic { max-height: 108px; }
+.ucard .name { font: 400 18px/1.1 var(--display); margin-top: 2px; }
+.ucard .stats { gap: 4px; }
+.ucard .st { font-size: 12px; padding: 3px 6px; }
+.ucard .step { gap: 6px; margin-top: 6px; min-height: 44px; }
+.ucard .step button { width: 44px; height: 44px; min-height: 44px; font-size: 22px; font-weight: 500; }
+.ucard .count { min-width: 34px; font: 400 28px/1 var(--display); }
+.ucard.has .count { color: var(--brass-hi); }
+.ucard .free { font-size: 13px; color: var(--ink-3); }
+.army { background: #110e0a; border: 1px solid var(--hair); border-radius: 14px; padding: 8px 10px; }
+.army-head { font: 700 10.5px/1 var(--ui); letter-spacing: .14em; color: var(--ink-3); padding: 2px 0 4px; }
+.army-pieces { max-height: 80px; }
+.sheet-foot .row button { min-height: 46px; font-size: 14.5px; padding: 8px; }
+.error { color: #ff9a84; font-size: 14px; margin: 0; }
+
+/* Phone held sideways: the strip and the buttons float on the table as dark tokens. */
+.phone .hud { background: rgba(21, 17, 12, .9); backdrop-filter: none; border-radius: 999px; padding: 4px 6px 4px 4px; min-height: 0; box-shadow: var(--sh-2); }
+.phone .who .crest { width: 36px; height: 36px; }
+.phone .info { background: rgba(21, 17, 12, .92); border: 1px solid var(--hair); border-radius: 14px; }
+.phone .bar button { min-height: 44px; padding: 8px 14px; }
+
+/* Board text in the UI type family. */
+.board .cost, .board .trail-kill, .board .badge text, .board .coord { font-family: var(--ui); }
+.board .float { font-family: var(--display); font-weight: 400; font-size: 24px; }
+
+@media (prefers-reduced-motion: reduce) {
+  button.primary.ready, .thinking { animation: none; }
+  button { transition: none; }
+}
+
+/* Captured pieces (chess.com): each side's trophies under the strip, greyed and small so they never compete. */
+.hud, .desktop .hud, .full .hud { flex-wrap: wrap; row-gap: 0; }
+.tally { flex-basis: 100%; display: flex; justify-content: space-between; gap: 12px; margin: 6px 2px 0; padding: 6px 2px 0; border-top: 1px solid var(--hair); min-height: 22px; }
+.tside { display: flex; align-items: center; gap: 3px; flex-wrap: wrap; min-width: 0; }
+.tside:last-child { justify-content: flex-end; }
+.tside .fdot { width: 7px; height: 7px; margin: 0 3px 0 0; box-shadow: 0 0 0 1px rgba(244, 236, 218, .35); }
+.tk { display: inline-flex; align-items: center; opacity: .5; filter: grayscale(.9); }
+.tk svg { width: 18px; height: 13px; display: block; }
+.tk i { font: 700 10.5px/1 var(--ui); font-style: normal; color: var(--ink-2); margin-left: 2px; }
+.tside b { font: 700 11px/1 var(--ui); color: var(--ink-2); margin-left: 4px; letter-spacing: .02em; }
+.tnone { font: 400 11px/1 var(--ui); font-style: normal; color: var(--ink-3); }
+.phone .tally { display: none; }
+
+/* ---------- campaign (src/ui/scenarios.ts): the list of historical battles ---------- */
+.cover.campaign { place-items: start center; }
+.campaign-card { width: min(560px, 100%); text-align: left; }
+.chero { position: relative; text-align: center; padding: 6px 0 4px; }
+.chero .ghost { position: absolute; left: -8px; top: 0; padding: 6px 10px; color: var(--muted); }
+.chero h2 { margin: 30px 0 4px; }
+.clist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.ccard { position: relative; padding: 14px; border-radius: 16px; background: var(--panel-2); border: 1px solid var(--line); }
+.ccard.won { border-color: color-mix(in srgb, var(--gold) 60%, var(--line)); }
+.ccard.locked { opacity: .55; }
+.ccard.locked .cvs svg { filter: grayscale(1); }
+.chead { display: flex; align-items: center; gap: 10px; }
+.cnum { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--gold); color: #1f1b15; font-weight: 700; font-size: 14px; }
+.cyear { color: var(--muted); font-size: 13px; letter-spacing: .06em; text-transform: uppercase; }
+.cyear em { font-style: normal; color: var(--gold); }
+.chead .cstars { margin-left: auto; }
+.cstars i { font-style: normal; font-size: 18px; color: var(--track); }
+.cstars i.on { color: var(--gold); }
+.ccard h3 { margin: 8px 0 6px; font: 400 24px/1.15 var(--title); color: var(--ink); }
+.cvs { display: flex; align-items: center; gap: 10px; margin: 4px 0 8px; }
+.cvs .hero-vs { font-size: 14px; }
+.cside { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.cside:last-child { justify-content: flex-end; text-align: right; flex-direction: row-reverse; }
+.cside svg { flex: none; width: 30px; height: 35px; }
+.cside b { font-size: 14px; line-height: 1.2; color: var(--ink); }
+.cside small { flex: none; padding: 1px 6px; border-radius: 6px; background: var(--fc); color: #fff; font-size: 11px; }
+.ccard .cstory { margin: 0 0 6px; font-size: 14px; line-height: 1.45; color: var(--ink); }
+.ccard .cgoal { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
+.ccard .clock { margin: 0; font-size: 13px; color: var(--muted); }
+.card .cresult { margin: 0 0 8px; }
+.cresult .cstars i { font-size: 30px; }
+
+/* Other panels (tutorial coach and offer, replay bar) dressed in the same walnut and brass. */
+.tut-coach { background: linear-gradient(180deg, #221b13, #18130d); border: 1px solid var(--brass-lo); border-radius: var(--r-lg); box-shadow: inset 0 1px 0 var(--bevel), var(--sh-2); padding: 10px 12px 12px 16px; }
+.tut-text { font-size: 15px; color: var(--ink); }
+.tut-step { font: 700 10.5px/1 var(--ui); letter-spacing: .14em; color: var(--ink-3); }
+.tut-dots i.on, .tut-nudge { color: var(--brass-hi); }
+.tut-dots i.on { background: var(--brass); }
+.tut-final { background: rgba(8, 6, 4, .74); }
+.tut-final-card { background: linear-gradient(180deg, #211a12 0%, #18130d 100%); border: 1px solid var(--hair); border-top: 1px solid var(--hair); border-radius: var(--r-xl); box-shadow: inset 0 1px 0 var(--bevel), var(--sh-3); padding: 28px 22px 20px; gap: 10px; }
+.tut-final-card h2 { font: 400 34px/1.05 var(--display); }
+.tut-final-card p { color: var(--ink-2); font-size: 15px; }
+.tut-final-card button { min-height: 50px; }
+.tut-medal { width: 68px; height: 68px; font: 400 34px/1 var(--display); color: var(--on-brass); background: radial-gradient(circle at 40% 30%, #f6e2ac 0%, #d4ad62 55%, #9c7634 100%); box-shadow: inset 0 0 0 1px #6e5222, 0 6px 16px rgba(0, 0, 0, .5); }
+.rp-bar .rp-play { background: var(--brass-fill); border-color: #6e5222; color: var(--on-brass); }
+.rp-bar .rp-speed { font-family: var(--ui); color: var(--brass-hi); }
+.rp-result .rp-watch { border-color: var(--brass-lo); }
+
+/* ---------- weather & light (src/ui/weather.ts) ----------
+   Page layers around the board, all moved or blended by the GPU: the light tint lies on the ground under the board,
+   .wx-sky over it (under the camera buttons). Nothing here takes a tap. */
+.ground-clip .wx-puddles { position: absolute; left: 0; top: 0; max-width: none; transform-origin: 0 0; will-change: transform; mix-blend-mode: screen; opacity: .8; }
+.ground-clip .wx-light { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; mix-blend-mode: multiply; pointer-events: none; }
+.wx-sky { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.wx-sky > * { position: absolute; inset: 0; pointer-events: none; }
+.wx-dim { mix-blend-mode: multiply; }
+/* Falling rain and snow: a tile that repeats, slid by exactly one tile and started over, so it never jumps. */
+.wx-sky .wx-fall { inset: auto; left: calc(-1 * var(--tw)); top: calc(-1 * var(--th)); width: calc(100% + 2 * var(--tw)); height: calc(100% + 2 * var(--th)); background-repeat: repeat; will-change: transform; animation: wx-fall linear infinite; }
+@keyframes wx-fall { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(var(--tw), var(--th), 0); } }
+.wx-sky .wx-sway { will-change: transform; animation: wx-sway 5s ease-in-out infinite alternate; }
+.wx-sky .wx-sway0 { animation-duration: 7s; animation-delay: -2s; }
+@keyframes wx-sway { from { transform: translate3d(-14px, 0, 0); } to { transform: translate3d(14px, 0, 0); } }
+.wx-sky .wx-sway > .wx-fall { position: absolute; }
+/* Fog banks drift slowly sideways. */
+.wx-sky .wx-drift { inset: 0 auto 0 0; width: calc(100% + var(--tw)); background-repeat: repeat-x; will-change: transform; animation: wx-drift linear infinite; }
+.wx-sky .wx-fog1 { animation-direction: reverse; top: 8%; }
+@keyframes wx-drift { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(calc(-1 * var(--tw)), 0, 0); } }
+/* The New battle screen: icon buttons and the line under each. */
+.wxseg button svg { fill: currentColor; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; margin-bottom: 3px; }
+.wxhint { margin: 6px 2px 12px; font-size: 12.5px; line-height: 1.35; color: var(--ink-3, var(--muted)); }
+@media (prefers-reduced-motion: reduce) {
+  .wx-sky .wx-fall, .wx-sky .wx-sway { display: none; }
+  .wx-sky .wx-drift { animation: none; }
+}
+/* Phones: the title screen sits straight on the lit table, no card around it. */
+@media (max-width: 600px) {
+  .cover > .card.start { background: transparent; border: 0; box-shadow: none; padding: 8px 4px 12px; }
+  .choice b { font-size: 20px; }
+}
+.ground-clip .wx-desat { position: absolute; inset: 0; background: #808080; mix-blend-mode: saturation; pointer-events: none; }
+.ground-clip .wx-warm { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; mix-blend-mode: soft-light; pointer-events: none; }
+/* Alegreya Sans draws old-style figures by default; counters and stats need lining ones. */
+*, *::before, *::after { font-feature-settings: 'lnum' 1; }
+.ground-clip .wx-gfog { position: absolute; left: 0; top: 0; overflow: hidden; transform-origin: 0 0; will-change: transform; pointer-events: none; }
+.ground-clip .wx-gfog-in { position: absolute; left: 0; top: 0; width: calc(100% + 900px); height: 100%; background-size: 900px 100%; background-repeat: repeat-x; will-change: transform; animation: wx-gfog 140s linear infinite; }
+@keyframes wx-gfog { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(-900px, 0, 0); } }
+@media (prefers-reduced-motion: reduce) { .ground-clip .wx-gfog-in { animation: none; } }
+/* Random-map style chips: one line each; the row scrolls sideways instead of wrapping words. */
+.mgen > .seg { overflow-x: auto; scrollbar-width: none; }
+.mgen > .seg::-webkit-scrollbar { display: none; }
+.mgen > .seg button { flex: 1 0 auto; white-space: nowrap; padding-left: 10px !important; padding-right: 10px !important; }
+
+/* Sound mixer in the menu (src/ui/sound.ts mixerHtml): three volume sliders under the Sound / Music / Voices rows. */
+.mixer { display: grid; gap: 6px; padding: 8px 14px 12px; border-top: 1px solid var(--hair, var(--line)); }
+.mix-row { display: grid; grid-template-columns: 5.5em 1fr; align-items: center; gap: 10px; font-size: 14px; color: var(--muted); }
+.mix-row input[type='range'] { width: 100%; min-width: 0; accent-color: #b0703a; }
+/* Campaign list in the same materials: wooden cards, a brass number coin, engraved year line. */
+.ccard { background: var(--wood-fill); border: 1px solid var(--hair); border-radius: var(--r-lg); box-shadow: var(--sh-1); padding: 16px; }
+.ccard.won { border-color: var(--brass-lo); }
+.cnum { background: radial-gradient(circle at 40% 30%, #f6e2ac 0%, #d4ad62 55%, #9c7634 100%); color: var(--on-brass); font: 400 15px/1 var(--display); box-shadow: inset 0 0 0 1px #6e5222; }
+.cyear { font: 700 11px/1 var(--ui); letter-spacing: .14em; color: var(--ink-3); }
+.cyear em { color: var(--brass); }
+.cstars i.on { color: var(--brass-hi); }
+.ccard .cstory { color: var(--ink-2); }
+.ccard .cgoal, .ccard .clock { color: var(--ink-3); }
+.chero .ghost { min-width: 44px; }
+@media (max-width: 600px) { .cover > .card.campaign-card { background: transparent; border: 0; box-shadow: none; padding: 8px 2px 12px; } }
+/* Armello: nothing on screen unless it has something to say — an empty hint card is hidden. */
+.desktop .info:empty, .full .info:empty, .landscape .info:empty { display: none; }
+/* Night: the hex lines turn a pale moonlit grey and the river catches the moon, so both stay readable. */
+.board.wx-night .hex { stroke: #c8d4f4; stroke-opacity: .2; }
+.ground-clip[data-time="night"] .gpart { filter: brightness(1.75) saturate(1.25); }

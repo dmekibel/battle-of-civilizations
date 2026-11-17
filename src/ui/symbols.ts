@@ -18,8 +18,12 @@ const SWORD = (ink: string) =>
 const HORSE = (ink: string, dx = 0) =>
   `<path transform="translate(${dx} 0)" d="M-7 12L-7 3C-7 -5 -2 -10 4 -10L6 -13L7.5 -9C11 -7 13 -3 13 1L13 3L9 4L5 1L3 3L3 12Z" fill="${ink}"/>`;
 
+/** A Champion's star. */
+const STAR = (ink: string, x: number, y: number, r: number) =>
+  `<path transform="translate(${x} ${y}) scale(${r / 10})" d="M0 -10L2.9 -4H9.5L4.3 0.5L6.2 7.5L0 3.4L-6.2 7.5L-4.3 0.5L-9.5 -4H-2.9Z" fill="${ink}"/>`;
+
 /** Pictures some armies use in place of the standard ones (no spears for the Cowboys). */
-export type ArtId = 'star' | 'tsar' | 'cross' | 'khan' | 'shogun' | 'bonnet' | 'shotgun' | 'saber' | 'tomahawk' | 'lancer' | 'pharaoh' | 'tricorn';
+export type ArtId = 'star' | 'tsar' | 'cross' | 'khan' | 'shogun' | 'bonnet' | 'shotgun' | 'saber' | 'tomahawk' | 'lancer' | 'pharaoh' | 'tricorn' | 'turban' | 'quetzal' | 'inkosi' | 'wolf' | 'wingHelm' | 'bogatyr' | 'oni';
 
 function art(id: ArtId, ink: string, bg: string): string {
   switch (id) {
@@ -56,13 +60,34 @@ function art(id: ArtId, ink: string, bg: string): string {
     case 'tricorn':
       // The pirate Captain's tricorn hat with a little skull.
       return `<path d="M-13 4Q-9 -9 0 -9Q9 -9 13 4Q6 0 0 3Q-6 0 -13 4Z" fill="${ink}"/><circle cx="0" cy="-3.5" r="2.4" fill="${bg}"/><path d="M-1 -1.5V0M1 -1.5V0" stroke="${bg}" stroke-width="0.9"/><path d="M-4 9L4 13M4 9L-4 13" stroke="${ink}" stroke-width="1.8" stroke-linecap="round"/>`;
+    case 'turban':
+      // The Sultan's great round turban with a jewel and a plume.
+      return `<path d="M-11 5Q-13 -8 0 -9Q13 -8 11 5Z" fill="${ink}"/><path d="M-11.5 -0.5Q0 -6 11.5 -0.5M-11 3Q0 -2 11 3" stroke="${bg}" stroke-width="1" fill="none"/><circle cx="0" cy="-4.5" r="1.8" fill="${bg}"/><path d="M0 -8.5Q-2.5 -12 1.5 -15" stroke="${ink}" stroke-width="2.2" fill="none" stroke-linecap="round"/><rect x="-7.5" y="5" width="15" height="5.5" rx="1.5" fill="${ink}"/>`;
+    case 'quetzal':
+      // The Aztec emperor's fan of quetzal feathers on a band.
+      return `<g transform="rotate(-56 0 9)"><path d="M0 9Q-2.8 -1 0 -13Q2.8 -1 0 9Z" fill="${ink}"/></g><g transform="rotate(-37 0 9)"><path d="M0 9Q-2.8 -1 0 -13Q2.8 -1 0 9Z" fill="${ink}"/></g><g transform="rotate(-18 0 9)"><path d="M0 9Q-2.8 -1 0 -13Q2.8 -1 0 9Z" fill="${ink}"/></g><g transform="rotate(0 0 9)"><path d="M0 9Q-2.8 -1 0 -13Q2.8 -1 0 9Z" fill="${ink}"/></g><g transform="rotate(18 0 9)"><path d="M0 9Q-2.8 -1 0 -13Q2.8 -1 0 9Z" fill="${ink}"/></g><g transform="rotate(37 0 9)"><path d="M0 9Q-2.8 -1 0 -13Q2.8 -1 0 9Z" fill="${ink}"/></g><g transform="rotate(56 0 9)"><path d="M0 9Q-2.8 -1 0 -13Q2.8 -1 0 9Z" fill="${ink}"/></g><rect x="-9" y="7" width="18" height="4.5" rx="1.5" fill="${ink}"/><path d="M-5 9.2H-3M-1 9.2H1M3 9.2H5" stroke="${bg}" stroke-width="1.4"/>`;
+    case 'wolf':
+      // The Ulfhednar's wolf-head hood: ears up, slit eyes, fangs.
+      return `<path d="M-11 -12L-5 -4H5L11 -12L12 0L7 5L4 12H-4L-7 5L-12 0Z" fill="${ink}"/><path d="M-7 -1L-2.5 1.5M7 -1L2.5 1.5" stroke="${bg}" stroke-width="1.6" stroke-linecap="round"/><path d="M-3 7L-2 10L-1 7ZM1 7L2 10L3 7Z" fill="${bg}"/>`;
+    case 'wingHelm':
+      // The Grand Commander's great helm with black eagle wings.
+      return `<path d="M-6 -5H6V9Q0 12.5 -6 9Z" fill="${ink}"/><path d="M-5 1H5M0 1V7" stroke="${bg}" stroke-width="1.4"/><g fill="${ink}"><path d="M-5 -6Q-15 -6 -14 -16Q-12 -12 -10 -12Q-11 -15 -8 -16Q-7 -11 -3 -8Z"/><path d="M5 -6Q15 -6 14 -16Q12 -12 10 -12Q11 -15 8 -16Q7 -11 3 -8Z"/></g>`;
+    case 'bogatyr':
+      // The Bogatyr: a tall pointed helmet over a long beard.
+      return `<path d="M0 -15L7.5 -4H-7.5Z" fill="${ink}"/><rect x="-8.5" y="-4.5" width="17" height="3" rx="1" fill="${ink}"/><path d="M-6.5 0H6.5L5.5 7L0 13L-5.5 7Z" fill="${ink}"/><path d="M-4 -0.5H-1.5M1.5 -0.5H4" stroke="${bg}" stroke-width="1.3"/>`;
+    case 'oni':
+      // The hatamoto's demon mask: horns, glaring eyes, fangs.
+      return `<g fill="${ink}"><path d="M-7 -6Q-13 -9 -11 -15Q-8 -11 -4 -8Z"/><path d="M7 -6Q13 -9 11 -15Q8 -11 4 -8Z"/><path d="M-8 -6Q0 -10 8 -6L9 3Q6 12 0 12Q-6 12 -9 3Z"/></g><path d="M-6.5 -2L-2 0M6.5 -2L2 0" stroke="${bg}" stroke-width="1.7" stroke-linecap="round"/><path d="M-5 4.5H5L4 8.5H-4Z" fill="${bg}"/><path d="M-3 4.5L-2 7.5L-1 4.5ZM1 4.5L2 7.5L3 4.5Z" fill="${ink}"/>`;
+    case 'inkosi':
+      // The Zulu king: a tall cowhide shield with a crane feather above it.
+      return `<ellipse cx="0" cy="1" rx="7" ry="11.5" fill="${ink}"/><path d="M0 -10.5V12.5" stroke="${bg}" stroke-width="1.4"/><circle cx="-3" cy="-3" r="1.6" fill="${bg}"/><circle cx="3.2" cy="5" r="1.8" fill="${bg}"/><path d="M0 -10Q5 -15 11 -13" stroke="${ink}" stroke-width="2.4" fill="none" stroke-linecap="round"/>`;
     case 'tomahawk':
       // A war hatchet: a handle with a stone head.
       return `<path d="M-9 12L6 -9" stroke="${ink}" stroke-width="2.4" stroke-linecap="round"/><path d="M1 -14L10 -11L9 -4L4 -8Z" fill="${ink}"/>`;
   }
 }
 
-function picture(type: UnitTypeId, ink: string): string {
+function picture(type: UnitTypeId, ink: string, bg = '#fffdf6'): string {
   switch (type) {
     case 'king':
       return `<path d="M-11 7L-11 -6L-5.5 0L0 -9L5.5 0L11 -6L11 7Z" fill="${ink}" stroke="${ink}" stroke-width="1.2" stroke-linejoin="round"/>`;
@@ -81,6 +106,15 @@ function picture(type: UnitTypeId, ink: string): string {
     case 'horseArcher':
       // A horse with a bow above its back.
       return `${HORSE(ink, -6)}<path d="M6 -14Q16 -5 6 4" fill="none" stroke="${ink}" stroke-width="2" stroke-linecap="round"/><path d="M6 -14L6 4" stroke="${ink}" stroke-width="1.2"/>`;
+    case 'champion':
+      // A Champion: a big two-handed greatsword with a star.
+      return `<path d="M-11 11L9 -9" stroke="${ink}" stroke-width="3" stroke-linecap="round"/><path d="M-9 3L-3 9" stroke="${ink}" stroke-width="2.4" stroke-linecap="round"/><path d="M9 -9L13 -13" stroke="${ink}" stroke-width="1.6" stroke-linecap="round"/>${STAR(ink, -7, -6, 6)}`;
+    case 'championRider':
+      // A mounted Champion: a horse, a long glaive and a star.
+      return `${HORSE(ink, -4)}<path d="M-17 -1L12 -11" stroke="${ink}" stroke-width="2" stroke-linecap="round"/><path d="M10 -10Q15 -16 18 -14Q16 -10 12 -8Z" fill="${ink}"/>${STAR(ink, -11, -9, 5)}`;
+    case 'championGun':
+      // The bounty hunter: two crossed revolvers.
+      return `<g transform="rotate(-25) translate(-1 -2) scale(0.8)"><path d="M-12 -5H9L11 -8H13V-2H4L0 2L-3 10H-9L-6 1H-12Z" fill="${ink}"/></g><g transform="scale(-1 1) rotate(-25) translate(-1 -2) scale(0.8)"><path d="M-12 -5H9L11 -8H13V-2H4L0 2L-3 10H-9L-6 1H-12Z" fill="${ink}"/></g>`;
     case 'gunslinger':
       // A revolver.
       return `<path d="M-12 -5H9L11 -8H13V-2H4L0 2L-3 10H-9L-6 1H-12Z" fill="${ink}"/>`;
@@ -117,6 +151,18 @@ function picture(type: UnitTypeId, ink: string): string {
     case 'bomber':
       // A round bomb with a lit fuse.
       return `<circle cx="-2" cy="3" r="8" fill="${ink}"/><path d="M3 -3L6 -7Q8 -10 11 -9" fill="none" stroke="${ink}" stroke-width="1.8" stroke-linecap="round"/><path d="M13 -13V-10M15.5 -9H12.5M13 -8L14.5 -6.5M11 -11L9.5 -12.5" stroke="${ink}" stroke-width="1.3" stroke-linecap="round"/>`;
+    case 'jaguar':
+      // A macuahuitl: a flat wooden club edged with obsidian teeth.
+      return `<g transform="rotate(38)"><path d="M0 13V6" stroke="${ink}" stroke-width="2.6" stroke-linecap="round"/><rect x="-3" y="-14" width="6" height="21" rx="3" fill="${ink}"/><path d="M-3 -11L-6.5 -9.5L-3 -8ZM-3 -5.5L-6.5 -4L-3 -2.5ZM-3 0L-6.5 1.5L-3 3ZM3 -11L6.5 -9.5L3 -8ZM3 -5.5L6.5 -4L3 -2.5ZM3 0L6.5 1.5L3 3Z" fill="${ink}"/></g>`;
+    case 'atlatl':
+      // A feathered dart on its throwing stick.
+      return `<path d="M-14 7L12 -6" stroke="${ink}" stroke-width="1.8" stroke-linecap="round"/><path d="M16 -8L8 -6.5L10.5 -2Z" fill="${ink}"/><path d="M-14 7L-15 1.5M-14 7L-9.5 9.5M-11 5.5L-12 0.5M-11 5.5L-6.5 8" stroke="${ink}" stroke-width="1.6" stroke-linecap="round"/><path d="M-6 9L6 3L6 0" stroke="${ink}" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+    case 'impi':
+      // A tall cowhide shield with the short stabbing spear behind it.
+      return `<path d="M-13 12L9 -8" stroke="${ink}" stroke-width="2" stroke-linecap="round"/><path d="M14 -13Q8 -11 7 -6Q12 -7 14 -13Z" fill="${ink}"/><ellipse cx="-2" cy="1" rx="6.5" ry="12" fill="${ink}"/><path d="M-2 -10.5V12.5" stroke="${bg}" stroke-width="1.4"/><path d="M-5 -4V-1M1 3V6" stroke="${bg}" stroke-width="1.6" stroke-linecap="round"/>`;
+    case 'thrower':
+      // A throwing spear in flight.
+      return `<path d="M-11 10L6 -6" stroke="${ink}" stroke-width="2" stroke-linecap="round"/><path d="M13 -12Q6 -10 4.5 -5Q10 -5.5 13 -12Z" fill="${ink}"/><path d="M-14 -3L-8 -3M-15 2L-10 2M-12 -8L-7 -8" stroke="${ink}" stroke-width="1.6" stroke-linecap="round"/>`;
     case 'samurai':
       // A katana: a long, slightly curved blade with a round guard.
       return `<path d="M-11 10Q1 4 12 -11" fill="none" stroke="${ink}" stroke-width="2.4" stroke-linecap="round"/><circle cx="-5" cy="6.3" r="2.6" fill="none" stroke="${ink}" stroke-width="1.8"/>`;
@@ -153,7 +199,7 @@ export function unitSymbol(type: UnitTypeId, owner: Player, hp: number): string 
   const own = factionOf(owner).art?.[type];
   // Once hit, a thin bar under the counter shows the hits it has left.
   const bar = wounded ? healthBar(hp, full) : '';
-  return `<g>${box}${bar}<g>${own ? art(own, ink, heavy ? color : '#fffdf6') : picture(type, ink)}</g></g>`;
+  return `<g>${box}${bar}<g>${own ? art(own, ink, heavy ? color : '#fffdf6') : picture(type, ink, heavy ? color : '#fffdf6')}</g></g>`;
 }
 
 /** A stand-alone icon for lists and the army builder. */

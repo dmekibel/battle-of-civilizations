@@ -6,11 +6,11 @@ import type { ArmyCounts, Player } from '../engine';
 import type { Lang } from './i18n';
 import type { ArtId } from './symbols';
 
-export type FactionId = 'novgorod' | 'teutonic' | 'mongols' | 'japanese' | 'frontier' | 'comanche' | 'vikings' | 'romans' | 'british' | 'french' | 'egypt' | 'pirates';
+export type FactionId = 'novgorod' | 'teutonic' | 'mongols' | 'japanese' | 'frontier' | 'comanche' | 'vikings' | 'romans' | 'british' | 'french' | 'egypt' | 'pirates' | 'ottomans' | 'aztecs' | 'zulus';
 /** Armies are grouped by the age they fought in. */
 export type Era = 'ancient' | 'medieval' | 'gunpowder';
 export const ERAS: Era[] = ['ancient', 'medieval', 'gunpowder'];
-export const ERA_OF: Record<FactionId, Era> = { romans: 'ancient', egypt: 'ancient', vikings: 'medieval', novgorod: 'medieval', teutonic: 'medieval', mongols: 'medieval', japanese: 'medieval', frontier: 'gunpowder', comanche: 'gunpowder', british: 'gunpowder', french: 'gunpowder', pirates: 'gunpowder' };
+export const ERA_OF: Record<FactionId, Era> = { romans: 'ancient', egypt: 'ancient', vikings: 'medieval', novgorod: 'medieval', teutonic: 'medieval', mongols: 'medieval', japanese: 'medieval', frontier: 'gunpowder', comanche: 'gunpowder', british: 'gunpowder', french: 'gunpowder', pirates: 'gunpowder', ottomans: 'gunpowder', aztecs: 'medieval', zulus: 'gunpowder' };
 
 export interface Faction {
   name: Record<Lang, string>;
@@ -25,6 +25,8 @@ export interface Faction {
   emblem: string;
   /** Some armies call shared pieces by their own names (a Comanche King is a Chief). */
   names?: Partial<Record<UnitTypeId, Record<Lang, string>>>;
+  /** One line about the army's Champion, under the blurb on the New battle screen. */
+  champion?: Record<Lang, string>;
   /** Pieces drawn with the army's own picture (the Sheriff's badge, a tomahawk). */
   art?: Partial<Record<UnitTypeId, ArtId>>;
 }
@@ -49,46 +51,64 @@ export const FACTIONS: Record<FactionId, Faction> = {
     name: { en: 'Russians', ru: 'Русь' },
     color: '#a8201a',
     text: '#ec6a5c',
-    roster: ['lightInfantry', 'heavyInfantry', 'archer', 'lightCavalry', 'heavyCavalry'],
+    roster: ['lightInfantry', 'heavyInfantry', 'archer', 'lightCavalry', 'heavyCavalry', 'champion'],
     blurb: { en: 'Balanced Rus army: spearmen, archers and druzhina riders.', ru: 'Сбалансированное русское войско: копейщики, лучники и дружина.' },
+    champion: { en: 'Champion: the Bogatyr, a legendary giant hero with a flanged mace and a red shield. Takes 3 hits, hits for 2.', ru: 'Чемпион: богатырь, былинный великан с шестопёром и красным щитом. Выдерживает 3 удара, бьёт на 2.' },
     emblem: shield('#a8201a', '#d9a521', '<path d="M30 8V17M26 11H34" stroke="#e8b923" stroke-width="2.2"/><path d="M30 17Q41 25 38 34H22Q19 25 30 17Z" fill="#e8b923"/><path d="M23 34H37V48H23Z" fill="#e8b923"/><path d="M28 39H32V48H28Z" fill="#a8201a"/><path d="M17 48H43V52H17Z" fill="#e8b923"/>'),
-    art: { king: 'tsar' },
+    art: { champion: 'bogatyr', king: 'tsar' },
+    names: {
+      champion: { en: 'Bogatyr', ru: 'Богатырь' },
+    },
   },
   teutonic: {
     name: { en: 'German Knights', ru: 'Немецкие рыцари' },
     color: '#1b1b1d',
     text: '#e9e4d6',
-    roster: ['lightInfantry', 'heavyInfantry', 'archer', 'lightCavalry', 'heavyCavalry'],
+    roster: ['lightInfantry', 'heavyInfantry', 'archer', 'lightCavalry', 'heavyCavalry', 'champion'],
     blurb: { en: 'Crusader knights: heavy cavalry and disciplined foot.', ru: 'Рыцари-крестоносцы: тяжёлая конница и стойкая пехота.' },
+    champion: { en: 'Champion: the Grand Commander in full plate, eagle wings on his great helm and a giant two-handed sword. Takes 3 hits, hits for 2.', ru: 'Чемпион: великий комтур в полных латах, с орлиными крыльями на шлеме и огромным двуручным мечом. Выдерживает 3 удара, бьёт на 2.' },
     emblem: shield('#f4f1e8', '#1b1b1d', '<path d="M24 12H36L33 28H48V40H33L36 58H24L27 40H12V28H27Z" fill="#1b1b1d"/>'),
-    art: { king: 'cross' },
+    art: { champion: 'wingHelm', king: 'cross' },
+    names: {
+      champion: { en: 'Grand Commander', ru: 'Великий комтур' },
+    },
   },
   mongols: {
     name: { en: 'Mongols', ru: 'Монголы' },
     color: '#1f5fa8',
     text: '#86b9f0',
-    roster: ['lightInfantry', 'archer', 'lightCavalry', 'heavyCavalry', 'horseArcher'],
+    roster: ['lightInfantry', 'archer', 'lightCavalry', 'heavyCavalry', 'horseArcher', 'championRider'],
     blurb: { en: 'Horse archers: shoot and ride. Few foot soldiers, no heavy infantry.', ru: 'Конные лучники: стреляют на скаку. Мало пехоты, нет тяжёлой пехоты.' },
+    champion: { en: "Champion: a Keshig, the Khan's own bodyguard, on an armoured horse with a long glaive. Fast, takes 3 hits, hits for 2.", ru: 'Чемпион: кешиктен, личный телохранитель хана, на коне в броне с длинной глефой. Быстрый, выдерживает 3 удара, бьёт на 2.' },
     emblem: shield('#1f5fa8', '#e1b12c', '<path d="M22 14Q46 32 22 50" fill="none" stroke="#e1b12c" stroke-width="3.2" stroke-linecap="round"/><path d="M22 14V50" stroke="#e1b12c" stroke-width="1.5"/><path d="M12 32H44" stroke="#e1b12c" stroke-width="2.2"/><path d="M50 32L43 28V36Z" fill="#e1b12c"/>'),
     art: { king: 'khan' },
+    names: {
+      championRider: { en: 'Keshig guard', ru: 'Кешиктен' },
+    },
   },
   japanese: {
     name: { en: 'Japan', ru: 'Япония' },
     color: '#5b2a86',
     text: '#c7a6ef',
-    roster: ['ashigaru', 'samurai', 'archer', 'lightCavalry', 'heavyCavalry'],
+    roster: ['ashigaru', 'samurai', 'archer', 'lightCavalry', 'heavyCavalry', 'champion'],
     blurb: { en: 'Samurai who hit hard, and cheap ashigaru spearmen that stop cavalry.', ru: 'Самураи бьют сильно, дешёвые асигару с копьями останавливают конницу.' },
+    champion: { en: "Champion: the Oni-masked hatamoto, the warlord's guard in black-and-red armour with a nodachi. Takes 3 hits, hits for 2.", ru: 'Чемпион: хатамото в маске демона, страж полководца в чёрно-красных доспехах с нодати. Выдерживает 3 удара, бьёт на 2.' },
     emblem: shield('#f4f1e8', '#5b2a86', kabuto('#5b2a86', '#f4f1e8', 'translate(30 37) scale(0.15) translate(-300 -270)')),
-    art: { king: 'shogun' },
+    art: { champion: 'oni', king: 'shogun' },
+    names: {
+      champion: { en: 'Oni hatamoto', ru: 'Хатамото-они' },
+    },
   },
   frontier: {
     name: { en: 'Cowboys', ru: 'Ковбои' },
     color: '#8a5a2b',
     text: '#e3b781',
-    roster: ['deputy', 'gunslinger', 'rifleman', 'cowboy', 'heavyCavalry'],
+    roster: ['deputy', 'gunslinger', 'rifleman', 'cowboy', 'heavyCavalry', 'championGun'],
     blurb: { en: 'The Old West: riflemen, gunslingers, deputies with shotguns and cowboys who shoot from the saddle.', ru: 'Дикий Запад: стрелки, помощники шерифа с дробовиками и ковбои, стреляющие на скаку.' },
+    champion: { en: 'Champion: the Bounty hunter, two revolvers drawn, shoots 2-4 hexes for 2. Takes 3 hits.', ru: 'Чемпион: охотник за головами с двумя револьверами, стреляет на 2-4 гекса, попадание на 2. Выдерживает 3 удара.' },
     emblem: shield('#8a5a2b', '#e1b12c', '<path d="M30 14L34 25H45L36 32L39 43L30 36L21 43L24 32L15 25H26Z" fill="#e1b12c" stroke="#6b4410" stroke-width="1.2" stroke-linejoin="round"/>'),
     names: {
+      championGun: { en: 'Bounty hunter', ru: 'Охотник за головами' },
       king: { en: 'Sheriff', ru: 'Шериф' },
       lightInfantry: { en: 'Deputies', ru: 'Помощники шерифа' },
       heavyCavalry: { en: 'Cavalry troopers', ru: 'Кавалеристы' },
@@ -99,10 +119,12 @@ export const FACTIONS: Record<FactionId, Faction> = {
     name: { en: 'Indians', ru: 'Индейцы' },
     color: '#1f8a8a',
     text: '#7fd6d0',
-    roster: ['lightInfantry', 'archer', 'lightCavalry', 'horseArcher'],
+    roster: ['lightInfantry', 'archer', 'lightCavalry', 'horseArcher', 'championRider'],
     blurb: { en: 'Plains warriors, the finest riders of the West: fast mounted warriors and archers, no heavy troops.', ru: 'Воины равнин, лучшие всадники Запада: быстрые конные воины и лучники, без тяжёлых войск.' },
+    champion: { en: 'Champion: a Dog Soldier on a painted war horse, with lance and shield. Fast, takes 3 hits, hits for 2.', ru: 'Чемпион: пёс-воин на расписном боевом коне, с копьём и щитом. Быстрый, выдерживает 3 удара, бьёт на 2.' },
     emblem: shield('#1f8a8a', '#e9e4d6', '<g transform="rotate(-48 30 48)"><path d="M30 48Q24.5 31 30 12Q35.5 31 30 48Z" fill="#f4f1e8"/><path d="M30 12Q27.8 16.5 30 21Q32.2 16.5 30 12Z" fill="#1b1b1d"/></g><g transform="rotate(-24 30 48)"><path d="M30 48Q24.5 31 30 12Q35.5 31 30 48Z" fill="#f4f1e8"/><path d="M30 12Q27.8 16.5 30 21Q32.2 16.5 30 12Z" fill="#1b1b1d"/></g><g transform="rotate(0 30 48)"><path d="M30 48Q24.5 31 30 12Q35.5 31 30 48Z" fill="#f4f1e8"/><path d="M30 12Q27.8 16.5 30 21Q32.2 16.5 30 12Z" fill="#1b1b1d"/></g><g transform="rotate(24 30 48)"><path d="M30 48Q24.5 31 30 12Q35.5 31 30 48Z" fill="#f4f1e8"/><path d="M30 12Q27.8 16.5 30 21Q32.2 16.5 30 12Z" fill="#1b1b1d"/></g><g transform="rotate(48 30 48)"><path d="M30 48Q24.5 31 30 12Q35.5 31 30 48Z" fill="#f4f1e8"/><path d="M30 12Q27.8 16.5 30 21Q32.2 16.5 30 12Z" fill="#1b1b1d"/></g><path d="M17 44H43V50H17Z" fill="#e1b12c"/><path d="M21 47H23M27 47H29M31 47H33M37 47H39" stroke="#a8201a" stroke-width="2"/>'),
     names: {
+      championRider: { en: 'Dog Soldier', ru: 'Пёс-воин' },
       king: { en: 'Chief', ru: 'Вождь' },
       lightInfantry: { en: 'Warriors', ru: 'Воины' },
       lightCavalry: { en: 'Mounted warriors', ru: 'Конные воины' },
@@ -114,14 +136,17 @@ export const FACTIONS: Record<FactionId, Faction> = {
     name: { en: 'Vikings', ru: 'Викинги' },
     color: '#2f5f8f',
     text: '#8fc0ee',
-    roster: ['lightInfantry', 'heavyInfantry', 'berserker', 'axeThrower', 'archer'],
+    roster: ['lightInfantry', 'heavyInfantry', 'berserker', 'axeThrower', 'archer', 'champion'],
     blurb: { en: 'Raiders on foot: berserkers who hit twice as hard but fall to one blow, and axes thrown from close range. No horses.', ru: 'Пешие налётчики: берсерки бьют вдвое сильнее, но падают от одного удара; топоры летят с близкого расстояния. Конницы нет.' },
+    champion: { en: 'Champion: the Úlfheðinn, a wolf-skin warrior with a huge Dane axe. Takes 3 hits, hits for 2.', ru: 'Чемпион: ульфхеднар, воин в волчьей шкуре с огромной датской секирой. Выдерживает 3 удара, бьёт на 2.' },
     emblem: shield('#2f5f8f', '#e9e4d6', '<circle cx="30" cy="32" r="17" fill="none" stroke="#e9e4d6" stroke-width="3"/><path d="M30 15V49M13 32H47" stroke="#e9e4d6" stroke-width="3"/><circle cx="30" cy="32" r="4.5" fill="#d9a521"/>'),
     names: {
+      champion: { en: 'Úlfheðinn', ru: 'Ульфхеднар' },
       king: { en: 'Jarl', ru: 'Ярл' },
       lightInfantry: { en: 'Raiders', ru: 'Налётчики' },
       heavyInfantry: { en: 'Huscarls', ru: 'Хускарлы' },
     },
+    art: { champion: 'wolf' },
   },
   romans: {
     name: { en: 'Romans', ru: 'Римляне' },
@@ -200,9 +225,58 @@ export const FACTIONS: Record<FactionId, Faction> = {
     },
     art: { king: 'tricorn' },
   },
+  ottomans: {
+    name: { en: 'Ottomans', ru: 'Османы' },
+    color: '#c0143c',
+    text: '#ffd36b',
+    roster: ['lightInfantry', 'skirmisher', 'lightCavalry', 'heavyCavalry', 'cannon'],
+    blurb: { en: "The Sultan's army: azap spearmen, Janissary musketeers, akinji raiders, armoured sipahi lancers and a great bronze bombard.", ru: 'Войско султана: азапы с копьями, янычары с мушкетами, лёгкие акынджи, латные сипахи с копьями и огромная бронзовая бомбарда.' },
+    emblem: shield('#c0143c', '#e8b923', '<circle cx="27" cy="33" r="14" fill="#e8b923"/><circle cx="31.5" cy="33" r="11.5" fill="#c0143c"/><path d="M35.5 33.0L39.1 31.6L39.3 27.8L41.7 30.8L45.4 29.8L43.3 33.0L45.4 36.2L41.7 35.2L39.3 38.2L39.1 34.4Z" fill="#e8b923"/>'),
+    names: {
+      king: { en: 'Sultan', ru: 'Султан' },
+      lightInfantry: { en: 'Azaps', ru: 'Азапы' },
+      skirmisher: { en: 'Janissaries', ru: 'Янычары' },
+      lightCavalry: { en: 'Akinji riders', ru: 'Акынджи' },
+      heavyCavalry: { en: 'Sipahis', ru: 'Сипахи' },
+      cannon: { en: 'Bombard', ru: 'Бомбарда' },
+    },
+    art: { king: 'turban' },
+  },
+  aztecs: {
+    name: { en: 'Aztecs', ru: 'Ацтеки' },
+    color: '#12a4b8',
+    text: '#86e4f0',
+    roster: ['lightInfantry', 'heavyInfantry', 'jaguar', 'atlatl', 'archer'],
+    blurb: { en: 'Warriors of Tenochtitlan: eagle and jaguar warriors with obsidian clubs, spearmen, archers and atlatl darts. No horses.', ru: 'Воины Теночтитлана: воины-орлы и воины-ягуары с обсидиановыми мечами, копейщики, лучники и метатели дротиков. Коней нет.' },
+    emblem: shield('#12a4b8', '#c8202c', '<path d="M40.8 30.7L47.0 33.0L40.8 35.3ZM39.2 39.0L42.0 45.0L36.0 42.2ZM32.3 43.8L30.0 50.0L27.7 43.8ZM24.0 42.2L18.0 45.0L20.8 39.0ZM19.2 35.3L13.0 33.0L19.2 30.7ZM20.8 27.0L18.0 21.0L24.0 23.8ZM27.7 22.2L30.0 16.0L32.3 22.2ZM36.0 23.8L42.0 21.0L39.2 27.0Z" fill="#e8b923"/><circle cx="30" cy="33" r="10" fill="#e8b923" stroke="#c8202c" stroke-width="1.6"/><circle cx="30" cy="33" r="5" fill="none" stroke="#c8202c" stroke-width="1.6"/><circle cx="30" cy="33" r="1.8" fill="#c8202c"/>'),
+    names: {
+      king: { en: 'Tlatoani', ru: 'Тлатоани' },
+      lightInfantry: { en: 'Warriors', ru: 'Воины' },
+      heavyInfantry: { en: 'Eagle warriors', ru: 'Воины-орлы' },
+      jaguar: { en: 'Jaguar warriors', ru: 'Воины-ягуары' },
+      atlatl: { en: 'Atlatl throwers', ru: 'Метатели дротиков' },
+    },
+    art: { king: 'quetzal' },
+  },
+  zulus: {
+    name: { en: 'Zulus', ru: 'Зулусы' },
+    color: '#5a3a24',
+    text: '#f1e4cc',
+    roster: ['lightInfantry', 'impi', 'heavyInfantry', 'thrower'],
+    blurb: { en: 'The impi on foot: stabbing spears that hit hard and stop riders, ringed veterans, young warriors and spear throwers. No horses, no guns.', ru: 'Пешие импи: короткие копья бьют сильно и останавливают конницу; ветераны с кольцом, молодые воины и метатели копий. Ни коней, ни ружей.' },
+    emblem: shield('#5a3a24', '#f1e4cc', '<path d="M15 54L45 14M45 54L15 14" stroke="#e9e4d6" stroke-width="2.4" stroke-linecap="round"/><path d="M45 14Q42 21 38 23Q41 18 45 14ZM15 14Q18 21 22 23Q19 18 15 14Z" fill="#e9e4d6" stroke="#e9e4d6" stroke-width="2.5" stroke-linejoin="round"/><ellipse cx="30" cy="35" rx="9" ry="17" fill="#f4f1e8" stroke="#1b1b1d" stroke-width="1.4"/><path d="M30 18V52" stroke="#5a3a24" stroke-width="2"/><path d="M24 26Q27 24 28 29Q25 31 24 26ZM32 39Q36 37 37 42Q33 45 32 39Z" fill="#5a3a24"/>'),
+    names: {
+      king: { en: 'Inkosi', ru: 'Инкоси' },
+      lightInfantry: { en: 'Young warriors', ru: 'Молодые воины' },
+      heavyInfantry: { en: 'Ringed veterans', ru: 'Ветераны с кольцом' },
+      impi: { en: 'Impi', ru: 'Импи' },
+      thrower: { en: 'Spear throwers', ru: 'Метатели копий' },
+    },
+    art: { king: 'inkosi' },
+  },
 };
 
-export const FACTION_ORDER: FactionId[] = ['romans', 'egypt', 'vikings', 'novgorod', 'teutonic', 'mongols', 'japanese', 'frontier', 'comanche', 'british', 'french', 'pirates'];
+export const FACTION_ORDER: FactionId[] = ['romans', 'egypt', 'vikings', 'novgorod', 'teutonic', 'mongols', 'japanese', 'aztecs', 'ottomans', 'frontier', 'comanche', 'british', 'french', 'pirates', 'zulus'];
 
 /** Which faction each side leads in the current battle. */
 export let sides: Record<Player, FactionId> = { red: 'novgorod', blue: 'teutonic' };
