@@ -76,6 +76,13 @@ function audio(): AudioContext | null {
     const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AC) return null;
     ctx = new AC();
+    // iPhone: play through the speaker even when the ringer switch is on silent (the game has its own Sound and Music switches).
+    try {
+      const session = (navigator as unknown as { audioSession?: { type: string } }).audioSession;
+      if (session) session.type = 'playback';
+    } catch {
+      /* older browsers: the ringer switch decides */
+    }
   }
   if (ctx.state === 'suspended') void ctx.resume();
   load(ctx);
@@ -177,8 +184,8 @@ export const musicOn = () => !musicOff;
 
 interface Track { gain: GainNode; timer: number; live: AudioBufferSourceNode[] }
 const OVERLAP = 3; // seconds a loop overlaps its own repeat
-const THEME_VOL = 0.2;
-const DRUM_VOL = 0.13;
+const THEME_VOL = 0.5; // 0.2 was too faint to hear on a phone speaker
+const DRUM_VOL = 0.3;
 const musicBuf = new Map<string, AudioBuffer | 'loading'>();
 const tracks = new Map<string, Track>();
 let scene: { themes: string[]; active: string | null; tension: boolean } = { themes: [], active: null, tension: false };
@@ -236,7 +243,7 @@ function applyMusic() {
     if (buf === 'loading') continue;
     const tr = tracks.get(name) ?? loopTrack(c, name, buf);
     const vol = name === 'tension' ? (scene.tension ? DRUM_VOL : 0) : name === scene.active ? THEME_VOL : 0;
-    tr.gain.gain.setTargetAtTime(vol, c.currentTime, name === 'tension' ? 1.2 : 0.9);
+    tr.gain.gain.setTargetAtTime(vol, c.currentTime, name === 'tension' ? 1.2 : 1.6);
   }
 }
 
@@ -264,6 +271,6 @@ if (typeof window !== 'undefined') {
     if (!muted || !musicOff) audio();
     applyMusic();
   };
-  window.addEventListener('pointerdown', wake, { passive: true });
-  window.addEventListener('keydown', wake, { passive: true });
+  // iPhones only allow sound to start when a tap ends, so listen for that too.
+  for (const ev of ['pointerdown', 'pointerup', 'touchend', 'click', 'keydown']) window.addEventListener(ev, wake, { passive: true });
 }
