@@ -79,6 +79,8 @@ interface Net {
   id: string;
   me: Player;
   rev: number;
+  /** The army the invited player picked for themselves. */
+  blue?: FactionId | null;
 }
 /** In a game against the computer, it plays the Teutonic Order. */
 const AI_SIDE: Player = 'blue';
@@ -161,6 +163,19 @@ const roleKey = (id: string) => `boc-net-${id}`;
   }
   if (mode === 'online') cover = false;
 }
+/** The host's "send this link" card, shown once a new online game exists. */
+let inviting = false;
+/** The invited player's "pick your army" card. */
+let pickingArmy = false;
+/** The invited player's own choice of army always wins over whatever the game document says. */
+function applyBlue() {
+  if (net?.blue && FACTIONS[net.blue] && settings.sides.blue !== net.blue) {
+    const red = settings.sides.red === net.blue ? settings.sides.blue : settings.sides.red;
+    settings = { ...settings, sides: { red, blue: net.blue } };
+    applySettings(settings);
+  }
+}
+let lastBlueAsk = 0;
 /** Online and not this phone's go (or the game hasn't arrived yet). */
 const theirTurn = (s: GameState) => mode === 'online' && !!net && s.phase !== 'over' && (net.rev < 0 || s.current !== net.me);
 const notMine = (s: GameState) => aiTurn(s) || theirTurn(s);
@@ -194,6 +209,20 @@ function syncOut() {
 let lastAsk = 0;
 async function syncIn() {
   if (mode !== 'online' || !net || sending || unsent || rolling || document.visibilityState !== 'visible') return;
+  // Until the invited player's army is known, look for their choice (it lives in its own small document).
+  if (!net.blue && net.rev >= 0 && !pickingArmy && Date.now() - lastBlueAsk > 3000) {
+    lastBlueAsk = Date.now();
+    const id0 = net.id;
+    fetchGame(`${id0}b`).then((b) => {
+      if (!net || net.id !== id0 || net.blue) return;
+      if (b && b.state in FACTIONS) {
+        net.blue = b.state as FactionId;
+        applyBlue();
+      } else if (net.me === 'blue') pickingArmy = true; // joined earlier but never chose
+      else return;
+      render();
+    }, () => {});
+  }
   // Waiting for the other player: ask often. On your own go nothing should change, so rarely.
   const every = theirTurn(sess.state) ? 2000 : 15000;
   if (Date.now() - lastAsk < every) return;
@@ -221,6 +250,7 @@ async function syncIn() {
   const data = JSON.parse(r.state) as { state: GameState; settings: Settings };
   settings = { ...data.settings, options: { ...DADS_RULES, ...data.settings.options } };
   applySettings(settings);
+  applyBlue();
   sess = startSession(data.state);
   netState = sess.state;
   net.rev = r.rev;
@@ -230,6 +260,16 @@ async function syncIn() {
     // Don't replay the whole battle so far, and look at the board from this side's edge.
     prevLog = sess.state.log.length;
     cam = { ...cam, yaw: yawFor(net.me) };
+    if (net.me === 'blue' && !net.blue) {
+      // Joining for the first time: has this player already picked an army (on another visit)?
+      const id1 = net.id;
+      const b = await fetchGame(`${id1}b`).catch(() => null);
+      if (net?.id !== id1) return;
+      if (b && b.state in FACTIONS) {
+        net.blue = b.state as FactionId;
+        applyBlue();
+      } else pickingArmy = true;
+    }
   }
   render();
 }
@@ -754,9 +794,9 @@ function setupScreen(): string {
     <h2><button data-act="setup-back" class="ghost back" aria-label="${t(lang, 'back')}">${icon('back')}</button>${t(lang, 'newBattle')}</h2>
     <div class="sheet-scroll">
       <div class="vs">
-        ${side('red', mode === 'ai' ? t(lang, 'sideYou') : t(lang, 'sideFirst'))}
+        ${side('red', mode === 'pvp' ? t(lang, 'sideFirst') : t(lang, 'sideYou'))}
         <span class="vs-mid">${t(lang, 'vs')}</span>
-        ${side('blue', mode === 'ai' ? t(lang, 'sideComputer') : t(lang, 'sideSecond'))}
+        ${mode === 'online' ? `<div class="vs-card" style="--fc:#6b6b6b"><span class="vs-who">${t(lang, 'sideOpponent')}</span><b style="font-size:34px;line-height:48px">?</b><b>${t(lang, 'theyPick')}</b></div>` : side('blue', mode === 'ai' ? t(lang, 'sideComputer') : t(lang, 'sideSecond'))}
       </div>
       <div class="ftiles">${tiles}</div>
       <p class="blurb">${FACTIONS[settings.sides[pickSide]].blurb[lang]}</p>
@@ -809,6 +849,30 @@ function startScreen(): string {
     <button data-act="mode" data-mode="pvp" class="choice">${icon(people)}<span class="ctext"><b>${t(lang, 'twoPlayers')}</b><span>${t(lang, 'twoPlayersSub')}</span></span><i aria-hidden="true">›</i></button>
     <button data-act="mode" data-mode="ai" class="choice">${icon(robot)}<span class="ctext"><b>${t(lang, 'vsComputer')}</b><span>${t(lang, 'vsComputerSub')}</span></span><i aria-hidden="true">›</i></button>
     <button data-act="mode" data-mode="online" class="choice">${icon('<circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3.5 12h17M12 3.5c3 3 3 14 0 17M12 3.5c-3 3-3 14 0 17" fill="none" stroke="currentColor" stroke-width="2"/>')}<span class="ctext"><b>${t(lang, 'playOnline')}</b><span>${t(lang, 'playOnlineSub')}</span></span><i aria-hidden="true">›</i></button>
+  </div></div>`;
+}
+
+/** Online: the host's card with the link to send. */
+function inviteScreen(): string {
+  return `<div class="cover"><div class="card start">
+    <div class="hero"><h2>${t(lang, 'inviteTitle')}</h2><p>${t(lang, 'inviteText')}</p></div>
+    <input class="invite-url" readonly value="${inviteUrl()}" onclick="this.select()" aria-label="${t(lang, 'inviteLink')}">
+    <button data-act="copy-link" class="primary wide">${t(lang, 'copyLink')}</button>
+    ${typeof navigator.share === 'function' ? `<button data-act="share" class="wide">${t(lang, 'shareLink')}</button>` : ''}
+    <button data-act="invite-ok" class="ghost wide">${t(lang, 'inviteContinue')}</button>
+  </div></div>`;
+}
+
+/** Online: the invited player picks their own army (any but the host's). */
+function armyPickScreen(): string {
+  const tiles = FACTION_ORDER.map((id) => {
+    const f = FACTIONS[id];
+    const taken = settings.sides.red === id;
+    return `<button data-act="net-army" data-value="${id}" class="ftile ${taken ? 'taken' : ''}" ${taken ? 'disabled' : ''} style="--fc:${f.color}">${f.emblem}<span>${f.name[lang]}</span></button>`;
+  }).join('');
+  return `<div class="cover"><div class="card start">
+    <div class="hero"><h2>${t(lang, 'pickArmyTitle')}</h2><p>${t(lang, 'pickArmyText')} <b>${FACTIONS[settings.sides.red].name[lang]}</b>.</p></div>
+    <div class="ftiles">${tiles}</div>
   </div></div>`;
 }
 
@@ -1167,7 +1231,9 @@ function draw() {
       <footer class="bar">${bar(s)}</footer>
       ${withPanel() ? `<aside class="side">${menuBody(s)}</aside>` : ''}
     </div>
-    ${s.phase === 'draft' && !cover && !choosing && !setupOpen && !theirTurn(s) ? draftSheet(s) : ''}
+    ${s.phase === 'draft' && !cover && !choosing && !setupOpen && !theirTurn(s) && !inviting && !pickingArmy ? draftSheet(s) : ''}
+    ${inviting && net && !choosing && !setupOpen ? inviteScreen() : ''}
+    ${pickingArmy && net && !choosing && !setupOpen ? armyPickScreen() : ''}
     ${cover && s.phase !== 'over' && !choosing && !setupOpen ? passScreen(s) : ''}
     ${choosing ? startScreen() : ''}
     ${setupOpen ? setupScreen() : ''}
@@ -1328,7 +1394,7 @@ function restart(state: GameState) {
         localStorage.setItem(roleKey(net.id), 'red');
       } catch { /* the link still works for this visit */ }
       history.replaceState(null, '', `?g=${net.id}`);
-      void navigator.clipboard?.writeText(inviteUrl()).then(() => { message = t(lang, 'linkCopied'); render(); }, () => {});
+      inviting = true;
     }
     netState = null; // a new battle on the same link: send it
     if (net.rev < 0) net.rev = 0;
@@ -1447,6 +1513,22 @@ app.addEventListener('click', (e) => {
   // Online, while the other player is on: look around freely, but nothing that plays the game.
   if (theirTurn(sess.state) && !choosing && !setupOpen && ['ack', 'auto', 'auto-all', 'auto-army', 'done', 'draft', 'end', 'less', 'more', 'next', 'reroll', 'roll', 'take', 'tray', 'undo', 'quick'].includes(act)) return;
   switch (act) {
+    case 'copy-link':
+      void navigator.clipboard?.writeText(inviteUrl()).then(() => { message = t(lang, 'linkCopied'); render(); }, () => {});
+      app.querySelector<HTMLInputElement>('.invite-url')?.select();
+      return;
+    case 'invite-ok':
+      inviting = false;
+      return render();
+    case 'net-army': {
+      const f = btn!.getAttribute('data-value') as FactionId;
+      if (!net || !FACTIONS[f] || settings.sides.red === f) return;
+      net.blue = f;
+      pickingArmy = false;
+      applyBlue();
+      void pushGame(`${net.id}b`, 1, f);
+      return render();
+    }
     case 'share': {
       const url = inviteUrl();
       if (navigator.share) void navigator.share({ title: t(lang, 'title'), url }).catch(() => {});
@@ -1508,7 +1590,8 @@ app.addEventListener('click', (e) => {
       return render();
     case 'mode':
       mode = (btn!.getAttribute('data-mode') ?? 'pvp') as Mode;
-      if (mode !== 'online' && net) leaveNet();
+      if (net) leaveNet(); // picking a way to play always starts afresh; an online game gets a new link
+      if (mode === 'online') pickSide = 'red';
       choosing = false;
       setupOpen = true;
       settings = loadSettings();
@@ -1533,7 +1616,7 @@ app.addEventListener('click', (e) => {
       return render();
     }
     case 'pick-side':
-      pickSide = btn!.getAttribute('data-side') as Player;
+      pickSide = mode === 'online' ? 'red' : (btn!.getAttribute('data-side') as Player);
       return render();
     case 'rules-open':
       rulesOpen = !rulesOpen;

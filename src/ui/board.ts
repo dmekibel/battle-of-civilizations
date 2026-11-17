@@ -260,12 +260,18 @@ function oak(tx: number, ty: number, k: number, tall: boolean): string {
   );
 }
 
+/** A direction on the flat map as the camera sees it: [to the right, towards the viewer]. Depends only on how far the camera is turned. */
+function turned(v: View, dx: number, dy: number): Pt {
+  const [cos, sin] = [Math.cos(v.cam.yaw), Math.sin(v.cam.yaw)];
+  return [dx * cos - dy * sin, dx * sin + dy * cos];
+}
+
 /** Which of the 8 sides of something standing on the map the camera sees: 0 when the map's +x points at the viewer, counting round in eighths. */
-function seenFrom(v: View, L: Lens): number {
-  const [fw, fh] = mapSize(v.portrait);
-  const [ax, ay] = L.pt(fw / 2, fh / 2);
-  const [bx, by] = L.pt(fw / 2 + 20, fh / 2);
-  const a = Math.atan2(bx - ax, (by - ay) / Math.max(0.2, Math.cos(tiltAngle(v))));
+function seenFrom(v: View): number {
+  // Worked out from the camera's turn alone. Measured through the perspective view it shifted a little as the
+  // camera slid over the board, and trees near a boundary flipped between two pictures while panning.
+  const [rx, ry] = turned(v, 1, 0);
+  const a = Math.atan2(rx, ry);
   // Pointing down the screen = facing us (0); pointing down-left = 'front-left' (1), and so on round.
   return ((-Math.round(a / (Math.PI / 4)) % 8) + 8) % 8;
 }
@@ -300,7 +306,7 @@ function trees(h: Hex, v: View, L: Lens): Standing[] {
       // It is drawn from the side the camera sees it from, so it turns as the camera orbits.
       const seed = h.col * 7 + h.row * 11 + i * 5;
       const [kind, size] = TREE_KINDS[seed % TREE_KINDS.length];
-      const dir = L.tilt ? DIRS8[(seenFrom(v, L) + (seed % 8)) % 8] : 'front';
+      const dir = L.tilt ? DIRS8[(seenFrom(v) + (seed % 8)) % 8] : 'front';
       const f = (L.tilt ? 0.27 : 0.12) * k; // the tallest tree stands about one and a half soldiers high
       const [w, hh] = [size[0] * f, size[1] * f];
       return { depth: L.depth(x + dx, y + dy), svg: shadow + pic(TREE_URL(kind, dir), size, tx - w / 2, ty - hh + 2 * k, w, hh) };
@@ -387,7 +393,7 @@ type ViewId = 'front' | 'fdiag' | 'side' | 'bdiag' | 'back';
 interface Look { view: ViewId; flip: boolean; /** The true 8-way direction, for pieces drawn from all 8 sides. */ dir: string }
 const VIEWS: ViewId[] = ['front', 'fdiag', 'side', 'bdiag', 'back'];
 
-function lookFor(owner: Player, v: View, L: Lens, s: GameState): Look {
+function lookFor(owner: Player, v: View, s: GameState): Look {
   // Measured on screen, not worked out: from the middle of the board, step towards the enemy's
   // side (red starts in the first columns, blue in the last) and see which way that step points.
   const mid = Math.floor(s.board.length / 2);
@@ -395,13 +401,7 @@ function lookFor(owner: Player, v: View, L: Lens, s: GameState): Look {
   const redSide = flat({ col: 0, row: mid }, v);
   const blueSide = flat({ col: cols - 1, row: mid }, v);
   const [from, to] = owner === 'red' ? [redSide, blueSide] : [blueSide, redSide];
-  const c: Pt = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2];
-  const d = Math.hypot(to[0] - from[0], to[1] - from[1]) || 1;
-  const step: Pt = [c[0] + ((to[0] - from[0]) / d) * 20, c[1] + ((to[1] - from[1]) / d) * 20];
-  const [ax, ay] = L.pt(...c);
-  const [bx, by] = L.pt(...step);
-  const rx = bx - ax;
-  const ry = (by - ay) / Math.max(0.2, Math.cos(tiltAngle(v))); // down the screen = towards the viewer
+  const [rx, ry] = turned(v, to[0] - from[0], to[1] - from[1]); // ry > 0 = towards the viewer
   const turn = Math.atan2(Math.abs(rx), ry); // 0 = facing us, π = facing away
   const n = Math.round(turn / (Math.PI / 4)); // 0 front, 1 front diagonal, 2 side, 3 back diagonal, 4 back
   const side = rx > 0 ? 'right' : 'left';
@@ -538,7 +538,7 @@ function slab(v: View, L: Lens): string {
 export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_EFFECTS): string {
   const L = lens(v);
   if (v.tilt) preloadFigures();
-  const looks: Record<Player, Look> = { red: lookFor('red', v, L, s), blue: lookFor('blue', v, L, s) };
+  const looks: Record<Player, Look> = { red: lookFor('red', v, s), blue: lookFor('blue', v, s) };
   const ground: string[] = [];
   const standing: Standing[] = [];
   const top: string[] = [];

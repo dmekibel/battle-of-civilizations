@@ -482,3 +482,6 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 .stage-wrap::after { content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
   background: radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(8, 12, 6, .38) 100%); z-index: 1; }
 @media (prefers-reduced-motion: reduce) { .board .clouds { animation: none; } }
+
+.invite-url { width: 100%; box-sizing: border-box; padding: 12px; border-radius: 10px; border: 1px solid var(--line); background: var(--track); color: var(--ink); font: 14px/1.2 ui-monospace, Menlo, monospace; text-align: center; }
+.ftile:disabled { opacity: .35; }
