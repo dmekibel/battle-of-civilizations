@@ -253,7 +253,7 @@ let tilt = (() => {
   }
 })();
 /** Steps for the + / − buttons; pinching can stop anywhere between the first and last. */
-const [ZOOM_MIN, ZOOM_MAX] = [0.7, 4];
+const [ZOOM_MIN, ZOOM_MAX] = [0.7, 10];
 
 type Buyable = keyof ArmyCounts;
 /** The side to move's faction decides what it can buy and what the pieces list shows. */

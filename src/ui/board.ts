@@ -269,8 +269,8 @@ function lookFor(owner: Player, v: View): Look {
   return { view: VIEWS[Math.round(turn / (Math.PI / 4))], flip: rx > 0 };
 }
 
-/** Pixels of figure art per map unit at size 1: a foot figure (about 190 px) stands about 49 units tall. */
-const ART_SCALE = 0.26;
+/** Pixels of figure art per map unit at size 1: pictures are exported with a 150 px base; a foot figure stands about 49 units tall. */
+const ART_SCALE = 0.26 * 80 / 150;
 const SPRITE_URL = (fac: string, type: string, view: string) => `${import.meta.env.BASE_URL}pieces/${fac}/${type}-${view}.webp`;
 
 /** The carved figure for this piece in 2.5D, if its army has one. */
