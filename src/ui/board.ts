@@ -529,7 +529,8 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
   // Paint from the back of the board to the front so nearer things overlap farther ones.
   standing.sort((a, b) => a.depth - b.depth);
   // Atmosphere: warm sun from the board's far-left corner and cool shade opposite (turns with the board),
-  // slow cloud shadows, and haze over the far edge when the board is tilted.
+  // slow cloud shadows (the animation is offset by the clock, so a redrawn board carries on from the same spot
+  // instead of jumping back, which flickered while panning), and haze over the far edge when the board is tilted.
   const [fw, fh] = mapSize(v.portrait);
   const [sunX, sunY] = L.pt(-0.25 * fw, -0.35 * fh);
   const [mx, my] = L.pt(fw / 2, fh / 2);
@@ -550,7 +551,7 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
       <radialGradient id="${u}cloud"><stop offset="0" stop-color="#0c1408" stop-opacity=".2"/><stop offset="1" stop-color="#0c1408" stop-opacity="0"/></radialGradient>
     </defs>
     <rect class="light" width="${W}" height="${H}" fill="url(#${u}sun)" clip-path="url(#${u}clip)"/>
-    <g clip-path="url(#${u}clip)"><g class="clouds" fill="url(#${u}cloud)"><ellipse cx="${(+W * 0.2).toFixed(0)}" cy="${(+H * 0.35).toFixed(0)}" rx="${(+W * 0.16).toFixed(0)}" ry="${(+H * 0.09).toFixed(0)}"/><ellipse cx="${(+W * 0.75).toFixed(0)}" cy="${(+H * 0.7).toFixed(0)}" rx="${(+W * 0.2).toFixed(0)}" ry="${(+H * 0.1).toFixed(0)}"/></g></g>`;
+    <g clip-path="url(#${u}clip)"><g class="clouds" fill="url(#${u}cloud)" style="animation-delay:-${((performance.now() / 1000) % 180).toFixed(2)}s"><ellipse cx="${(+W * 0.2).toFixed(0)}" cy="${(+H * 0.35).toFixed(0)}" rx="${(+W * 0.16).toFixed(0)}" ry="${(+H * 0.09).toFixed(0)}"/><ellipse cx="${(+W * 0.75).toFixed(0)}" cy="${(+H * 0.7).toFixed(0)}" rx="${(+W * 0.2).toFixed(0)}" ry="${(+H * 0.1).toFixed(0)}"/></g></g>`;
   const haze = L.tilt ? `<rect class="light" width="${W}" height="${H}" fill="url(#${u}haze)" clip-path="url(#${u}clip)"/>` : '';
   const body = ground.join('') + light + standing.map((x) => x.svg).join('') + haze + top.join('');
   return `<svg class="board ${L.tilt ? 'tilted' : ''}" viewBox="0 0 ${L.width.toFixed(0)} ${L.height.toFixed(0)}" role="img">${body}</svg>`;
