@@ -256,7 +256,7 @@ const RAYS = Array.from({ length: 8 }, (_, i) => {
  *  whether we see it from the front, a front diagonal, the side, a back diagonal or the back, in
  *  45° steps. Turned views are drawn facing left and mirrored when the piece faces right. */
 type ViewId = 'front' | 'fdiag' | 'side' | 'bdiag' | 'back';
-interface Look { view: ViewId; flip: boolean }
+interface Look { view: ViewId; flip: boolean; /** The true 8-way direction, for pieces drawn from all 8 sides. */ dir: string }
 const VIEWS: ViewId[] = ['front', 'fdiag', 'side', 'bdiag', 'back'];
 
 function lookFor(owner: Player, v: View, L: Lens, s: GameState): Look {
@@ -275,7 +275,10 @@ function lookFor(owner: Player, v: View, L: Lens, s: GameState): Look {
   const rx = bx - ax;
   const ry = (by - ay) / Math.max(0.2, Math.cos(tiltAngle(v))); // down the screen = towards the viewer
   const turn = Math.atan2(Math.abs(rx), ry); // 0 = facing us, π = facing away
-  return { view: VIEWS[Math.round(turn / (Math.PI / 4))], flip: rx > 0 };
+  const n = Math.round(turn / (Math.PI / 4)); // 0 front, 1 front diagonal, 2 side, 3 back diagonal, 4 back
+  const side = rx > 0 ? 'right' : 'left';
+  const dir = ['front', `front-${side}`, side, `back-${side}`, 'back'][n];
+  return { view: VIEWS[n], flip: rx > 0, dir };
 }
 
 /** Which straight views of an aiming piece show it shooting sideways (see figure()). */
@@ -295,6 +298,16 @@ function figure(type: UnitTypeId, owner: Player, hp: number, k: number, look: Lo
   if (!set) return null;
   // Pieces that shoot forward can't be drawn aiming straight at (or away from) the camera, so head-on they
   // show their diagonal instead, where the weapon clearly points the way they face.
+  // Pieces drawn from all 8 sides: the true picture, never mirrored, so nothing switches hands.
+  const true8 = set[look.dir];
+  if (true8) {
+    const [w8, h8] = [true8[0] * ART_SCALE * k, true8[1] * ART_SCALE * k];
+    const full8 = maxHp(type);
+    const bar8 = hp > 0 && hp < full8 ? `<g transform="translate(0 ${(7 * k).toFixed(1)}) scale(${(0.7 * k).toFixed(3)}) translate(0 -16)">${healthBar(hp, full8)}</g>` : '';
+    return `<ellipse cx="0" cy="${k.toFixed(1)}" rx="${(16 * k).toFixed(1)}" ry="${(5 * k).toFixed(1)}" fill="#000" opacity=".3"/>
+    <ellipse cx="0" cy="${k.toFixed(1)}" rx="${(17 * k).toFixed(1)}" ry="${(5.6 * k).toFixed(1)}" fill="none" stroke="${armyColor(owner)}" stroke-width="${(2 * k).toFixed(1)}" opacity=".9"/>
+    <image decoding="sync" href="${SPRITE_URL(fac, type, look.dir)}" x="${(-w8 / 2).toFixed(1)}" y="${(-h8 + 4 * k).toFixed(1)}" width="${w8.toFixed(1)}" height="${h8.toFixed(1)}"/>${bar8}`;
+  }
   const wanted: ViewId = AIMS_FORWARD[`${fac}/${type}`]?.includes(look.view) ? (look.view === 'front' ? 'fdiag' : set.bdiag ? 'bdiag' : 'side') : look.view;
   // A missing diagonal falls back to the straight view on the same side (front or back).
   const view: ViewId = set[wanted] ? wanted : wanted === 'fdiag' ? 'front' : wanted === 'bdiag' ? 'back' : 'side';
