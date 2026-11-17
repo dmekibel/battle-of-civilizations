@@ -29,6 +29,8 @@ export interface Camera {
 }
 
 export interface View {
+  /** Write each hex's name on it (off unless switched on in the menu). */
+  labels?: boolean;
   portrait: boolean;
   /** 2.5D: tilted board with standing pieces. Off = straight down from above. */
   tilt: boolean;
@@ -510,7 +512,7 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
       const [lx, ly] = L.pt(x, y - S * 0.62);
       ground.push(
         `<polygon class="hex" data-col="${c}" data-row="${r}" points="${corners(hex, v, L)}" ${groundReady ? 'fill="#000" fill-opacity="0" stroke="#1d3312" stroke-opacity=".28" stroke-width="1"' : `fill="${fill(t, hex)}" stroke="#5d7f40" stroke-width="1"`}/>`,
-        `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" class="coord" style="font-size:${(7 * L.size(x, y)).toFixed(1)}px">${hexName(hex)}</text>`,
+        v.labels ? `<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" class="coord" style="font-size:${(7 * L.size(x, y)).toFixed(1)}px">${hexName(hex)}</text>` : '',
       );
       if (t === 'river' && !groundReady) ground.push(riverRipple(hex, v, L));
       if (t === 'forest') standing.push(...trees(hex, v, L));

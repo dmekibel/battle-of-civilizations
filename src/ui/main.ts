@@ -209,7 +209,7 @@ let tiltShown: number | null = null;
 let stageSize: [number, number] = [window.innerWidth, Math.max(300, window.innerHeight * 0.7)];
 const view = () => {
   const c = tiltShown === null ? cam : { ...cam, pitch: tiltShown };
-  return { portrait, tilt, cam: upsideDown() ? { ...c, yaw: c.yaw + Math.PI } : c, vw: stageSize[0], vh: stageSize[1] };
+  return { labels: showLabels, portrait, tilt, cam: upsideDown() ? { ...c, yaw: c.yaw + Math.PI } : c, vw: stageSize[0], vh: stageSize[1] };
 };
 
 /** Across the table, a new turn tips the camera down flat, swaps to the other player's seat at
@@ -244,6 +244,11 @@ function tiltOver(to: Player) {
 /** Screen directions are reversed for the far player, whose screen is turned round. */
 const flipSign = () => (upsideDown() ? -1 : 1);
 
+/** Extras that are off unless switched on in the menu: hex names on the board, and the corner cube that turns the camera. */
+const flag = (key: string) => { try { return localStorage.getItem(key) === '1'; } catch { return false; } };
+const setFlag = (key: string, on: boolean) => { try { localStorage.setItem(key, on ? '1' : '0'); } catch { /* private window */ } };
+let showLabels = flag('boc-labels');
+let showCube = flag('boc-cube');
 /** 2.5D board (tilted, pieces standing) or the flat map; remembered per device. */
 const VIEW_KEY = 'boc-view';
 let tilt = (() => {
@@ -784,6 +789,8 @@ function menuBody(s: GameState): string {
   return `<div class="mgroup">
       ${row('lang', '#3a6fb0', G.globe, t(lang, 'rowLanguage'), lang === 'en' ? 'English' : 'Русский')}
       ${row('view', '#7a5bb0', G.cube, t(lang, 'rowView'), tilt ? t(lang, 'view25') : t(lang, 'viewFlatShort'))}
+      ${row('labels', '#5b7a4a', '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z" fill="none"/><path d="M9 10l3-1.5v7" fill="none"/>', t(lang, 'rowLabels'), '', showLabels)}
+      ${row('cube', '#7a5bb0', G.cube, t(lang, 'rowCube'), '', showCube)}
       ${row('cam-reset', '#5b6b7a', G.target, t(lang, 'camResetMenu'))}
       ${mode === 'pvp' ? row('table', '#a8811a', G.seats, t(lang, 'rowSeating'), table === 'pass' ? t(lang, 'seatPass') : t(lang, 'seatAcross')) : ''}
       ${row('mute', '#3f8f5a', G.sound, t(lang, 'rowSound'), '', !isMuted())}
@@ -1036,7 +1043,7 @@ function draw() {
       </header>
       <div class="stage-wrap">
         <div class="stage">${renderBoard(s, overlay(s), view(), fx)}</div>
-        <div class="viewcube" title="${t(lang, 'cubeHelp')}" aria-label="${t(lang, 'cubeHelp')}">${viewCube(view())}</div>
+        ${showCube ? `<div class="viewcube" title="${t(lang, 'cubeHelp')}" aria-label="${t(lang, 'cubeHelp')}">${viewCube(view())}</div>` : ''}
         <div class="cam" aria-label="${t(lang, 'camera')}">
           <button data-act="cam-flip" title="${t(lang, 'camFlip')}" aria-label="${t(lang, 'camFlip')}">${icon('flip')}</button>
         </div>
@@ -1464,6 +1471,14 @@ app.addEventListener('click', (e) => {
         /* keep the choice for this visit only */
       }
       return render();
+    case 'labels':
+      showLabels = !showLabels;
+      setFlag('boc-labels', showLabels);
+      return render();
+    case 'cube':
+      showCube = !showCube;
+      setFlag('boc-cube', showCube);
+      return render();
     case 'music':
       toggleMusic();
       return render();
@@ -1813,8 +1828,8 @@ app.addEventListener('pointermove', (e) => {
   if (!cubeDrag || e.pointerId !== cubeDrag.id) return;
   cam = {
     ...cam,
-    yaw: cubeDrag.yaw + (e.clientX - cubeDrag.x) * flipSign() * 0.012,
-    pitch: tilt ? clampPitch(cubeDrag.pitch + (e.clientY - cubeDrag.y) * flipSign() * 0.006) : cam.pitch,
+    yaw: cubeDrag.yaw - (e.clientX - cubeDrag.x) * flipSign() * 0.012,
+    pitch: tilt ? clampPitch(cubeDrag.pitch - (e.clientY - cubeDrag.y) * flipSign() * 0.006) : cam.pitch,
   };
   camFrame();
 });
