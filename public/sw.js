@@ -1,6 +1,6 @@
 // Offline play: the page is fetched fresh when there's a connection and served from the
 // cache when there isn't; the game's scripts, styles and icons are cached as they load.
-const CACHE = 'battle-v1';
+const CACHE = 'battle-v2'; // a new name clears every old cached file on the next visit
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(['./', './manifest.webmanifest', './icon-192.png'])));

@@ -8,7 +8,7 @@ import type { AttackPreview, GameState, Hex, Player, Reach } from '../engine';
 import { maxHp } from '../engine';
 import { sides } from './factions';
 import { hexName } from './i18n';
-import { SPRITES } from './sprites';
+import { ART_VERSION, SPRITES } from './sprites';
 import { armyColor, healthBar, unitSymbol } from './symbols';
 
 const S = 34; // hex radius in SVG units
@@ -271,7 +271,7 @@ function lookFor(owner: Player, v: View): Look {
 
 /** Pixels of figure art per map unit at size 1: pictures are exported with a 150 px base; a foot figure stands about 49 units tall. */
 const ART_SCALE = 0.26 * 80 / 150;
-const SPRITE_URL = (fac: string, type: string, view: string) => `${import.meta.env.BASE_URL}pieces/${fac}/${type}-${view}.webp`;
+const SPRITE_URL = (fac: string, type: string, view: string) => `${import.meta.env.BASE_URL}pieces/${fac}/${type}-${view}.webp?v=${ART_VERSION}`;
 
 /** The carved figure for this piece in 2.5D, if its army has one. */
 function figure(type: UnitTypeId, owner: Player, hp: number, k: number, look: Look): string | null {
