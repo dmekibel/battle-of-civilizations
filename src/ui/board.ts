@@ -252,9 +252,12 @@ const RAYS = Array.from({ length: 8 }, (_, i) => {
   return `M${(5 * Math.cos(a)).toFixed(1)} ${(5 * Math.sin(a)).toFixed(1)}L${(12 * Math.cos(a)).toFixed(1)} ${(12 * Math.sin(a)).toFixed(1)}`;
 }).join('');
 
-/** Which side of its figure a piece shows: each army faces the enemy, and the camera's turn
- *  decides whether we see it from the front, the side (mirrored when it faces right) or the back. */
-interface Look { view: 'front' | 'side' | 'back'; flip: boolean }
+/** Which side of its figure a piece shows: each army faces the enemy, and the camera's turn decides
+ *  whether we see it from the front, a front diagonal, the side, a back diagonal or the back, in
+ *  45° steps. Turned views are drawn facing left and mirrored when the piece faces right. */
+type ViewId = 'front' | 'fdiag' | 'side' | 'bdiag' | 'back';
+interface Look { view: ViewId; flip: boolean }
+const VIEWS: ViewId[] = ['front', 'fdiag', 'side', 'bdiag', 'back'];
 
 function lookFor(owner: Player, v: View): Look {
   // Red stands at the left (landscape) or bottom (portrait) of the flat map and faces the other way.
@@ -262,8 +265,8 @@ function lookFor(owner: Player, v: View): Look {
   const [cos, sin] = [Math.cos(v.cam.yaw), Math.sin(v.cam.yaw)];
   const rx = f[0] * cos - f[1] * sin;
   const ry = f[0] * sin + f[1] * cos; // positive = towards the viewer
-  if (Math.abs(ry) >= Math.abs(rx)) return { view: ry > 0 ? 'front' : 'back', flip: false };
-  return { view: 'side', flip: rx > 0 };
+  const turn = Math.atan2(Math.abs(rx), ry); // 0 = facing us, π = facing away
+  return { view: VIEWS[Math.round(turn / (Math.PI / 4))], flip: rx > 0 };
 }
 
 /** Pixels of figure art per map unit at size 1: a foot figure (about 190 px) stands about 49 units tall. */
@@ -273,15 +276,19 @@ const SPRITE_URL = (fac: string, type: string, view: string) => `${import.meta.e
 /** The carved figure for this piece in 2.5D, if its army has one. */
 function figure(type: UnitTypeId, owner: Player, hp: number, k: number, look: Look): string | null {
   const fac = sides[owner];
-  const size = SPRITES[fac]?.[type]?.[look.view];
+  const set = SPRITES[fac]?.[type];
+  if (!set) return null;
+  // A missing diagonal falls back to the straight view on the same side (front or back).
+  const view: ViewId = set[look.view] ? look.view : look.view === 'fdiag' ? 'front' : look.view === 'bdiag' ? 'back' : 'side';
+  const size = set[view];
   if (!size) return null;
   const [w, h] = [size[0] * ART_SCALE * k, size[1] * ART_SCALE * k];
   const full = maxHp(type);
   const bar = hp > 0 && hp < full ? `<g transform="translate(0 ${(7 * k).toFixed(1)}) scale(${(0.7 * k).toFixed(3)}) translate(0 -16)">${healthBar(hp, full)}</g>` : '';
-  const flip = look.view === 'side' && look.flip ? ' transform="scale(-1 1)"' : '';
+  const flip = view !== 'front' && view !== 'back' && look.flip ? ' transform="scale(-1 1)"' : '';
   return `<ellipse cx="0" cy="${k.toFixed(1)}" rx="${(16 * k).toFixed(1)}" ry="${(5 * k).toFixed(1)}" fill="#000" opacity=".3"/>
     <ellipse cx="0" cy="${k.toFixed(1)}" rx="${(17 * k).toFixed(1)}" ry="${(5.6 * k).toFixed(1)}" fill="none" stroke="${armyColor(owner)}" stroke-width="${(2 * k).toFixed(1)}" opacity=".9"/>
-    <image href="${SPRITE_URL(fac, type, look.view)}" x="${(-w / 2).toFixed(1)}" y="${(-h + 4 * k).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"${flip}/>${bar}`;
+    <image href="${SPRITE_URL(fac, type, view)}" x="${(-w / 2).toFixed(1)}" y="${(-h + 4 * k).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"${flip}/>${bar}`;
 }
 
 let preloaded = '';
@@ -291,8 +298,8 @@ export function preloadFigures() {
   if (key === preloaded || typeof Image === 'undefined') return;
   preloaded = key;
   for (const fac of [sides.red, sides.blue]) {
-    for (const type of Object.keys(SPRITES[fac] ?? {})) {
-      for (const view of ['front', 'side', 'back']) new Image().src = SPRITE_URL(fac, type, view);
+    for (const [type, set] of Object.entries(SPRITES[fac] ?? {})) {
+      for (const view of Object.keys(set)) new Image().src = SPRITE_URL(fac, type, view);
     }
   }
 }
