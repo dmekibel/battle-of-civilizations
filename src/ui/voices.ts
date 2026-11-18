@@ -94,6 +94,7 @@ const KIND: Partial<Record<UnitTypeId, string>> = {
   lightCavalry: 'rider', heavyCavalry: 'rider', cowboy: 'rider', chariot: 'rider',
   archer: 'ranged', horseArcher: 'ranged', gunslinger: 'ranged', rifleman: 'ranged', skirmisher: 'ranged',
   axeThrower: 'ranged', atlatl: 'ranged', thrower: 'ranged', bomber: 'ranged', cannon: 'crew', ballista: 'crew',
+  banner: 'foot', scout: 'foot', shieldbearer: 'heavy', wildRider: 'rider', crossbow: 'ranged', longRifle: 'ranged', rocket: 'crew',
 };
 
 function takesFor(army: string, type: UnitTypeId, moment: Moment): AudioBuffer[] {
@@ -211,7 +212,7 @@ type Weapon = 'sword' | 'axe' | 'spear' | 'club';
 function weaponOf(army: string, type: UnitTypeId): Weapon {
   if (army === 'vikings' && type !== 'archer') return 'axe';
   if (type === 'jaguar' || (army === 'aztecs' && type === 'heavyInfantry') || (army === 'comanche' && type === 'lightInfantry')) return 'club';
-  if (['lightInfantry', 'ashigaru', 'impi', 'lightCavalry', 'championRider', 'chariot', 'thrower', 'atlatl'].includes(type)) return 'spear';
+  if (['lightInfantry', 'ashigaru', 'impi', 'lightCavalry', 'championRider', 'chariot', 'thrower', 'atlatl', 'shieldbearer', 'wildRider'].includes(type)) return 'spear';
   return 'sword';
 }
 

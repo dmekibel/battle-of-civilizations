@@ -50,11 +50,18 @@ const ROLE: Record<UnitTypeId, [string, string]> = {
   bomber: ['Throw grenades a short way for 2.', 'Бросают гранаты недалеко, урон 2.'],
   champion: ['One per army: a towering elite warrior.', 'Один на армию: могучий элитный воин.'],
   championRider: ['One per army: an elite rider.', 'Один на армию: элитный всадник.'],
-  championGun: ['One per army: a deadly bounty hunter.', 'Один на армию: смертельный охотник за головами.'],
+  championGun: ['One per army: a deadly gunfighter.', 'Один на армию: смертельный стрелок.'],
   jaguar: ['Elite warriors with obsidian clubs.', 'Элитные воины с обсидиановыми дубинами.'],
   atlatl: ['Dart throwers with good reach.', 'Метатели дротиков с хорошей дальностью.'],
   impi: ['Stabbing spears, double damage to riders.', 'Короткие копья, двойной урон по коннице.'],
   thrower: ['Hurl assegai spears a short way.', 'Мечут ассегаи недалеко.'],
+  banner: ['One per army: friends next to it hit +1 in melee.', 'Один на армию: соседи бьют в ближнем бою на 1 сильнее.'],
+  scout: ['Cheap; the only foot that walks through forest.', 'Дёшевы; единственные, кто проходит через лес.'],
+  shieldbearer: ['Big shields: every shot does 1 less.', 'Большие щиты: каждый выстрел наносит на 1 меньше.'],
+  rocket: ['Lobs over trees and walls: far, hits for 2.', 'Бьют навесом через лес и стены: далеко и на 2.'],
+  crossbow: ['Slow reload, but each shot hits for 2.', 'Долго заряжают, но каждый выстрел на 2.'],
+  longRifle: ['The longest reach on foot: hits for 2.', 'Самый дальний пеший выстрел: на 2.'],
+  wildRider: ['Fast and fierce, falls to one blow.', 'Быстрые и яростные, падают от одного удара.'],
 };
 const CHAMPS: UnitTypeId[] = ['champion', 'championRider', 'championGun'];
 

@@ -1,0 +1,35 @@
+// Written by _art/cav_fix.py. Per-view corrections for carved riders whose oval base, seen end-on or from a diagonal, has its
+// centre much higher in the picture than in the side views (the figure looked lifted off its hex). DROP = logical px to
+// draw that view lower, so every view's base centre sits about 50 px above the picture's bottom, like the side views and the foot pieces.
+export const DROP: Record<string, number> = {
+ "comanche/championRider/back": 63.6,
+ "comanche/championRider/back-left": 76.1,
+ "comanche/championRider/back-right": 74.1,
+ "comanche/championRider/front": 63.6,
+ "comanche/championRider/front-left": 47.1,
+ "comanche/championRider/front-right": 76.1,
+ "comanche/championRider/left": 4.0,
+ "comanche/championRider/right": 3.2,
+ "mongols/championRider/back": 62.2,
+ "mongols/championRider/back-left": 75.6,
+ "mongols/championRider/back-right": 76.2,
+ "mongols/championRider/front": 69.6,
+ "mongols/championRider/front-left": 80.9,
+ "mongols/championRider/front-right": 75.2,
+ "mongols/championRider/left": 7.5,
+ "mongols/championRider/right": 4.3,
+ "teutonic/heavyCavalry/back": 59.5,
+ "teutonic/heavyCavalry/back-left": 69.8,
+ "teutonic/heavyCavalry/back-right": 57.4,
+ "teutonic/heavyCavalry/front": 46.1,
+ "teutonic/heavyCavalry/front-left": 57.1,
+ "teutonic/heavyCavalry/front-right": 55.3,
+ "teutonic/heavyCavalry/right": 13.2,
+ "teutonic/lightCavalry/back": 39.4,
+ "teutonic/lightCavalry/back-left": 51.6,
+ "teutonic/lightCavalry/back-right": 49.6,
+ "teutonic/lightCavalry/front": 17.0,
+ "teutonic/lightCavalry/front-left": 31.3,
+ "teutonic/lightCavalry/front-right": 29.4,
+ "teutonic/lightCavalry/right": 3.2
+};

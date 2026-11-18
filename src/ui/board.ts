@@ -9,6 +9,7 @@ import { maxHp, neighbors } from '../engine';
 import { sides } from './factions';
 import { hexName } from './i18n';
 import { ART_VERSION, SPRITES } from './sprites';
+import { DROP } from './spritefix';
 import { artAt, BUILD_SCALE, TREE_SCALE, BIOME_SCENERY, biomeId, biomeOf, biomePics, detailUrlOf, groundUrlOf, propsOf, riverFile, treeKinds, treeUrlOf } from './biomes';
 import { armyColor, healthBar, unitSymbol } from './symbols';
 import { sideColor, sideColorsOn, sideDashed } from './sides';
@@ -703,7 +704,7 @@ export const NO_EFFECTS: Effects = { from: new Map(), hits: [], walks: new Map()
 /** Time for one step of a walk, in ms. */
 export const STEP_MS = 130;
 /** Pieces that fire guns: a quick tracer and smoke instead of an arrow in flight. */
-const GUNS = new Set<UnitTypeId>(['gunslinger', 'championGun', 'rifleman', 'cowboy', 'deputy', 'lineInfantry', 'skirmisher', 'cannon', 'bomber']);
+const GUNS = new Set<UnitTypeId>(['gunslinger', 'championGun', 'rifleman', 'cowboy', 'deputy', 'lineInfantry', 'skirmisher', 'cannon', 'bomber', 'crossbow', 'longRifle', 'rocket']);
 /** When the blow lands after the attack starts (seconds): arrows fly, bullets and blades are quick. */
 /** How long an arrow is in the air (seconds): slow enough to follow with the eye. */
 export const ARROW_S = 0.65;
@@ -795,11 +796,14 @@ function figure(type: UnitTypeId, owner: Player, hp: number, k: number, look: Lo
   const true8 = set[look.dir];
   if (true8) {
     const [w8, h8] = [true8[0] * ART_SCALE * k, true8[1] * ART_SCALE * k];
+    // Views whose base centre sits higher in the picture than usual (a rider's oval base from a diagonal) are drawn lower,
+    // so the base, not the picture's bottom edge, stands on the hex (src/ui/spritefix.ts, written by _art/cav_fix.py).
+    const drop8 = (DROP[`${fac}/${ART_OF[type] ?? type}/${look.dir}`] ?? 0) * ART_SCALE * k;
     const full8 = maxHp(type);
     const bar8 = hp > 0 && hp < full8 ? `<g transform="translate(0 ${(7 * k).toFixed(1)}) scale(${(0.7 * k).toFixed(3)}) translate(0 -16)">${healthBar(hp, full8)}</g>` : '';
     return `${castShadow(k)}<ellipse cx="0" cy="${k.toFixed(1)}" rx="${(13 * k).toFixed(1)}" ry="${(4 * k).toFixed(1)}" fill="#000" opacity=".35"/>
     ${baseRing(owner, k)}
-    ${pic(SPRITE_URL(fac, type, look.dir), true8, -w8 / 2, -h8 + 4 * k, w8, h8)}${bar8}`;
+    ${pic(SPRITE_URL(fac, type, look.dir), true8, -w8 / 2, -h8 + 4 * k + drop8, w8, h8)}${bar8}`;
   }
   const wanted: ViewId = AIMS_FORWARD[`${fac}/${type}`]?.includes(look.view) ? (look.view === 'front' ? 'fdiag' : set.bdiag ? 'bdiag' : 'side') : look.view;
   // A missing diagonal falls back to the straight view on the same side (front or back).

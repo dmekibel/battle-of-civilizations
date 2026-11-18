@@ -1467,7 +1467,6 @@ body:has(.screen.phone) .tut-coach { top: calc(max(6px, env(safe-area-inset-top,
 /* replay: always-visible Exit and New game (2026-11-18) */
 .rp-top { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 10px); right: max(12px, env(safe-area-inset-right, 0px)); z-index: 40; display: flex; gap: 8px; }
 .rp-top button { min-height: 44px; padding: 0 16px; border-radius: 22px; font-weight: 700; }
-.rp-top button { min-height: 44px; padding: 0 16px; border-radius: 22px; font-weight: 700; }
 
 /* Army showcase on wide screens (2026-11-18): a wide sheet and the pieces in a grid of cards. */
 @media (min-width: 820px) {
@@ -1481,3 +1480,193 @@ body:has(.screen.phone) .tut-coach { top: calc(max(6px, env(safe-area-inset-top,
   .ap-fig img { max-height: 150px; }
 }
 @media (min-width: 1400px) { .ap-units { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); } }
+
+/* =====================================================================================
+   DESKTOP LAYOUT (2026-11-18): every menu screen gets a real desktop composition.
+   Same gate as main.ts isDesktop() (≥ 1000 × 560, landscape), so phones held either way never see it.
+   Borrowed: Civilization VI / Total War main menus (hero art large, menu as a side column; setup screen with
+   the settings in a left column and Start bottom-right), Hearthstone (big crest on the victory screen, cards that
+   lift on hover), chess.com desktop (wide two-column lists for saved games, hover rows), Wingspan (army tiles
+   as big framed cards in a grid).
+   ===================================================================================== */
+/* Title: wrapper for the mode cards; invisible to layout on phones. */
+.modes { display: contents; }
+.start .saves-link { min-height: 36px; padding: 4px 10px; font-size: 13.5px; color: var(--ink-2); align-self: center; }
+
+@media (min-width: 1000px) and (min-height: 560px) and (orientation: landscape) {
+  /* ---- shared: brass focus rings and hover lift (keyboard and mouse) ---- */
+  .cover button:focus-visible, .sheet button:focus-visible, .drawer button:focus-visible, .side button:focus-visible,
+  .cover input:focus-visible, .sheet input:focus-visible { outline: 2px solid var(--brass-hi); outline-offset: 3px; }
+  .choice, .ftile, .mtile, .vs-card, .preset, .ccard, .slot, .ap-unit { transition: transform .14s ease-out, border-color .14s, box-shadow .14s, filter .14s; }
+  @media (hover: hover) and (pointer: fine) {
+    .choice:not(:disabled):hover, .ftile:not(:disabled):hover, .mtile:hover, .vs-card:hover, .preset:hover {
+      transform: translateY(-2px); border-color: var(--brass-lo); filter: brightness(1.08); }
+    .choice:hover > i { color: var(--brass); }
+    .ap-unit:hover, .slot:hover, .ccard:not(.locked):hover { border-color: var(--brass-lo); }
+    .setup-nav .srow:not(.on):hover { background: rgba(255, 236, 200, .05); }
+  }
+  .cover, .sheet { padding: 32px; }
+
+  /* ---- title: the two kings big on the left, the ways to play as a column on the right ---- */
+  .card.start:has(.duel) {
+    position: relative; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(380px, 460px); align-items: center; column-gap: 56px;
+    width: min(1280px, 100%); padding: 40px 48px 44px; background: transparent; border: 0; box-shadow: none; }
+  .card.start:has(.duel) .langs { position: absolute; top: 0; right: 0; }
+  .card.start:has(.duel) .hero { padding: 0; }
+  .card.start:has(.duel) .duel { height: min(46vh, 420px); margin: 0; column-gap: 8px; }
+  .card.start:has(.duel) .duel::before { height: 70px; left: 4%; right: 4%; bottom: -6px; background: radial-gradient(ellipse, rgba(240, 200, 120, .2), transparent 70%); }
+  .card.start:has(.duel) .duel .figpic { height: min(44vh, 400px); filter: drop-shadow(0 18px 18px rgba(0, 0, 0, .65)); }
+  .card.start:has(.duel) .hero .logo svg { width: 118px; height: 138px; }
+  .card.start:has(.duel) .hero h2 { font-size: clamp(48px, 4.6vw, 72px); margin: 22px 0 8px; letter-spacing: .02em; }
+  .card.start:has(.duel) .hero p { font-size: 18px; color: var(--ink-3); }
+  .card.start:has(.duel) .modes { display: flex; flex-direction: column; gap: 12px; padding-top: 28px; }
+  .card.start:has(.duel) .choice { min-height: 84px; padding: 14px 20px 14px 16px; }
+  .card.start:has(.duel) .choice b { font-size: 24px; }
+  .card.start:has(.duel) .ctext > span { font-size: 14.5px; }
+  .card.start:has(.duel) .cicon { width: 54px; height: 54px; }
+  .card.start:has(.duel) .saves-link { align-self: flex-end; margin: -6px 0 -4px; }
+
+  /* ---- New battle: face-off big on the left, settings on the right, Start bottom-right ---- */
+  .sheet-body.setup:not(.ap) { width: min(1240px, 100%); height: min(780px, 100%); max-width: none; padding: 0 32px; }
+  .sheet-body.setup > h2 { margin: 0 -32px; padding: 20px 32px 18px; font-size: 30px; }
+  .sheet-body.setup .sheet-scroll { margin: 0 -32px; padding: 8px 32px 28px; }
+  .sheet-body.setup .sheet-foot { margin: 0 -32px; padding: 16px 32px 20px; flex-direction: row; justify-content: flex-end; align-items: center; }
+  .sheet-body.setup .sheet-foot .primary.wide { width: auto; min-width: 340px; min-height: 56px; font-size: 18px; }
+  .setup-sum { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 28px; align-items: start; padding-top: 18px; }
+  .setup-sum .vs { margin: 0; gap: 14px; position: sticky; top: 0; }
+  .setup-sum .vs-card { padding: 18px 12px 22px; gap: 10px; }
+  .setup-sum .vs-card .figpic { height: min(40vh, 330px); filter: drop-shadow(0 14px 14px rgba(0, 0, 0, .55)); }
+  .setup-sum .vs-card b { font-size: 26px; }
+  .setup-sum .vs-who { font-size: 12px; }
+  .setup-sum .vs-swap { width: 52px; height: 52px; }
+  .setup-sum .srow { min-height: 62px; padding: 8px 16px 8px 20px; font-size: 16.5px; }
+  .setup-sum .srow-v { font-size: 15.5px; }
+  .setup-sum .srow-pic { width: 84px; }
+  .setup-sum .srow-pic .mthumb, .setup-sum .srow-pic svg { width: 84px; }
+
+  /* Sub-pages: every setting stays listed on the left; the page fills the right (no full-screen push). */
+  .sheet-body.setup.has-nav { display: grid; grid-template-columns: 300px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; column-gap: 28px; }
+  .sheet-body.setup.has-nav > h2, .sheet-body.setup.has-nav > .sheet-foot { grid-column: 1 / -1; }
+  .sheet-body.setup.has-nav > .sheet-scroll { margin-left: 0; padding-left: 0; }
+  .setup-nav { align-self: start; margin-top: 18px; max-height: calc(100% - 36px); overflow-y: auto; scrollbar-width: thin;
+    background: var(--wood-1); border: 1px solid var(--hair); border-radius: var(--r-lg); box-shadow: inset 0 1px 0 var(--bevel), var(--sh-1); }
+  .setup-nav .srow { min-height: 54px; padding: 6px 12px 6px 16px; flex-wrap: wrap; row-gap: 0; position: relative; }
+  .setup-nav .srow + .srow { border-top: 1px solid var(--hair); }
+  .setup-nav .srow-l { flex-basis: 100%; font-size: 15px; }
+  .setup-nav .srow-v { justify-content: flex-start; text-align: left; font-size: 13px; }
+  .setup-nav .srow-pic, .setup-nav .srow-chev { display: none; }
+  .setup-nav .nav-home .srow-l { font: 700 11px/1 var(--ui); letter-spacing: .16em; text-transform: uppercase; color: var(--ink-3); }
+  .setup-nav .nav-home::before { content: '‹'; font-size: 20px; color: var(--brass-lo); margin-right: 8px; }
+  .setup-nav .nav-home { flex-wrap: nowrap; min-height: 48px; }
+  .setup-nav .nav-home .srow-l { flex-basis: auto; }
+  .setup-nav .srow.on { background: linear-gradient(90deg, rgba(212, 173, 98, .16), rgba(212, 173, 98, .03)); }
+  .setup-nav .srow.on::after { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--brass); }
+  .setup-nav .srow.on .srow-l { color: var(--brass-hi); }
+  .has-nav .sub-in { animation: none; }
+  /* Map: 4–6 tiles a row, bigger previews. */
+  .setup-sub .mtiles { grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 14px; }
+  .setup-sub .mtile { padding: 8px 8px 12px; font-size: 14px; gap: 9px; }
+  .setup-sub .mbig { max-width: 520px; }
+  /* Army: bigger leaders, five or six a row. */
+  .setup-sub .ftiles { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+  .setup-sub .ftile { padding: 14px 8px 14px; font-size: 15px; gap: 8px; }
+  .setup-sub .ftile .figpic { height: 150px; }
+  .setup-sub .ftile-view { width: 38px; height: 38px; top: 6px; right: 6px; }
+  .setup-sub .sub-tabs { max-width: 460px; }
+  .setup .blurb { font-size: 15.5px; max-width: 75ch; }
+  /* Rules: presets side by side, rule groups in two columns. */
+  .setup-sub .presets { max-width: 760px; }
+  .setup-sub .rgroups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
+  .setup-sub .rule { min-height: 64px; }
+  /* Single-choice pages and weather: a comfortable reading width, not stretched. */
+  .setup-sub .olist { max-width: 620px; }
+  .setup-sub .orow { min-height: 62px; }
+  .setup-sub.sub-weather { max-width: 760px; }
+
+  /* ---- Armies gallery (title screen): big framed leaders in a wide grid ---- */
+  .sheet-body.setup:not(.ap):not(:has(.srows, .setup-sub, .setup-nav)) .ftiles { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 16px; }
+  .sheet-body.setup:not(.ap):not(:has(.srows, .setup-sub, .setup-nav)) .ftile { padding: 16px 10px 16px; font: 400 20px/1.1 var(--display); color: var(--ink); gap: 10px; }
+  .sheet-body.setup:not(.ap):not(:has(.srows, .setup-sub, .setup-nav)) .ftile .figpic { height: 210px; filter: drop-shadow(0 10px 10px rgba(0, 0, 0, .55)); }
+  .sheet-body.setup:not(.ap):not(:has(.srows, .setup-sub, .setup-nav)) .era { margin: 28px 0 14px; font-size: 12px; }
+
+  /* ---- Army showcase: each piece large enough to admire (figure ~300px), three or four cards a row ---- */
+  .sheet-body.ap { width: min(1320px, 100%); height: min(940px, 100%); padding: 0 32px; }
+  .sheet-body.ap > h2 { margin: 0 -32px; padding: 18px 32px 16px; font-size: 30px; }
+  .sheet-body.ap .sheet-scroll { margin: 0 -32px; padding: 6px 32px 28px; }
+  .sheet-body.ap .sheet-foot { margin: 0 -32px; padding: 16px 32px 20px; flex-direction: row; justify-content: flex-end; }
+  .sheet-body.ap .sheet-foot .primary.wide { width: auto; min-width: 320px; }
+  .ap .ap-hero { grid-template-columns: 84px 1fr; padding: 18px 24px; }
+  .ap .ap-emblem svg { width: 74px; height: 86px; }
+  .ap .ap-blurb { font-size: 16px; }
+  .ap-turnbar { margin: 14px 0 10px; font-size: 13.5px; }
+  .ap-turnbar button { width: 48px; height: 48px; min-height: 48px; font-size: 24px; background: var(--wood-1); border: 1px solid var(--hair-2); }
+  .ap-nav button { width: 48px; height: 48px; background: var(--wood-1); border: 1px solid var(--hair-2); }
+  .ap-nav { gap: 8px; margin-right: 0; }
+  .ap-units { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+  .ap-unit { grid-template-columns: 1fr; grid-template-rows: auto auto; align-items: start; gap: 6px; padding: 14px 18px 18px;
+    background: radial-gradient(ellipse 70% 52% at 50% 40%, #33281b 0%, #1a140d 78%); }
+  .ap-fig { height: clamp(260px, 36vh, 340px); }
+  .ap-fig img { max-height: 100%; height: 100%; width: auto; filter: drop-shadow(0 14px 12px rgba(0, 0, 0, .55)); image-rendering: auto; }
+  .ap-info { align-items: center; text-align: center; }
+  .ap-info b { font-size: 24px; }
+  .ap-info small { font-size: 14px; max-width: 40ch; }
+  .ap-info .stats { justify-content: center; }
+  .ap-info .st { font-size: 13.5px; padding: 4px 8px; }
+
+  /* ---- menu drawer: a wider panel with bigger rows ---- */
+  .drawer { width: 460px; padding-left: 22px; padding-right: 22px; }
+  .drawer-head { font-size: 28px; }
+  /* Game actions (Main menu, saved games, quick battle) first, as in Civ VI's pause menu; settings below. */
+  .drawer > .mgroup ~ .mgroup { order: -1; }
+  .drawer > .drawer-head { order: -2; }
+  .drawer .mrow, .side .mrow { min-height: 54px; font-size: 16px; }
+  .drawer .mrow .mval { font-size: 14.5px; }
+  .drawer .legend li div, .drawer .log { font-size: 14px; }
+
+  /* ---- saved games and campaign: wide two-column lists ---- */
+  .saves-card, .campaign-card { width: min(1080px, 100%); padding: 28px 36px 36px; }
+  .saves-card .chero h2, .campaign-card .chero h2 { font-size: 46px; }
+  .saves-card .chero p, .campaign-card .chero p { font-size: 16px; }
+  .slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 14px; }
+  .slot { padding: 16px 18px; }
+  .slot-crests svg { width: 34px; height: 34px; }
+  .slot-crests span { width: 36px; height: 36px; }
+  .slot-text b { font-size: 22px; }
+  .slot-text small { font-size: 14px; }
+  .clist { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+  .ccard { padding: 20px; }
+
+  /* ---- Play online, Join, Invite, pick-your-army: wider cards, choices side by side ---- */
+  .card.online-pick { width: min(820px, 100%); padding: 28px 36px 40px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .card.online-pick > .chero, .card.online-pick > .hero { grid-column: 1 / -1; }
+  .card.online-pick .hero h2, .card.join-card .hero h2 { font-size: 46px; }
+  .card.online-pick .hero p, .card.join-card .hero p { font-size: 16px; }
+  .online-pick .choice.big { min-height: 200px; flex-direction: column; align-items: flex-start; justify-content: flex-start; padding: 22px; gap: 16px; position: relative; }
+  .online-pick .choice.big > i { position: absolute; right: 20px; bottom: 16px; }
+  .online-pick .choice.big .cicon { width: 60px; height: 60px; }
+  .online-pick .choice.big b { font-size: 28px; }
+  .online-pick .choice.big .ctext > span { font-size: 15px; }
+  .card.join-card { width: min(600px, 100%); padding: 28px 40px 40px; }
+  .join-card .join-input { min-height: 76px; font-size: 42px; }
+  .card.start:has(.join-code), .card.start:has(.invite-url) { width: min(620px, 100%); padding: 32px 40px 36px; }
+  .card.start:not(:has(.duel)):has(> .ftiles) { width: min(1080px, 100%); padding: 32px 40px 40px; }
+  .card.start:not(:has(.duel)) > .ftiles { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; }
+  .card.start:not(:has(.duel)) > .ftiles .figpic { height: 170px; }
+
+  /* ---- victory: a bigger crest and title, the numbers in a wide table, the two buttons side by side ---- */
+  .victory .card { width: min(680px, 100%); padding: clamp(16px, 3vh, 32px) 48px clamp(20px, 3.4vh, 36px); display: grid; grid-template-columns: 1fr 1fr; column-gap: 12px; row-gap: 10px; }
+  .victory .card > * { grid-column: 1 / -1; }
+  .victory .card > button[data-act='restart'] { grid-column: 1; }
+  .victory .card > button[data-act='see-board'] { grid-column: 2; }
+  .victory .vbanner { height: clamp(130px, 21vh, 210px); }
+  .victory .vrays { width: clamp(200px, 30vh, 300px); height: clamp(200px, 30vh, 300px); }
+  .victory .vemblem { width: clamp(100px, 14vh, 140px); height: clamp(100px, 14vh, 140px); }
+  .victory .vemblem svg { width: 76px; height: 89px; }
+  .victory h2 { font-size: clamp(44px, 6.4vh, 64px); }
+  .victory .card p { font-size: 17px; }
+  .victory .vstats { padding: 8px 28px; }
+  .victory .vrow { grid-template-columns: 90px 1fr 90px; font-size: 12px; padding: clamp(7px, 1.2vh, 12px) 0; }
+  .victory .vrow b { font-size: clamp(26px, 3.6vh, 34px); }
+  .victory .card button.wide { min-height: 56px; font-size: 17px; }
+}
+/* ===== end desktop layout ===== */

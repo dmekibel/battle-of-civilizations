@@ -122,7 +122,7 @@ export function liftUnit(s: GameState, unitId: string): Result {
 // heavy infantry holds the front centre, light infantry extends the line, archers stand
 // one rank behind the infantry, cavalry guards the wings (light cavalry furthest out),
 // and the King stays at the back in the middle.
-const DEPLOY_ORDER: UnitTypeId[] = ['king', 'champion', 'championGun', 'championRider', 'heavyInfantry', 'lineInfantry', 'samurai', 'archer', 'rifleman', 'gunslinger', 'deputy', 'lightInfantry', 'berserker', 'boarder', 'jaguar', 'impi', 'ashigaru', 'axeThrower', 'bomber', 'atlatl', 'thrower', 'skirmisher', 'ballista', 'cannon', 'heavyCavalry', 'lightCavalry', 'horseArcher', 'chariot', 'cowboy'];
+const DEPLOY_ORDER: UnitTypeId[] = ['king', 'champion', 'championGun', 'championRider', 'shieldbearer', 'heavyInfantry', 'lineInfantry', 'samurai', 'banner', 'archer', 'crossbow', 'longRifle', 'rifleman', 'gunslinger', 'deputy', 'lightInfantry', 'berserker', 'boarder', 'jaguar', 'impi', 'ashigaru', 'axeThrower', 'bomber', 'atlatl', 'thrower', 'skirmisher', 'ballista', 'cannon', 'rocket', 'scout', 'heavyCavalry', 'wildRider', 'lightCavalry', 'horseArcher', 'chariot', 'cowboy'];
 
 function formationScore(type: UnitTypeId, depth: number, front: number, lateral: number, maxLateral: number): number {
   const wing = maxLateral - lateral; // 0 at the very edge of the board
@@ -130,6 +130,7 @@ function formationScore(type: UnitTypeId, depth: number, front: number, lateral:
     case 'king':
       return depth * 10 + lateral;
     case 'champion':
+    case 'shieldbearer':
     case 'heavyInfantry':
     case 'lineInfantry':
     case 'samurai':
@@ -140,7 +141,11 @@ function formationScore(type: UnitTypeId, depth: number, front: number, lateral:
     case 'jaguar':
     case 'impi':
     case 'ashigaru':
+    case 'scout':
       return (front - depth) * 10 + lateral;
+    // The banner stands in the second rank, in the middle of the line, so the front rank touches it.
+    case 'banner':
+      return Math.abs(front - 1 - depth) * 10 + lateral * 2;
     case 'archer':
     case 'rifleman':
     case 'axeThrower':
@@ -152,9 +157,13 @@ function formationScore(type: UnitTypeId, depth: number, front: number, lateral:
     case 'cannon':
     case 'gunslinger':
     case 'championGun':
+    case 'crossbow':
+    case 'longRifle':
+    case 'rocket':
       return Math.abs(front - 1 - depth) * 10 + lateral;
     case 'heavyCavalry':
     case 'championRider':
+    case 'wildRider':
       return Math.abs(front - 1 - depth) * 3 + Math.max(0, wing - 2) * 6;
     case 'lightCavalry':
     case 'horseArcher':
@@ -228,6 +237,13 @@ const ARMY_MIX: Record<keyof ArmyCounts, number> = {
   atlatl: 0.15,
   impi: 0.3,
   thrower: 0.15,
+  banner: 0.08,
+  scout: 0.1,
+  shieldbearer: 0.2,
+  rocket: 0.1,
+  crossbow: 0.15,
+  longRifle: 0.1,
+  wildRider: 0.15,
 };
 
 /** The pieces most armies can buy (factions add or swap some). */

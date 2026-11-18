@@ -41,7 +41,17 @@ export type UnitTypeId =
   | 'atlatl'
   // Zulus: impi with the stabbing spear hit hard and stop cavalry; throwers hurl assegais 2-3 hexes.
   | 'impi'
-  | 'thrower';
+  | 'thrower'
+  // Batch one of new pieces (ROSTERS.md): shared chassis, each army shows its own name and art.
+  // A banner makes friends next to it hit harder; a scout walks through forest; a shieldbearer shrugs off arrows;
+  // a rocket lobs over everything; crossbows (and matchlocks) and long rifles hit for 2; a wild rider hits hard and falls fast.
+  | 'banner'
+  | 'scout'
+  | 'shieldbearer'
+  | 'rocket'
+  | 'crossbow'
+  | 'longRifle'
+  | 'wildRider';
 
 export type TimeOfDay = 'day' | 'dusk' | 'night';
 export type WeatherKind = 'clear' | 'rain' | 'snow' | 'fog';
@@ -75,6 +85,8 @@ export interface RangedRules {
   minRange: number;
   maxRange: number;
   damage: number;
+  /** Lobbed: the shot flies over forest, houses, walls and pieces (no line of sight needed). */
+  lob?: boolean;
 }
 
 export interface UnitRules {
@@ -93,6 +105,12 @@ export interface UnitRules {
   mounted?: boolean;
   /** Spearmen: double damage against mounted pieces. */
   antiCavalry?: boolean;
+  /** Banner: friends standing next to this piece hit this much harder in melee (several banners don't add up). */
+  aura?: number;
+  /** Scout: may enter forest (which still blocks sight, so the scout hides there). */
+  forest?: boolean;
+  /** Arrow-proof shield: every shot at this piece does this much less (1-damage arrows do nothing). */
+  shotGuard?: number;
 }
 
 export type Placement = [type: UnitTypeId, col: number, row: number];
@@ -306,6 +324,14 @@ export const CONFIG: GameConfig = {
     // Zulus: impi with the short stabbing spear (double damage against riders); throwers hurl assegais.
     impi: { moveCost: 3, attack: 2, hp: 1, ranged: null, heavy: false, antiCavalry: true },
     thrower: { moveCost: 3, attack: 1, hp: 1, ranged: { cost: 1, minRange: 2, maxRange: 3, damage: 1 }, heavy: false },
+    // Batch one (ROSTERS.md, 2026-11-18).
+    banner: { moveCost: 3, attack: 0, hp: 1, ranged: null, heavy: false, aura: 1 },
+    scout: { moveCost: 3, attack: 1, hp: 1, ranged: null, heavy: false, forest: true },
+    shieldbearer: { moveCost: 6, attack: 1, hp: 2, ranged: null, heavy: true, shotGuard: 1 },
+    rocket: { moveCost: 6, attack: 0, hp: 1, ranged: { cost: 2, minRange: 3, maxRange: 7, damage: 2, lob: true }, heavy: true },
+    crossbow: { moveCost: 4, attack: 0, hp: 1, ranged: { cost: 2, minRange: 2, maxRange: 5, damage: 2 }, heavy: false },
+    longRifle: { moveCost: 4, attack: 0, hp: 1, ranged: { cost: 2, minRange: 3, maxRange: 8, damage: 2 }, heavy: false },
+    wildRider: { moveCost: 1, speed: 3, attack: 2, hp: 1, ranged: null, heavy: false, mounted: true },
     cowboy: { moveCost: 1, speed: 3, attack: 1, hp: 1, ranged: { cost: 1, minRange: 2, maxRange: 3, damage: 1 }, heavy: false, mounted: true },
     // Melee for archers is an open question; 0 = they only shoot.
     archer: {
@@ -346,8 +372,8 @@ export const CONFIG: GameConfig = {
   weatherRules: { rainRangeLoss: 1, fogMaxRange: 4, snowRiderSlow: 1 },
   army: {
     budget: 50,
-    cost: { lightInfantry: 1, heavyInfantry: 2, archer: 3, lightCavalry: 3, heavyCavalry: 4, horseArcher: 4, samurai: 4, ashigaru: 1, gunslinger: 3, rifleman: 3, cowboy: 4, deputy: 2, berserker: 3, axeThrower: 3, ballista: 5, lineInfantry: 3, skirmisher: 3, cannon: 5, chariot: 5, boarder: 3, bomber: 4, jaguar: 4, atlatl: 3, impi: 3, thrower: 3, champion: 6, championRider: 7, championGun: 7 },
-    max: { champion: 1, championRider: 1, championGun: 1 },
+    cost: { lightInfantry: 1, heavyInfantry: 2, archer: 3, lightCavalry: 3, heavyCavalry: 4, horseArcher: 4, samurai: 4, ashigaru: 1, gunslinger: 3, rifleman: 3, cowboy: 4, deputy: 2, berserker: 3, axeThrower: 3, ballista: 5, lineInfantry: 3, skirmisher: 3, cannon: 5, chariot: 5, boarder: 3, bomber: 4, jaguar: 4, atlatl: 3, impi: 3, thrower: 3, champion: 6, championRider: 7, championGun: 7, banner: 4, scout: 2, shieldbearer: 3, rocket: 5, crossbow: 4, longRifle: 5, wildRider: 4 },
+    max: { champion: 1, championRider: 1, championGun: 1, banner: 1 },
   },
   // 5 columns leave room for the largest possible army (50 light infantry and the King).
   deploy: { depth: 5 },

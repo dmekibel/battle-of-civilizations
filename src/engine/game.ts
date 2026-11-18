@@ -149,7 +149,7 @@ function search(s: GameState, unitId: string, cfg: GameConfig): { out: Map<strin
     for (const n of neighbors(cur.hex)) {
       if (!onBoard(s, n)) continue;
       const t = cfg.terrain[terrainAt(s, n)];
-      if (!t.passable || (t.noMounted && mounted(u, cfg))) continue;
+      if (!canEnter(u.type, terrainAt(s, n), cfg)) continue;
       const occ = unitAt(s, n);
       if (occ && (occ.owner !== u.owner || !cfg.movement.passThroughFriendly)) continue;
       const steps = cur.steps + t.moveCostMultiplier;
@@ -168,7 +168,30 @@ function search(s: GameState, unitId: string, cfg: GameConfig): { out: Map<strin
 const enemyNext = (s: GameState, h: Hex, owner: Player) => s.units.some((e) => e.owner !== owner && distance(e.pos, h) === 1);
 
 const mounted = (u: Unit, cfg: GameConfig) => !!cfg.units[u.type].mounted;
-const INFANTRY = new Set(['champion', 'championGun', 'heavyInfantry', 'lightInfantry', 'deputy', 'samurai', 'ashigaru', 'berserker', 'axeThrower', 'lineInfantry', 'skirmisher', 'boarder', 'bomber', 'jaguar', 'atlatl', 'impi', 'thrower']);
+const INFANTRY = new Set(['champion', 'championGun', 'heavyInfantry', 'lightInfantry', 'deputy', 'samurai', 'ashigaru', 'berserker', 'axeThrower', 'lineInfantry', 'skirmisher', 'boarder', 'bomber', 'jaguar', 'atlatl', 'impi', 'thrower', 'banner', 'scout', 'shieldbearer', 'crossbow', 'longRifle']);
+
+/** Whether a piece of this type may step onto this ground: passable ground (no riders in a swamp), and forest
+ *  for scouts. */
+export function canEnter(type: Unit['type'], terrain: TerrainId, cfg: GameConfig = CONFIG): boolean {
+  const t = cfg.terrain[terrain];
+  const rules = cfg.units[type];
+  if (t.noMounted && rules.mounted) return false;
+  return t.passable || (terrain === 'forest' && !!rules.forest);
+}
+
+/** A shot from `a` at `b` by this type: a lobbed shot (rockets) needs no line of sight. */
+export const canSee = (s: GameState, type: Unit['type'], a: Hex, b: Hex, cfg: GameConfig = CONFIG): boolean =>
+  !!cfg.units[type].ranged?.lob || hasLineOfSight(s, a, b, cfg);
+
+/** Banner: the biggest bonus a friendly banner next to `a` gives its melee blows (banners don't add up). */
+export function bannerBonus(s: GameState, a: Unit, cfg: GameConfig = CONFIG): number {
+  let best = 0;
+  for (const f of s.units) {
+    const aura = cfg.units[f.type].aura ?? 0;
+    if (aura > best && f.id !== a.id && f.owner === a.owner && distance(f.pos, a.pos) === 1) best = aura;
+  }
+  return best;
+}
 
 /** Points value of an army (its King not counted), for the morale rule. */
 export function armyValue(s: GameState, p: Player, cfg: GameConfig = CONFIG): number {
@@ -227,7 +250,7 @@ export function isFlanked(s: GameState, a: Unit, t: Unit): boolean {
 
 /** Melee bonuses from the optional rules: cavalry charge, the King's command and flanking. */
 function meleeBonus(s: GameState, a: Unit, t: Unit, cfg: GameConfig): number {
-  let bonus = 0;
+  let bonus = bannerBonus(s, a, cfg);
   if (cfg.options.flanking && isFlanked(s, a, t)) bonus += 1;
   if (cfg.options.charge && mounted(a, cfg) && (a.ran ?? 0) >= 3) bonus += 1;
   if (cfg.options.kingAura && a.type !== 'king') {
@@ -269,7 +292,7 @@ function checkStrike(
     if (!r) return 'cannotShoot';
     const d = distance(a.pos, t.pos);
     if (d < r.minRange || d > maxRangeAt(s, a.pos, r.maxRange, cfg)) return 'outOfRange';
-    if (!hasLineOfSight(s, a.pos, t.pos, cfg)) return 'noLineOfSight';
+    if (!canSee(s, a.type, a.pos, t.pos, cfg)) return 'noLineOfSight';
     if (cfg.options.volleys !== null && (a.shots ?? 0) >= cfg.options.volleys) return 'outOfArrows';
     cost = r.cost * (cfg.options.longShotFrom !== null && d > cfg.options.longShotFrom ? 2 : 1);
     // Two hits from a bow or gun are always enough: a shot takes at least half the target's full health
@@ -278,7 +301,9 @@ function checkStrike(
     covered = inCover(s, a.pos, t.pos, cfg);
   }
   if (s.points < cost) return 'notEnoughPoints';
-  const damage = Math.max(0, damageOn(s, t, raw, cfg) - (covered ? 1 : 0));
+  // Arrow-proof shields: every shot at the piece does its shotGuard less.
+  const guard = kind === 'shoot' ? cfg.units[t.type].shotGuard ?? 0 : 0;
+  const damage = Math.max(0, damageOn(s, t, raw, cfg) - (covered ? 1 : 0) - guard);
   // Spears: cavalry charging into infantry takes a hit back, unless the infantry falls.
   const counter = kind === 'attack' && cfg.options.spears && mounted(a, cfg) && INFANTRY.has(t.type) && t.hp > damage ? 1 : 0;
   return { a, t, cost, damage, counter, covered };

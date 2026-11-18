@@ -578,7 +578,7 @@ const [ZOOM_MIN, ZOOM_MAX] = [0.7, 18]; // close enough to see the carving on a 
 type Buyable = keyof ArmyCounts;
 /** The side to move's faction decides what it can buy and what the pieces list shows. */
 const buyOrder = () => rosterOf(sess.state.current) as Buyable[];
-const TRAY_ORDER: UnitTypeId[] = ['king', 'championRider', 'champion', 'championGun', 'heavyCavalry', 'lightCavalry', 'horseArcher', 'chariot', 'heavyInfantry', 'lineInfantry', 'samurai', 'lightInfantry', 'berserker', 'boarder', 'jaguar', 'impi', 'deputy', 'ashigaru', 'axeThrower', 'bomber', 'atlatl', 'thrower', 'skirmisher', 'archer', 'ballista', 'cannon'];
+const TRAY_ORDER: UnitTypeId[] = ['king', 'championRider', 'champion', 'championGun', 'heavyCavalry', 'lightCavalry', 'horseArcher', 'chariot', 'wildRider', 'shieldbearer', 'heavyInfantry', 'lineInfantry', 'samurai', 'banner', 'lightInfantry', 'berserker', 'boarder', 'jaguar', 'impi', 'scout', 'deputy', 'ashigaru', 'axeThrower', 'bomber', 'atlatl', 'thrower', 'skirmisher', 'archer', 'crossbow', 'longRifle', 'ballista', 'cannon', 'rocket'];
 
 // ---------- view helpers ----------
 
@@ -1181,13 +1181,7 @@ function setupScreen(): string {
   const anim = setupAnim;
   setupAnim = '';
 
-  const summary = `
-      <div class="vs">
-        ${side('red', mode === 'pvp' ? t(lang, 'sideFirst') : t(lang, 'sideYou'))}
-        ${mode === 'online' ? `<span class="vs-mid">${t(lang, 'vs')}</span>` : `<button data-act="swap-sides" class="vs-swap" title="${t(lang, 'swapSides')}" aria-label="${t(lang, 'swapSides')}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h15M15 4l4 4-4 4M20 16H5M9 12l-4 4 4 4"/></svg></button>`}
-        ${mode === 'online' ? `<div class="vs-card" style="--fc:#6b6b6b"><span class="vs-who">${t(lang, 'sideOpponent')}</span><b style="font-size:34px;line-height:48px">?</b><b>${t(lang, 'theyPick')}</b></div>` : side('blue', mode === 'ai' ? t(lang, 'sideComputer') : t(lang, 'sideSecond'))}
-      </div>
-      <div class="srows">
+  const rowsHtml = `
         ${summaryRow('map', t(lang, 'map'), mapName, mapPic)}
         ${summaryRow('budget', st(lang, 'armySize'), `${settings.budget} ${st(lang, 'points')}`)}
         ${summaryRow('rules', t(lang, 'rules'), rulesVal)}
@@ -1196,11 +1190,22 @@ function setupScreen(): string {
         ${summaryRow('size', t(lang, 'boardSize'), valOf(sizes, settings.size ?? 'standard'))}
         ${summaryRow('lines', t(lang, 'battleLines'), valOf(lines, settings.options.battleLines ?? 'normal'))}
         ${summaryRow('dice', t(lang, 'pointsEachTurn'), valOf(dice, settings.dice))}
-      </div>`;
+`;
+  const summary = `
+      <div class="vs">
+        ${side('red', mode === 'pvp' ? t(lang, 'sideFirst') : t(lang, 'sideYou'))}
+        ${mode === 'online' ? `<span class="vs-mid">${t(lang, 'vs')}</span>` : `<button data-act="swap-sides" class="vs-swap" title="${t(lang, 'swapSides')}" aria-label="${t(lang, 'swapSides')}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h15M15 4l4 4-4 4M20 16H5M9 12l-4 4 4 4"/></svg></button>`}
+        ${mode === 'online' ? `<div class="vs-card" style="--fc:#6b6b6b"><span class="vs-who">${t(lang, 'sideOpponent')}</span><b style="font-size:34px;line-height:48px">?</b><b>${t(lang, 'theyPick')}</b></div>` : side('blue', mode === 'ai' ? t(lang, 'sideComputer') : t(lang, 'sideSecond'))}
+      </div>
+      <div class="srows">${rowsHtml}</div>`;
+  // Desktop: a sub-page keeps every setting in a left column (Civ VI / Total War setup screens), not a full-screen push.
+  const nav = page && desktop
+    ? `<nav class="setup-nav" aria-label="${t(lang, 'newBattle')}"><button data-act="setup-sub-back" class="srow nav-home"><span class="srow-l">${t(lang, 'newBattle')}</span></button>${(summaryRow('army', st(lang, 'army'), FACTIONS[settings.sides[pickSide]].name[lang]) + rowsHtml).replace(`data-page="${page}" class="srow"`, `data-page="${page}" class="srow on" aria-current="page"`)}</nav>`
+    : '';
 
-  return `<div class="sheet"><div class="sheet-body setup">
+  return `<div class="sheet"><div class="sheet-body setup ${nav ? 'has-nav' : ''}">
     <h2><button data-act="${page ? 'setup-sub-back' : 'setup-back'}" class="ghost back" aria-label="${t(lang, 'back')}">${icon('back')}</button>${page ? pages[page][0] : t(lang, 'newBattle')}</h2>
-    <div class="sheet-scroll ${page ? `setup-sub sub-${page}` : 'setup-sum'} ${anim}">${page ? pages[page][1]() : summary}</div>
+    ${nav}<div class="sheet-scroll ${page ? `setup-sub sub-${page}` : 'setup-sum'} ${anim}">${page ? pages[page][1]() : summary}</div>
     <div class="sheet-foot"><button data-act="begin" class="primary wide">${t(lang, mode === 'online' ? 'hostGameBtn' : 'startBattle')}</button></div>
   </div></div>`;
 }
@@ -1220,6 +1225,10 @@ function startScreen(): string {
   const icon = (d: string) => `<span class="cicon" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22">${d}</svg></span>`;
   const people = '<circle cx="8" cy="8" r="3.2"/><circle cx="16.5" cy="8" r="3.2"/><path d="M2.5 19c.6-3.4 2.8-5.2 5.5-5.2s4.9 1.8 5.5 5.2zM11.5 19c.5-3 2.4-5.2 5-5.2 2.7 0 4.6 1.8 5.2 5.2z"/>';
   const robot = '<rect x="5" y="8" width="14" height="11" rx="3"/><path d="M12 4v4" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="3.5" r="1.6"/><circle cx="9.3" cy="13.5" r="1.5" fill="var(--panel-2)"/><circle cx="14.7" cy="13.5" r="1.5" fill="var(--panel-2)"/>';
+  // Continue goes straight back into the game last on screen (Main menu saved it); the full list is one tap further.
+  const slots = listSlots<SlotInfo>(store);
+  const cur = slotId ? slots.find((m) => m.id === slotId && m.info && FACTIONS[m.info.red] && FACTIONS[m.info.blue]) : undefined;
+  const curText = cur ? `${FACTIONS[cur.info.red].name[lang]} ${t(lang, 'vs')} ${FACTIONS[cur.info.blue].name[lang]}` : '';
   return `<div class="cover"><div class="card start">
     <div class="seg langs" role="radiogroup">${pick('en', 'English')}${pick('ru', 'Русский')}</div>
     <div class="hero">
@@ -1227,12 +1236,15 @@ function startScreen(): string {
       <h2>${t(lang, 'title')}</h2>
       <p>${t(lang, 'chooseMode')}</p>
     </div>
-    ${listSlots(store).length ? `<button data-act="saves" class="choice continue">${icon('<path d="M7 4.5v15l12-7.5z" fill="currentColor"/>')}<span class="ctext"><b>${t(lang, 'continueGame')}</b><span>${t(lang, 'continueSub')}</span></span><i aria-hidden="true">›</i></button>` : ''}
+    <div class="modes">
+    ${slots.length ? `<button data-act="${cur ? 'continue' : 'saves'}" class="choice continue">${icon('<path d="M7 4.5v15l12-7.5z" fill="currentColor"/>')}<span class="ctext"><b>${t(lang, 'continueGame')}</b><span>${curText || t(lang, 'continueSub')}</span></span><i aria-hidden="true">›</i></button>` : ''}
+    ${cur && slots.length > 1 ? `<button data-act="saves" class="ghost saves-link">${t(lang, 'savedGames')} · ${slots.length}</button>` : ''}
     <button data-act="mode" data-mode="pvp" class="choice">${icon(people)}<span class="ctext"><b>${t(lang, 'twoPlayers')}</b><span>${t(lang, 'twoPlayersSub')}</span></span><i aria-hidden="true">›</i></button>
     <button data-act="mode" data-mode="ai" class="choice">${icon(robot)}<span class="ctext"><b>${t(lang, 'vsComputer')}</b><span>${t(lang, 'vsComputerSub')}</span></span><i aria-hidden="true">›</i></button>
     <button data-act="mode" data-mode="online" class="choice">${icon('<circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3.5 12h17M12 3.5c3 3 3 14 0 17M12 3.5c-3 3-3 14 0 17" fill="none" stroke="currentColor" stroke-width="2"/>')}<span class="ctext"><b>${t(lang, 'playOnline')}</b><span>${t(lang, 'playOnlineSub')}</span></span><i aria-hidden="true">›</i></button>
     <button data-act="campaign" class="choice">${icon('<path d="M5 3v18M5 4h11l-2.5 4L16 12H5" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>')}<span class="ctext"><b>${campaignText(lang).campaign}</b><span>${campaignText(lang).campaignSub}</span></span><i aria-hidden="true">›</i></button>
     <button data-act="armies" class="choice">${icon('<path d="M12 2.5l8 3v6c0 5-3.4 8.6-8 10-4.6-1.4-8-5-8-10v-6z"/>')}<span class="ctext"><b>${st(lang, 'armies')}</b><span>${st(lang, 'armiesSub')}</span></span><i aria-hidden="true">›</i></button>
+    </div>
   </div></div>`;
 }
 
@@ -1431,7 +1443,7 @@ function menuBody(s: GameState): string {
       ${row('saves', '#a8811a', '<path d="M5 4h11l3 3v13H5z" fill="none"/><path d="M8 4v5h7V4M8 20v-6h8v6" fill="none"/>', t(lang, 'savedGames'), String(listSlots(store).length))}
       ${row('quick', '#c2453a', G.bolt, t(lang, 'quick'))}
       ${row('tutorial', '#3a8f8a', '<circle cx="12" cy="12" r="8.5" fill="none"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .8-1 1.5v.7M12 16.5v.5" fill="none"/>', tutorialLabel(lang))}
-      ${row('new', '#c2453a', G.plus, confirmNew ? t(lang, 'confirmNew') : t(lang, 'newGame'), '', undefined, confirmNew ? 'danger' : '')}
+      ${row('home', '#c2453a', '<path d="M4 11l8-7 8 7M6.5 9.5V20h11V9.5" fill="none"/><path d="M10 20v-5h4v5" fill="none"/>', lang === 'ru' ? 'Главное меню' : 'Main menu')}
     </div>
     <section><h3>${t(lang, 'pieces')}</h3><ul class="legend">${legendList(s.current)}</ul>${statKey()}<p class="note">${t(lang, 'legendNote')}</p></section>
     <section><h3>${t(lang, 'log')}</h3><ol class="log">${log || `<li class="empty">${t(lang, 'emptyLog')}</li>`}</ol></section>
@@ -1617,7 +1629,7 @@ function setZoom(factor: number) {
 }
 
 /** Pieces that fire guns, and which gunshot they make. */
-const GUN_SOUND: Partial<Record<UnitTypeId, 'pistol' | 'rifle' | 'musket' | 'cannon' | 'boom'>> = { gunslinger: 'pistol', championGun: 'pistol', cowboy: 'pistol', rifleman: 'rifle', deputy: 'rifle', lineInfantry: 'musket', skirmisher: 'musket', cannon: 'cannon', bomber: 'boom' };
+const GUN_SOUND: Partial<Record<UnitTypeId, 'pistol' | 'rifle' | 'musket' | 'cannon' | 'boom'>> = { gunslinger: 'pistol', championGun: 'pistol', cowboy: 'pistol', rifleman: 'rifle', deputy: 'rifle', lineInfantry: 'musket', skirmisher: 'musket', cannon: 'cannon', bomber: 'boom', crossbow: 'musket', longRifle: 'rifle', rocket: 'boom' };
 
 /** Your own side's sounds play close and full, the other side's from across the field (both sides are yours when two share a phone). */
 const nearSide = (p: Player) => (mode === 'ai' ? p !== AI_SIDE : mode === 'online' && net ? p === net.me : true);
@@ -2536,6 +2548,18 @@ app.addEventListener('click', (e) => {
       confirmNew = false;
       menuOpen = false;
       choosing = true;
+      return render();
+    case 'home':
+      // Menu → Main menu: the game is saved as it stands, then the title screen (Continue brings it straight back).
+      saveGame();
+      menuOpen = false;
+      choosing = true;
+      return render();
+    case 'continue':
+      // Title → Continue: straight back into the game on screen (or the newest save); the list if it is gone.
+      if (slotId && resumeSlot(slotId)) return;
+      savesOpen = true;
+      refreshLiveTurns();
       return render();
     case 'restart':
       choosing = true;

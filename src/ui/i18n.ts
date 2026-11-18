@@ -713,6 +713,13 @@ const UNITS: Record<Lang, Record<UnitTypeId, string>> = {
     atlatl: 'Метатели дротиков',
     impi: 'Импи',
     thrower: 'Метатели копий',
+    banner: 'Знаменосец',
+    scout: 'Разведчики',
+    shieldbearer: 'Щитоносцы',
+    rocket: 'Ракеты',
+    crossbow: 'Арбалетчики',
+    longRifle: 'Дальнобойный стрелок',
+    wildRider: 'Лихие всадники',
   },
   en: {
     king: 'King',
@@ -744,6 +751,13 @@ const UNITS: Record<Lang, Record<UnitTypeId, string>> = {
     atlatl: 'Dart throwers',
     impi: 'Impi',
     thrower: 'Spear throwers',
+    banner: 'Banner bearer',
+    scout: 'Scouts',
+    shieldbearer: 'Shieldbearers',
+    rocket: 'Rockets',
+    crossbow: 'Crossbowmen',
+    longRifle: 'Long rifle',
+    wildRider: 'Wild riders',
   },
 };
 

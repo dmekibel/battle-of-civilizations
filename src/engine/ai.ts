@@ -6,7 +6,7 @@
 
 import { CONFIG, type GameConfig, type UnitTypeId } from '../config';
 import { distance, key, neighbors, type Hex } from './hex';
-import { armyValue, attack, canMarch, canReroll, inCover, march, getUnit, previewStrike, weatherRange, endTurn, hasLineOfSight, kingCapturedBy, maxHp, maxRangeAt, kingOf, moveUnit, onBoard, other, reachable, reroll, rollDice, shoot, strikeTargets, takeHex, terrainAt, type Rng } from './game';
+import { armyValue, attack, bannerBonus, canSee, canMarch, canReroll, inCover, march, getUnit, previewStrike, weatherRange, endTurn, kingCapturedBy, maxHp, maxRangeAt, kingOf, moveUnit, onBoard, other, reachable, reroll, rollDice, shoot, strikeTargets, takeHex, terrainAt, type Rng } from './game';
 import type { GameState, Player, Result, Unit } from './types';
 
 export type AiAction =
@@ -35,8 +35,8 @@ function danger(s: GameState, u: Unit, at: Hex, cfg: GameConfig): number {
     const dist = distance(e.pos, at);
     if (dist === 1) d += cfg.units[e.type].attack;
     const r = cfg.units[e.type].ranged;
-    // Forest cover: a piece sheltered by the trees from this shooter takes 1 less from it.
-    if (r && dist >= r.minRange && dist <= r.maxRange) d += Math.max(0, r.damage - (inCover(s, e.pos, at, cfg) ? 1 : 0)) * 0.5;
+    // Forest cover: a piece sheltered by the trees from this shooter takes 1 less from it; an arrow-proof shield 1 less again.
+    if (r && dist >= r.minRange && dist <= r.maxRange) d += Math.max(0, r.damage - (inCover(s, e.pos, at, cfg) ? 1 : 0) - (cfg.units[u.type].shotGuard ?? 0)) * 0.5;
   }
   return d;
 }
@@ -45,13 +45,15 @@ function danger(s: GameState, u: Unit, at: Hex, cfg: GameConfig): number {
 function bestHitFrom(s: GameState, u: Unit, at: Hex, pointsLeft: number, cfg: GameConfig): number {
   const r = cfg.units[u.type];
   let best = 0;
+  // A friendly banner next to the hex makes the blow from there 1 harder.
+  const melee = r.attack > 0 ? r.attack + bannerBonus(s, { ...u, pos: at }, cfg) : 0;
   for (const e of s.units) {
     if (e.owner === u.owner) continue;
     const d = distance(at, e.pos);
-    if (r.attack > 0 && d === 1 && pointsLeft >= cfg.combat.attackCost) best = Math.max(best, strikeScore(e, r.attack, cfg));
-    if (r.ranged && d >= r.ranged.minRange && d <= maxRangeAt(s, at, r.ranged.maxRange, cfg) && pointsLeft >= r.ranged.cost && hasLineOfSight(s, at, e.pos, cfg)) {
-      // Don't walk somewhere only to shoot into the trees for nothing.
-      const dmg = r.ranged.damage - (inCover(s, at, e.pos, cfg) ? 1 : 0);
+    if (melee > 0 && d === 1 && pointsLeft >= cfg.combat.attackCost) best = Math.max(best, strikeScore(e, melee * (r.antiCavalry && cfg.units[e.type].mounted ? 2 : 1), cfg));
+    if (r.ranged && d >= r.ranged.minRange && d <= maxRangeAt(s, at, r.ranged.maxRange, cfg) && pointsLeft >= r.ranged.cost && canSee(s, u.type, at, e.pos, cfg)) {
+      // Don't walk somewhere only to shoot into the trees (or at an arrow-proof shield) for nothing.
+      const dmg = r.ranged.damage - (inCover(s, at, e.pos, cfg) ? 1 : 0) - (cfg.units[e.type].shotGuard ?? 0);
       if (dmg > 0) best = Math.max(best, strikeScore(e, dmg, cfg));
     }
   }
@@ -69,15 +71,15 @@ function goalFor(s: GameState, u: Unit): Hex | null {
   return nearest.pos;
 }
 
-/** Steps from every hex to `goal` walking around forest and over bridges (pieces ignored). */
-function pathField(s: GameState, goal: Hex, cfg: GameConfig): Map<string, number> {
+/** Steps from every hex to `goal` walking around forest and over bridges (pieces ignored); scouts may cut through forest. */
+function pathField(s: GameState, goal: Hex, cfg: GameConfig, forest = false): Map<string, number> {
   const dist = new Map<string, number>([[key(goal), 0]]);
   const queue = [goal];
   for (let i = 0; i < queue.length; i++) {
     const h = queue[i];
     const d = dist.get(key(h))!;
     for (const n of neighbors(h)) {
-      if (!onBoard(s, n) || dist.has(key(n)) || !cfg.terrain[terrainAt(s, n)].passable) continue;
+      if (!onBoard(s, n) || dist.has(key(n)) || !(cfg.terrain[terrainAt(s, n)].passable || (forest && terrainAt(s, n) === 'forest'))) continue;
       dist.set(key(n), d + 1);
       queue.push(n);
     }
@@ -89,14 +91,28 @@ type Fields = Map<string, { dist: Map<string, number>; line: number }>;
 
 /** Path field towards `goal`, plus how far the army's middle (median piece) is from it. */
 function fieldFor(s: GameState, u: Unit, goal: Hex, cfg: GameConfig, fields: Fields) {
-  let f = fields.get(key(goal));
+  const forest = !!cfg.units[u.type].forest;
+  const fk = (forest ? 'f' : '') + key(goal);
+  let f = fields.get(fk);
   if (!f) {
-    const dist = pathField(s, goal, cfg);
+    const dist = pathField(s, goal, cfg, forest);
     const own = s.units.filter((x) => x.owner === u.owner && x.type !== 'king').map((x) => dist.get(key(x.pos)) ?? 99).sort((a, b) => a - b);
     f = { dist, line: own.length ? own[Math.floor(own.length / 2)] : 0 };
-    fields.set(key(goal), f);
+    fields.set(fk, f);
   }
   return f;
+}
+
+/** Banner: how good a hex is for it, from the friendly fighters it would stand next to (they hit +1 there),
+ *  less the danger, plus staying close to the middle of its own fighters so it follows the army. */
+function bannerSpot(s: GameState, u: Unit, at: Hex, cfg: GameConfig): number {
+  const fighters = s.units.filter((f) => f.owner === u.owner && f.id !== u.id && f.type !== 'king' && cfg.units[f.type].attack > 0);
+  if (!fighters.length) return 0;
+  const touching = fighters.filter((f) => distance(f.pos, at) === 1).length;
+  const near = fighters.map((f) => distance(f.pos, at)).sort((a, b) => a - b).slice(0, 4);
+  const spread = near.reduce((a, b) => a + b, 0) / near.length;
+  const risk = danger(s, u, at, cfg) >= u.hp ? worth(u.type, cfg) * 2 : danger(s, u, at, cfg);
+  return touching * 3 - spread - risk;
 }
 
 /** The turn of the last attack or shot (0 if none yet). */
@@ -117,6 +133,9 @@ function moveScore(s: GameState, u: Unit, to: Hex, cost: number, cfg: GameConfig
     const then = danger(s, u, to, cfg);
     return now > 0 ? (now - then) * 30 - cost : -1;
   }
+  // The banner doesn't fight: it walks to where it helps the most fighters and stays out of reach.
+  // (Weighted up so a lagging banner keeps pace with the march instead of losing every step to the fighters.)
+  if (rules.aura) return 3 * (bannerSpot(s, u, to, cfg) - bannerSpot(s, u, u.pos, cfg)) - cost * 0.15;
   const hit = bestHitFrom(s, u, to, left, cfg);
   if (hit > 0) return hit * 0.9 - cost * 0.3 - danger(s, u, to, cfg) * (worth(u.type, cfg) / 2);
   const goal = goalFor(s, u);
@@ -423,7 +442,7 @@ function killCost(s: GameState, t: Unit, th: Threat, cfg: GameConfig, dead: Set<
     const rg = rules.ranged;
     if (rg && !(cfg.options.volleys !== null && (r.u.shots ?? 0) >= cfg.options.volleys)) {
       // Forest cover, judged from where the shooter stands now (close enough for weighing danger).
-      const dmg = Math.max(rg.damage, Math.ceil(maxHp(t.type, cfg) / 2)) - guard - (inCover(s, r.u.pos, t.pos, cfg) ? 1 : 0);
+      const dmg = Math.max(rg.damage, Math.ceil(maxHp(t.type, cfg) / 2)) - guard - (inCover(s, r.u.pos, t.pos, cfg) ? 1 : 0) - (cfg.units[t.type].shotGuard ?? 0);
       if (dmg > 0) {
         const { near, far } = shotField(s, r, cfg);
         const i = t.pos.row * s.board[0].length + t.pos.col;
@@ -504,6 +523,7 @@ function expectedLoss(s: GameState, th: Threat, cfg: GameConfig, dead: Set<strin
 
 /** Hex this piece should head for (Hard): like Normal, but the King and shooters keep behind the line. */
 function hardMarch(s: GameState, u: Unit, to: Hex, cost: number, cfg: GameConfig, fields: Fields): number {
+  if (cfg.units[u.type].aura) return 3 * (bannerSpot(s, u, to, cfg) - bannerSpot(s, u, u.pos, cfg)) - cost * 0.15;
   const goal = goalFor(s, u);
   if (!goal) return 0;
   const { dist, line } = fieldFor(s, u, goal, cfg, fields);

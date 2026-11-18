@@ -169,6 +169,27 @@ function picture(type: UnitTypeId, ink: string, bg = '#fffdf6'): string {
     case 'ashigaru':
       // A yari: a tall straight spear with a cross-bar.
       return `<path d="M0 12V-8M-5 -5H5" stroke="${ink}" stroke-width="2.2" stroke-linecap="round"/><path d="M0 -14L-3 -7H3Z" fill="${ink}"/>`;
+    case 'banner':
+      // A standard: a pole with a swallow-tailed flag.
+      return `<path d="M-6 13V-13" stroke="${ink}" stroke-width="2.2" stroke-linecap="round"/><path d="M-5 -12H12L7 -6.5L12 -1H-5Z" fill="${ink}"/>`;
+    case 'scout':
+      // A fir tree with a dagger across it: the scout who walks through the woods.
+      return `<path d="M-4 -13L-11 -2H-7L-12 6H4L-1 -2H3Z" fill="${ink}"/><path d="M-4 6V10" stroke="${ink}" stroke-width="2.2"/><path d="M2 11L13 -3" stroke="${ink}" stroke-width="2.2" stroke-linecap="round"/><path d="M0 6L5 10" stroke="${ink}" stroke-width="1.8" stroke-linecap="round"/>`;
+    case 'shieldbearer':
+      // A big round shield with an arrow glancing off it.
+      return `<circle cx="-1" cy="1" r="10" fill="none" stroke="${ink}" stroke-width="2.4"/><circle cx="-1" cy="1" r="3" fill="${ink}"/><path d="M5 -12L14 -7" stroke="${ink}" stroke-width="1.8" stroke-linecap="round"/><path d="M3 -13L8 -13L6 -9Z" fill="${ink}"/>`;
+    case 'rocket':
+      // A rocket on its long stick, climbing in an arc.
+      return `<path d="M-14 12Q-6 -2 6 -7" fill="none" stroke="${ink}" stroke-width="1.6" stroke-dasharray="2.5 2" stroke-linecap="round"/><path d="M4 -5L13 -11" stroke="${ink}" stroke-width="4.6" stroke-linecap="round"/><path d="M14 -12L18 -13L16 -9Z" fill="${ink}"/>`;
+    case 'crossbow':
+      // A crossbow (or matchlock): a stock with a bow across its front.
+      return `<path d="M-12 8L10 -6" stroke="${ink}" stroke-width="3" stroke-linecap="round"/><path d="M1 -12Q9 -4 14 3" fill="none" stroke="${ink}" stroke-width="2.2" stroke-linecap="round"/><path d="M1 -12L14 3" stroke="${ink}" stroke-width="1"/><path d="M-14 4L-8 4L-7 9L-13 12Z" fill="${ink}"/>`;
+    case 'longRifle':
+      // A long rifle resting on crossed shooting sticks.
+      return `<path d="M-15 0L15 -6" stroke="${ink}" stroke-width="2.4" stroke-linecap="round"/><path d="M-16 -3L-9 -3L-8 2L-15 4Z" fill="${ink}"/><path d="M2 12L9 -6M9 12L2 -6" stroke="${ink}" stroke-width="1.8" stroke-linecap="round"/>`;
+    case 'wildRider':
+      // A horse with a wing above it: the wild rider.
+      return `${HORSE(ink, -4)}<path d="M2 -9Q8 -17 16 -15Q12 -13 13 -10Q9 -11 8 -8Q5 -9 2 -9Z" fill="${ink}"/>`;
     case 'archer':
       // Bow drawn with an arrow on the string.
       return `<path d="M-4 -12Q10 0 -4 12" fill="none" stroke="${ink}" stroke-width="2.2" stroke-linecap="round"/>` +
