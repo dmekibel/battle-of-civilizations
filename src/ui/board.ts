@@ -341,7 +341,14 @@ function sheetId(url: string, w: number, h: number): string | null {
   return id;
 }
 /** A picture `nat` pixels big, drawn w x h with its top left at (x, y); `flip` mirrors it left to right about x = 0. */
+/** Standing pictures were carved and photographed from a low angle; seen from high above they look too tall, so
+ *  they are squashed a little (feet fixed) the steeper the camera looks down (David 2026-11-18). Set per drawing. */
+let SQUASH = 1;
 function pic(url: string, nat: Pt, x: number, y: number, w: number, h: number, flip = false): string {
+  if (SQUASH !== 1) {
+    y += h * (1 - SQUASH);
+    h *= SQUASH;
+  }
   // see-through: remember where this picture lands, so the sprite that drew it knows its screen box.
   lastPic = flip ? [-x - w, y, -x, y + h] : [x, y, x + w, y + h];
   const id = sheetId(url, nat[0], nat[1]);
@@ -1134,6 +1141,8 @@ function fetchBiome() {
 
 export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_EFFECTS): string {
   fetchBiome();
+  // Steep camera (looking down) → shorter figures; gentle slope → as carved. tiltAngle is 0 (flat view) to 76°.
+  SQUASH = v.tilt ? 0.78 + 0.22 * Math.min(1, Math.max(0, (tiltAngle(v) * 180) / Math.PI / 76)) : 1;
   // Raised high ground: the lens lifts every point on a raised hex onto its top.
   const T = terraces(s, v);
   const L = lens(v, T);

@@ -3251,6 +3251,7 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 // ---------- end-of-battle replay (src/ui/replay.ts) ----------
 // The replay borrows this board, its effects and camera; the live game and its save are never changed.
 let camBeforeReplay: Camera | null = null;
+let replayGlideAt = 0;
 initReplay({
   live: () => sess.state,
   lang: () => lang,
@@ -3264,10 +3265,16 @@ initReplay({
     const x = pts.reduce((a, p) => a + p[0], 0) / pts.length;
     const y = pts.reduce((a, p) => a + p[1], 0) / pts.length;
     const [fw, fh] = mapSize(portrait);
-    const zoom = Math.min(ZOOM_MAX, Math.max(cam.zoom, 1.4));
-    // Gentle: only move when the action is away from the middle of what is on screen.
-    if (Math.abs(zoom - cam.zoom) < 0.02 && Math.hypot(x - (cam.x ?? fw / 2), y - (cam.y ?? fh / 2)) < Math.min(fw, fh) / (3.2 * zoom)) return;
-    glideTo({ x, y, zoom }, Math.max(250, ms));
+    // Calm (David 2026-11-18: it jumped side to side): keep the zoom, never move more than once in 1.6 s, and
+    // only when the action is near the edge of what is on screen or off it, then glide slowly and only part way.
+    const zoom = cam.zoom;
+    const [cx, cy] = [cam.x ?? fw / 2, cam.y ?? fh / 2];
+    const [hw, hh] = [fw / (2 * zoom), fh / (2 * zoom)];
+    if (Math.abs(x - cx) < hw * 0.7 && Math.abs(y - cy) < hh * 0.7) return;
+    const now = performance.now();
+    if (now - replayGlideAt < 1600) return;
+    replayGlideAt = now;
+    glideTo({ x: cx + (x - cx) * 0.75, y: cy + (y - cy) * 0.75, zoom }, Math.max(1100, ms * 2));
   },
   begin: () => {
     camBeforeReplay = { ...cam };
