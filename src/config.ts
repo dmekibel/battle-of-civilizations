@@ -111,6 +111,8 @@ export interface UnitRules {
   forest?: boolean;
   /** Arrow-proof shield: every shot at this piece does this much less (1-damage arrows do nothing). */
   shotGuard?: number;
+  /** Shoots or rides, not both: once this piece has shot or fought, it can't move again that turn. */
+  standsAfterAttack?: boolean;
 }
 
 export type Placement = [type: UnitTypeId, col: number, row: number];
@@ -294,8 +296,9 @@ export const CONFIG: GameConfig = {
     lightInfantry: { moveCost: 3, attack: 1, hp: 1, ranged: null, heavy: false },
     heavyCavalry: { moveCost: 2, speed: 2, attack: 2, hp: 2, ranged: null, heavy: true, mounted: true },
     lightCavalry: { moveCost: 1, speed: 3, attack: 1, hp: 1, ranged: null, heavy: false, mounted: true },
-    // Mongols: fast riders who shoot from the saddle (shorter range than foot archers).
-    horseArcher: { moveCost: 1, speed: 3, attack: 1, hp: 1, ranged: { cost: 1, minRange: 2, maxRange: 4, damage: 1 }, heavy: false, mounted: true },
+    // Mongols: fast riders who shoot from the saddle (shorter range than foot archers). Ride in or shoot, then
+    // stay put: no riding off after a shot in the same turn (balance pass 2026-11-18, they won ~90%).
+    horseArcher: { moveCost: 1, speed: 3, attack: 1, hp: 1, ranged: { cost: 1, minRange: 2, maxRange: 4, damage: 1 }, heavy: false, mounted: true, standsAfterAttack: true },
     // Japanese: samurai fight hard and move like light infantry; ashigaru are cheap spearmen.
     samurai: { moveCost: 3, attack: 2, hp: 2, ranged: null, heavy: true },
     ashigaru: { moveCost: 3, attack: 1, hp: 1, ranged: null, heavy: false, antiCavalry: true },
@@ -323,7 +326,8 @@ export const CONFIG: GameConfig = {
     atlatl: { moveCost: 3, attack: 1, hp: 1, ranged: { cost: 1, minRange: 2, maxRange: 4, damage: 1 }, heavy: false },
     // Zulus: impi with the short stabbing spear (double damage against riders); throwers hurl assegais.
     impi: { moveCost: 3, attack: 2, hp: 1, ranged: null, heavy: false, antiCavalry: true },
-    thrower: { moveCost: 3, attack: 1, hp: 1, ranged: { cost: 1, minRange: 2, maxRange: 3, damage: 1 }, heavy: false },
+    // Throwers run 2 hexes a point and reach 4 (balance pass 2026-11-18: Zulus won almost nothing).
+    thrower: { moveCost: 3, speed: 2, attack: 1, hp: 1, ranged: { cost: 1, minRange: 2, maxRange: 4, damage: 1 }, heavy: false },
     // Batch one (ROSTERS.md, 2026-11-18).
     banner: { moveCost: 3, attack: 0, hp: 1, ranged: null, heavy: false, aura: 1 },
     scout: { moveCost: 3, attack: 1, hp: 1, ranged: null, heavy: false, forest: true },
@@ -372,7 +376,7 @@ export const CONFIG: GameConfig = {
   weatherRules: { rainRangeLoss: 1, fogMaxRange: 4, snowRiderSlow: 1 },
   army: {
     budget: 50,
-    cost: { lightInfantry: 1, heavyInfantry: 2, archer: 3, lightCavalry: 3, heavyCavalry: 4, horseArcher: 4, samurai: 4, ashigaru: 1, gunslinger: 3, rifleman: 3, cowboy: 4, deputy: 2, berserker: 3, axeThrower: 3, ballista: 5, lineInfantry: 3, skirmisher: 3, cannon: 5, chariot: 5, boarder: 3, bomber: 4, jaguar: 4, atlatl: 3, impi: 3, thrower: 3, champion: 6, championRider: 7, championGun: 7, banner: 4, scout: 2, shieldbearer: 3, rocket: 5, crossbow: 4, longRifle: 5, wildRider: 4 },
+    cost: { lightInfantry: 1, heavyInfantry: 2, archer: 3, lightCavalry: 3, heavyCavalry: 4, horseArcher: 5, samurai: 4, ashigaru: 1, gunslinger: 3, rifleman: 3, cowboy: 4, deputy: 2, berserker: 3, axeThrower: 3, ballista: 5, lineInfantry: 3, skirmisher: 3, cannon: 5, chariot: 5, boarder: 3, bomber: 4, jaguar: 4, atlatl: 3, impi: 2, thrower: 2, champion: 6, championRider: 7, championGun: 7, banner: 4, scout: 2, shieldbearer: 3, rocket: 5, crossbow: 4, longRifle: 5, wildRider: 4 },
     max: { champion: 1, championRider: 1, championGun: 1, banner: 1 },
   },
   // 5 columns leave room for the largest possible army (50 light infantry and the King).

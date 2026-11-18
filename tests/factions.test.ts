@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG, type GameConfig, type UnitTypeId } from '../src/config';
-import { armyCost, buildBoard, newGame, previewStrike, suggestArmy, type GameState, type Player } from '../src/engine';
+import { armyCost, buildBoard, newGame, previewStrike, reachable, shoot, suggestArmy, type GameState, type Player } from '../src/engine';
 
 const OPEN: GameConfig = { ...CONFIG, board: { ...CONFIG.board, riverCol: null, bridgeRows: [], forests: [] } };
 
@@ -19,6 +19,15 @@ describe('faction pieces', () => {
     const s = scenario([['red', 'horseArcher', 3, 1], ['blue', 'heavyInfantry', 3, 5], ['blue', 'heavyInfantry', 3, 7]]);
     expect(previewStrike(s, s.units[0].id, s.units[1].id, 'shoot', OPEN)?.damage).toBe(1);
     expect(previewStrike(s, s.units[0].id, s.units[2].id, 'shoot', OPEN)).toBeNull();
+  });
+
+  it('horse archers cost 5 and stay put once they have shot that turn', () => {
+    expect(CONFIG.army.cost.horseArcher).toBe(5);
+    const s = scenario([['red', 'horseArcher', 3, 1], ['blue', 'heavyInfantry', 3, 5]]);
+    expect(reachable(s, s.units[0].id, OPEN).size).toBeGreaterThan(0);
+    const r = shoot(s, s.units[0].id, s.units[1].id, OPEN);
+    if (!r.ok) throw new Error(r.error);
+    expect(reachable(r.state, s.units[0].id, OPEN).size).toBe(0);
   });
 
   it('ashigaru spearmen hit mounted pieces twice as hard', () => {

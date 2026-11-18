@@ -41,17 +41,17 @@ describe('Ottomans, Aztecs and Zulus', () => {
 
   it('an impi hits for 2, has 1 hp and is a spearman against riders', () => {
     expect(CONFIG.units.impi).toMatchObject({ moveCost: 3, attack: 2, hp: 1, ranged: null, heavy: false, antiCavalry: true });
-    expect(CONFIG.army.cost.impi).toBe(3);
+    expect(CONFIG.army.cost.impi).toBe(2);
     const s = scenario([['red', 'impi', 3, 3], ['blue', 'heavyInfantry', 3, 4]]);
     expect(getUnit(ok(attack(s, s.units[0].id, s.units[1].id, OPEN)), s.units[1].id)).toBeUndefined();
   });
 
-  it('a spear thrower reaches 2-3 hexes', () => {
-    expect(CONFIG.units.thrower).toMatchObject({ moveCost: 3, attack: 1, hp: 1, heavy: false, ranged: { cost: 1, minRange: 2, maxRange: 3, damage: 1 } });
-    expect(CONFIG.army.cost.thrower).toBe(3);
-    const s = scenario([['red', 'thrower', 3, 3], ['blue', 'lightInfantry', 3, 6]]);
+  it('a spear thrower runs 2 hexes a point and reaches 2-4 hexes', () => {
+    expect(CONFIG.units.thrower).toMatchObject({ moveCost: 3, speed: 2, attack: 1, hp: 1, heavy: false, ranged: { cost: 1, minRange: 2, maxRange: 4, damage: 1 } });
+    expect(CONFIG.army.cost.thrower).toBe(2);
+    const s = scenario([['red', 'thrower', 3, 3], ['blue', 'lightInfantry', 3, 7]]);
     expect(getUnit(ok(shoot(s, s.units[0].id, s.units[1].id, OPEN)), s.units[1].id)).toBeUndefined();
-    const far = scenario([['red', 'thrower', 3, 3], ['blue', 'lightInfantry', 3, 7]]);
+    const far = scenario([['red', 'thrower', 3, 3], ['blue', 'lightInfantry', 3, 8]]);
     expect(shoot(far, far.units[0].id, far.units[1].id, OPEN)).toEqual({ ok: false, error: 'outOfRange' });
   });
 

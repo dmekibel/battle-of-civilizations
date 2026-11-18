@@ -130,6 +130,7 @@ function search(s: GameState, unitId: string, cfg: GameConfig): { out: Map<strin
   if (!u || s.phase !== 'act' || u.owner !== s.current) return { out, prev };
   if (u.moved && !cfg.movement.multipleMovesPerUnit) return { out, prev };
   if (u.attacked && !cfg.combat.moveAfterAttack) return { out, prev };
+  if (u.attacked && cfg.units[u.type].standsAfterAttack) return { out, prev };
 
   // Search by hexes walked (every step is one hex); the price in points comes from the walk's length.
   // Top speed: what's left of this piece's hexes for the turn. Riders get one point's worth less than

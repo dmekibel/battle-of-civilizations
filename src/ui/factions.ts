@@ -88,7 +88,7 @@ export const FACTIONS: Record<FactionId, Faction> = {
     color: '#1f5fa8',
     text: '#86b9f0',
     roster: ['lightInfantry', 'archer', 'lightCavalry', 'heavyCavalry', 'horseArcher', 'championRider'],
-    blurb: { en: 'Horse archers: shoot and ride. Few foot soldiers, no heavy infantry.', ru: 'Конные лучники: стреляют на скаку. Мало пехоты, нет тяжёлой пехоты.' },
+    blurb: { en: 'Horse archers: ride in and shoot. Few foot soldiers, no heavy infantry.', ru: 'Конные лучники: подскакивают и стреляют. Мало пехоты, нет тяжёлой пехоты.' },
     champion: { en: "Champion: a Keshig, the Khan's own bodyguard, on an armoured horse with a long glaive. Fast, takes 3 hits, hits for 2.", ru: 'Чемпион: кешиктен, личный телохранитель хана, на коне в броне с длинной глефой. Быстрый, выдерживает 3 удара, бьёт на 2.' },
     emblem: shield('#1f5fa8', '#e1b12c', '<path d="M22 14Q46 32 22 50" fill="none" stroke="#e1b12c" stroke-width="3.2" stroke-linecap="round"/><path d="M22 14V50" stroke="#e1b12c" stroke-width="1.5"/><path d="M12 32H44" stroke="#e1b12c" stroke-width="2.2"/><path d="M50 32L43 28V36Z" fill="#e1b12c"/>'),
     art: { king: 'khan' },
