@@ -849,7 +849,10 @@ function figurePic(fac: string, type: UnitTypeId, view = 'front-left'): string {
   const art = type === 'deputy' ? 'lightInfantry' : type;
   const set = SPRITES[fac]?.[art];
   const v = set?.[view] ? view : set?.front ? 'front' : null;
-  return v ? `<img class="figpic" src="${import.meta.env.BASE_URL}pieces/${fac}/${art}-${v}.webp?v=${ART_VERSION}" alt="" draggable="false">` : '';
+  // --hs: this figure's height on the board against a typical foot figure (330), so pictures shown side by side
+  // keep the same scale (the Russian prince looked bigger than the German grand master on the title screen).
+  const hs = Math.min(1.3, Math.max(0.75, (set?.[v ?? '']?.[1] ?? 330) / 330));
+  return v ? `<img class="figpic" style="--hs:${hs.toFixed(3)}" src="${import.meta.env.BASE_URL}pieces/${fac}/${art}-${v}.webp?v=${ART_VERSION}" alt="" draggable="false">` : '';
 }
 
 function draftSheet(s: GameState): string {

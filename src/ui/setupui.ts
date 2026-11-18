@@ -113,14 +113,19 @@ export function armyShowcase(lang: Lang, fac: FactionId, back: string, choose?: 
   const f = FACTIONS[fac];
   const era = ERA_OF[fac];
   const units = ['king', ...f.roster] as UnitTypeId[];
+  // True scale inside the army: each figure as tall as it stands on the board, against the army's tallest
+  // (one Comanche looked like a giant next to the rest, David 2026-11-18).
+  const hOf = (u: UnitTypeId) => SPRITES[fac]?.[artOf(u)]?.front?.[1] ?? 0;
+  const tallest = Math.max(1, ...units.map(hOf));
   const cards = units.map((u) => {
     const src = figSrc(fac, u, VIEWS[view]);
+    const sc = Math.max(0.55, hOf(u) / tallest);
     const king = u === 'king';
     const champ = CHAMPS.includes(u);
     const label = king ? st(lang, 'king') : champ ? st(lang, 'champion') : '';
     const badge = label && label !== nameOf(lang, fac, u) ? label : '';
     return `<div class="ap-unit ${king ? 'king' : ''} ${champ ? 'champ' : ''}">
-      <div class="ap-fig" data-fac="${fac}" data-type="${u}">${src ? `<img src="${src}" alt="" draggable="false">` : ''}</div>
+      <div class="ap-fig" data-fac="${fac}" data-type="${u}">${src ? `<img src="${src}" alt="" draggable="false" style="transform:scale(${sc.toFixed(3)});transform-origin:50% 100%">` : ''}</div>
       <div class="ap-info">${badge ? `<span class="ap-badge">${badge}</span>` : ''}<b>${nameOf(lang, fac, u)}</b><small>${ROLE[u]?.[lang === 'ru' ? 1 : 0] ?? ''}</small>${champ && f.champion ? `<small class="ap-champ">${f.champion[lang]}</small>` : ''}${chips(lang, u)}</div>
     </div>`;
   }).join('');
