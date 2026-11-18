@@ -980,8 +980,32 @@ const thumbJobs = new Map<string, { board: () => GameConfig['board']; px: number
 /** An empty picture to hold a preview's place (and size) while it paints. */
 const BLANK = 'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEAAAAALAAAAAABAAEAAAIBAAA=';
 
+/** Fixed maps have a carved-wood diorama picture (made in _art/maptile_gen.py, placed by _art/maptile_place.py,
+ *  which also stamps TILE_V). Until it has loaded, or if it is missing, the painted preview stands in. */
+const TILE_V = 'dd1c5d06';
+const TILE_MAPS = new Set<string>(['river', 'fords', 'noford', 'island', 'pass', 'longwood', 'lake', 'ridge', 'open', 'forest', 'village', ...Object.values(HOME)]);
+const tileUrl = (m: string) => `${import.meta.env.BASE_URL}map/tile-${m}.webp?v=${TILE_V}`;
+/** 'ok' once the picture has loaded, 'missing' if it failed, 'loading' meanwhile. */
+const tileState = new Map<string, 'loading' | 'ok' | 'missing'>();
+function loadTile(m: string) {
+  if (tileState.has(m)) return;
+  tileState.set(m, 'loading');
+  const im = new Image();
+  im.onload = () => {
+    tileState.set(m, 'ok');
+    app.querySelectorAll<HTMLImageElement>(`img[data-tile="${CSS.escape(m)}"]`).forEach((el) => (el.src = im.src));
+  };
+  im.onerror = () => tileState.set(m, 'missing');
+  im.src = tileUrl(m);
+}
+
 /** The map as a little picture of the real board (painted once, then kept). `px` is the picture's width. */
 function mapThumb(m: MapId, px = 240): string {
+  const aspectStd = thumbAspect({ cols: 25, rows: 15 }).toFixed(4);
+  if (TILE_MAPS.has(m)) {
+    loadTile(m);
+    if (tileState.get(m) === 'ok') return `<img class="mthumb" data-tile="${m}" src="${tileUrl(m)}" alt="" draggable="false" style="aspect-ratio:${aspectStd}">`;
+  }
   // Random: the map this seed and land grow into (a question mark until one is chosen).
   if (m === 'random' && settings.map !== 'random') return `<svg viewBox="0 0 72 44" width="72" height="44" aria-hidden="true"><rect width="72" height="44" rx="6" fill="#6f9a4a"/><text x="36" y="30" text-anchor="middle" font-size="22" font-weight="700" fill="#f1e8d2">?</text></svg>`;
   const large = m === 'random' && settings.size === 'large';
@@ -992,7 +1016,8 @@ function mapThumb(m: MapId, px = 240): string {
     thumbJobs.set(key, { board: () => (m === 'random' ? boardFor('random', gen) : boardFor(m)), px });
   }
   const aspect = thumbAspect(large ? { cols: 33, rows: 19 } : { cols: 25, rows: 15 });
-  return `<img class="mthumb" data-thumb="${key}" src="${done ?? BLANK}" alt="" draggable="false" style="aspect-ratio:${aspect.toFixed(4)}">`;
+  const tileAttr = TILE_MAPS.has(m) ? ` data-tile="${m}"` : '';
+  return `<img class="mthumb" data-thumb="${key}"${tileAttr} src="${done ?? BLANK}" alt="" draggable="false" style="aspect-ratio:${aspect.toFixed(4)}">`;
 }
 
 /** Paints the previews the last render asked for, one at a time so the menu stays smooth, and puts each in place. */
@@ -1006,8 +1031,11 @@ async function fillThumbs() {
       thumbJobs.delete(key);
       // Only what is on screen now (a re-roll may have replaced it already).
       if (!app.querySelector(`img[data-thumb="${CSS.escape(key)}"]`)) continue;
+      // A fixed map whose carved-wood picture has arrived needs no painted stand-in.
+      const tileOf = key.split('|')[0];
+      if (tileState.get(tileOf) === 'ok') continue;
       const url = await paintThumb(key, job.board(), job.px * Math.min(2, Math.max(1, devicePixelRatio || 1)));
-      if (url) app.querySelectorAll<HTMLImageElement>(`img[data-thumb="${CSS.escape(key)}"]`).forEach((im) => (im.src = url));
+      if (url) app.querySelectorAll<HTMLImageElement>(`img[data-thumb="${CSS.escape(key)}"]`).forEach((im) => { if (tileState.get(tileOf) !== 'ok') im.src = url; });
       await new Promise((ok) => setTimeout(ok, 0));
     }
   } finally {

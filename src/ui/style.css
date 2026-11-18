@@ -407,7 +407,7 @@ button:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
 .mtile svg { width: 100%; height: auto; display: block; border-radius: 8px; }
 .mtile.on { border-color: var(--gold); }
 /* A preview of the real board: wood-coloured while it paints, then the miniature itself. */
-.mthumb { width: 100%; height: auto; display: block; border-radius: 6px; background: #4a311d; box-shadow: 0 1px 3px rgba(0,0,0,.45); }
+.mthumb { width: 100%; height: auto; display: block; object-fit: cover; border-radius: 6px; background: #4a311d; box-shadow: 0 1px 3px rgba(0,0,0,.45); }
 .mbig { flex: 1; min-width: 0; line-height: 0; }
 .mbig .mthumb { border-radius: 8px; }
 /* Customize land: one row per knob, its name above its steps. */

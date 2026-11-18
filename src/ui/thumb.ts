@@ -24,6 +24,33 @@ const geo = (b: Pick<Board, 'cols' | 'rows'>) => {
 const centre = (c: number, r: number): Pt => [S * 1.5 * c + S + GROUND_M, R3 * S * (r + 0.5 * (c & 1)) + (R3 / 2) * S + GROUND_M];
 const hexSeed = (c: number, r: number) => (c * 73 + r * 151 + ((c * r) % 7) * 31) % 97;
 
+/** Vignette: a close-up window on the map's most telling part (its buildings, crossings, lakes and hills),
+ *  about ten hexes across, at the same shape as a whole-board preview, so a tile reads as a little diorama. */
+const ZOOM_ITEMS = 1.55; // trees and buildings a bit bigger than true scale, so they read at this size
+function vignette(b: Board) {
+  const g = geo(b);
+  const aspect = g.w / g.h;
+  const w = Math.min(g.W, S * 1.5 * 10 + 2 * S);
+  const h = Math.min(g.H, w / aspect);
+  const pts: [number, number, number][] = [];
+  const add = (list: [number, number][] | undefined, wt: number) => (list ?? []).forEach(([c, r]) => pts.push([...centre(c, r), wt]));
+  add(b.houses, 4); add(b.towers, 3); add(b.walls, 1); add(b.lakes, 2); add(b.hills, 2); add(b.boulders, 1); add(b.forests, 0.4);
+  (b.gates ?? []).forEach((q) => pts.push([...centre(q.col, q.row), 3]));
+  const rivers = [...(b.riverCol === null ? [] : [{ col: b.riverCol, bridges: b.bridgeRows }]), ...(b.rivers ?? [])];
+  for (const rv of rivers) for (const r of rv.bridges) pts.push([...centre(rv.col, r), 5]);
+  let [fx, fy] = [GROUND_M + g.W / 2, GROUND_M + g.H / 2];
+  const tw = pts.reduce((a, p) => a + p[2], 0);
+  if (tw > 0) {
+    // Lean towards the features, but keep some of the board's middle (where the armies meet).
+    fx = 0.35 * fx + 0.65 * (pts.reduce((a, p) => a + p[0] * p[2], 0) / tw);
+    fy = 0.35 * fy + 0.65 * (pts.reduce((a, p) => a + p[1] * p[2], 0) / tw);
+  }
+  const x0 = Math.max(GROUND_M, Math.min(GROUND_M + g.W - w, fx - w / 2));
+  // Buildings and trees stand up from their hex, so look a little lower than their feet to keep their tops in.
+  const y0 = Math.max(GROUND_M - FRAME * 0.5, Math.min(GROUND_M + g.H - h, fy - h * 0.42));
+  return { ...g, x0, y0, w, h };
+}
+
 /** Width over height of a preview of this board (to size the placeholder while it paints). */
 export function thumbAspect(b: Pick<Board, 'cols' | 'rows'>): number {
   const g = geo(b);
@@ -93,7 +120,7 @@ export function paintThumb(key: string, b: Board, px: number): Promise<string | 
 async function paint(b: Board, px: number): Promise<string | null> {
   if (typeof document === 'undefined') return null;
   const large = b.cols > 25;
-  const g = geo(b);
+  const g = vignette(b);
   const k = px / g.w; // pixels per map unit
   const cv = document.createElement('canvas');
   cv.width = Math.round(g.w * k);
@@ -248,7 +275,7 @@ async function paint(b: Board, px: number): Promise<string | null> {
     const [x, y] = centre(c, r);
     spots.forEach(([dx, dy, sz], i) => {
       const [kind, nat] = treeSet[(c * 7 + r * 11 + i * 5) % treeSet.length];
-      const f = 0.21 * sz; // larger than on the board, or a wood is a few specks
+      const f = 0.21 * sz * ZOOM_ITEMS; // larger than on the board, or a wood is a few specks
       items.push({ y: y + dy, url: treeUrlOf(biomeId(b), kind, 'front'), nat, x: x + dx, w: nat[0] * f, h: nat[1] * f, shadow: 15 * sz });
     });
   }
@@ -256,7 +283,7 @@ async function paint(b: Board, px: number): Promise<string | null> {
     const [x, y] = centre(c, r);
     const name = artAt(b, c, r, 'house', hexSeed(c, r)); // biomes: a saloon, a yurt, a pagoda...
     const nat = scNat(name);
-    const f = 0.26 * (BUILD_SCALE[name] ?? 1);
+    const f = 0.26 * ZOOM_ITEMS * (BUILD_SCALE[name] ?? 1);
     items.push({ y: y + 14, url: scUrl(name), nat, x, w: nat[0] * f, h: nat[1] * f, shadow: 26 });
   }
   for (const [c, r] of b.boulders ?? []) {
@@ -264,7 +291,7 @@ async function paint(b: Board, px: number): Promise<string | null> {
     const nm = artAt(b, c, r, 'boulder', hexSeed(c, r));
     if (nm !== 'boulder') {
       const n2 = scNat(nm);
-      const f2 = 0.25 * (BUILD_SCALE[nm] ?? 1);
+      const f2 = 0.25 * ZOOM_ITEMS * (BUILD_SCALE[nm] ?? 1);
       items.push({ y: y + 10, url: scUrl(nm), nat: n2, x, w: n2[0] * f2, h: n2[1] * f2, shadow: 16 });
       continue;
     }
