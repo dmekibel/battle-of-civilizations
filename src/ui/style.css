@@ -1210,3 +1210,256 @@ button.primary.ready { animation: ready 2.2s ease-in-out infinite; }
 .join-input:focus { outline: 2px solid var(--brass-lo); outline-offset: 1px; }
 .join-row .primary { min-width: 92px; }
 .join-err { margin: 8px 2px 0; font-size: 14px; color: #e0846f; }
+
+/* ---------- online: host or join (first step of Play online) ---------- */
+.online-pick .chero, .join-card .chero { min-height: 36px; padding: 0; }
+.online-pick .choice.big { min-height: 96px; }
+.online-pick .choice.big b { font-size: 24px; }
+.join-card .join-box { display: flex; flex-direction: column; gap: 10px; }
+.join-card .join-input { min-height: 64px; font-size: 34px; }
+
+/* ---------- saved games ---------- */
+.cover.saves { place-items: start center; }
+.saves-card { width: min(560px, 100%); text-align: left; }
+.choice.continue { border-color: var(--brass-lo); box-shadow: inset 0 0 0 1px rgba(212, 173, 98, .35), var(--sh-1); }
+.slots { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.slot { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; align-items: center; padding: 12px; border-radius: 16px; background: var(--wood-fill, var(--panel-2)); border: 1px solid var(--hair, var(--line)); }
+.slot.now { border-color: var(--brass-lo); }
+.slot-crests { display: flex; flex-direction: column; gap: 2px; }
+.slot-crests span { display: grid; place-items: center; width: 30px; height: 30px; }
+.slot-crests svg { width: 28px; height: 28px; }
+.slot-text { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.slot-text b { font: 400 19px/1.15 var(--display); color: var(--ink); }
+.slot-text b .hero-vs { font-size: 13px; margin: 0 2px; }
+.slot-text small { font-size: 13px; color: var(--ink-2); line-height: 1.35; }
+.slot-turn { align-self: start; margin-top: 2px; padding: 3px 9px; border-radius: 999px; font: 700 11px/1.2 var(--ui); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); background: rgba(0, 0, 0, .35); border: 1px solid var(--hair-2); }
+.slot-turn.mine { color: #1b140a; background: var(--brass-fill); border-color: var(--brass); }
+.slot-btns { grid-column: 1 / -1; display: flex; gap: 8px; }
+.slot-btns button { flex: 1; min-height: 44px; }
+.slot-btns .danger { background: linear-gradient(180deg, #8a2a1f, #5e1a12); border-color: #b0452f; color: #fde7dc; }
+.slot-ask { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; }
+.slot-ask p { margin: 0; font-size: 14px; color: #f0b8a6; }
+.slots-empty { text-align: center; color: var(--ink-2); padding: 24px 0; }
+@media (max-width: 600px) { .cover > .card.saves-card { background: transparent; border: 0; box-shadow: none; padding: 8px 2px 12px; } }
+
+/* ---------- side colours + camera v2 (src/ui/sides.ts, "camera v2" in main.ts) ---------- */
+/* The crest medallion and the log's dots wear the side colour (yours / the enemy's), not only the army's paint. */
+.screen .hud .who .crest { outline: 2px solid var(--side-red, transparent); outline-offset: 1px; }
+.screen.blue .hud .who .crest { outline-color: var(--side-blue, transparent); }
+.dot.red { background: var(--side-red, var(--red)); }
+.dot.blue { background: var(--side-blue, var(--blue)); }
+/* Your pieces an enemy could reach next turn: a soft red ring that breathes on the ground under them. */
+.board .threat-ring { fill: rgba(226, 54, 44, .16); stroke: #ff5a48; stroke-width: 2.2; animation: threat-pulse 2.4s ease-in-out infinite; }
+@keyframes threat-pulse { 0%, 100% { opacity: .35; } 50% { opacity: .95; } }
+/* Arrow chips at the screen edges pointing at enemies off screen; tap to look there. */
+.edge-chips { position: absolute; inset: 0; pointer-events: none; z-index: 2; overflow: hidden; }
+.edge-chip { position: absolute; width: 34px; height: 34px; min-height: 0; margin: -17px 0 0 -17px; padding: 0; border-radius: 50%;
+  display: grid; place-items: center; pointer-events: auto; cursor: pointer;
+  background: rgba(21, 17, 12, .82); border: 2px dashed var(--side-foe, #e2362c); box-shadow: 0 2px 8px rgba(0, 0, 0, .45); }
+.edge-chip svg path { fill: var(--side-foe, #e2362c); }
+.edge-chip i { position: absolute; right: -4px; top: -4px; min-width: 15px; height: 15px; border-radius: 8px; padding: 0 3px;
+  font: 700 10px/15px var(--ui, sans-serif); font-style: normal; color: #fff; background: #b3261e; }
+.edge-chip.acted { animation: chip-ping 1.6s ease-out 2; }
+@keyframes chip-ping { 0% { box-shadow: 0 0 0 0 rgba(226, 54, 44, .7), 0 2px 8px rgba(0, 0, 0, .45); } 100% { box-shadow: 0 0 0 14px rgba(226, 54, 44, 0), 0 2px 8px rgba(0, 0, 0, .45); } }
+@media (prefers-reduced-motion: reduce) { .board .threat-ring, .edge-chip.acted { animation: none; } }
+
+/* ---------- setup summary: New battle as one screen of rows; each row opens its own page (main.ts setupScreen, setupui.ts) ---------- */
+.setup-sum { display: flex; flex-direction: column; gap: 14px; }
+.setup-sum .vs { margin-top: 10px; }
+.setup-sum .vs-card { padding: 10px 8px 12px; }
+.setup-sum .vs-card .figpic { height: 96px; }
+.srows, .olist { background: var(--wood-1); border: 1px solid var(--hair); border-radius: var(--r-lg); box-shadow: inset 0 1px 0 var(--bevel), var(--sh-1); overflow: hidden; }
+.srow, .orow { width: 100%; min-height: 50px; display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 16px; border: 0; border-radius: 0; background: transparent; box-shadow: none; text-align: left; font: 700 15px/1.2 var(--ui); color: var(--ink); }
+.srow + .srow, .orow + .orow { border-top: 1px solid var(--hair); }
+.srow:active:not(:disabled), .orow:active:not(:disabled) { transform: none; background: rgba(255, 236, 200, .05); }
+.srow-l { flex: none; }
+.srow-v { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 8px; color: var(--ink-3); font-weight: 500; font-size: 14.5px; text-align: right; }
+.srow-v > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.srow-pic { flex: none; width: 52px; }
+.srow-pic .mthumb, .srow-pic svg { width: 52px; height: auto; display: block; border-radius: 4px; }
+.srow-chev { font-style: normal; font-size: 22px; line-height: 1; color: var(--brass-lo); }
+.olist { margin-top: 14px; }
+.orow { min-height: 56px; padding: 8px 16px; }
+.orow > span { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.orow b { font: 700 16px/1.2 var(--ui); color: var(--ink-2); }
+.orow small { font-size: 12.5px; font-weight: 500; color: var(--ink-3); }
+.orow.on b { color: var(--ink); }
+.ocheck { font-style: normal; font-size: 18px; color: var(--brass); width: 18px; text-align: center; }
+@media (hover: hover) and (pointer: fine) { .srow:hover, .orow:hover { background: rgba(255, 236, 200, .04); } }
+.sub-tabs { margin-top: 12px; }
+.setup-sub .mgen, .setup-sub .wxseg:first-child { margin-top: 12px; }
+/* Sub-pages slide in from the right and the summary slides back from the left (iOS navigation push / pop). */
+.sub-in { animation: sub-in .26s cubic-bezier(.2, .8, .2, 1) both; }
+.sub-back { animation: sub-back .26s cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes sub-in { from { transform: translateX(36%); opacity: 0; } }
+@keyframes sub-back { from { transform: translateX(-24%); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .sub-in, .sub-back { animation: none; } }
+/* Army tiles carry a small eye button that opens the army's showcase. */
+.ftile-wrap { position: relative; display: grid; }
+.ftile-view { position: absolute; top: 4px; right: 4px; width: 34px; height: 34px; min-height: 34px; padding: 0; border-radius: 50%; display: grid; place-items: center;
+  background: rgba(16, 13, 9, .82); border: 1px solid var(--hair-2); color: var(--ink-2); box-shadow: none; }
+/* Landscape phones: the whole sheet, face-off on the left, rows in two columns on the right. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .sheet:has(> .setup) { padding: 0; }
+  .sheet-body.setup { width: 100%; height: 100%; max-height: 100%; border-radius: 0; border: 0;
+    padding-left: max(22px, env(safe-area-inset-left, 0px)); padding-right: max(22px, env(safe-area-inset-right, 0px)); }
+  .sheet-body.setup > h2 { padding-top: 6px; padding-bottom: 6px; font-size: 22px; }
+  .sheet-body.setup > .sheet-foot { padding-top: 8px; padding-bottom: max(8px, env(safe-area-inset-bottom, 0px)); }
+  .sheet-body.setup > .sheet-foot .primary { min-height: 46px; }
+  .setup-sum { display: grid; grid-template-columns: minmax(0, 290px) minmax(0, 1fr); align-items: start; gap: 14px; padding-top: 10px; }
+  .setup-sum .vs { margin-top: 0; }
+  .setup-sum .vs-card .figpic { height: 92px; }
+  .setup-sum .srows { display: grid; grid-template-columns: 1fr 1fr; }
+  .setup-sum .srow { min-height: 46px; border-top: 0; border-bottom: 1px solid var(--hair); }
+  .setup-sum .srow:nth-child(odd) { border-right: 1px solid var(--hair); }
+  .setup-sum .srow-pic { display: none; }
+  .ap-units { display: grid !important; grid-template-columns: 1fr 1fr; }
+}
+
+/* Army showcase: name, era, emblem and blurb, then every piece big and turnable (drag or the turn buttons). */
+.ap .ap-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ap-nav { display: flex; gap: 2px; margin-right: -10px; }
+.ap-nav button, .ap-turnbar button { width: 44px; height: 44px; min-height: 44px; padding: 0; border-radius: 50%; font-size: 26px; line-height: 1; color: var(--brass); box-shadow: none; }
+.ap-hero { display: grid; grid-template-columns: 56px 1fr; gap: 6px 12px; align-items: center; margin-top: 12px; padding: 12px 14px; border-radius: var(--r-lg); border: 1px solid var(--hair);
+  background: radial-gradient(ellipse 90% 90% at 15% 30%, color-mix(in srgb, var(--fc) 32%, #1d1710) 0%, #1a140d 80%); box-shadow: var(--sh-1); touch-action: pan-y; }
+.ap-emblem { grid-row: span 2; display: grid; place-items: center; }
+.ap-emblem svg { width: 52px; height: 61px; filter: drop-shadow(0 3px 5px rgba(0, 0, 0, .5)); }
+.ap-era { font: 700 11px/1.2 var(--ui); letter-spacing: .14em; text-transform: uppercase; color: var(--brass); }
+.ap-blurb { margin: 0; font-size: 14px; line-height: 1.4; color: var(--ink-2); }
+.ap-turnbar { display: flex; align-items: center; justify-content: space-between; margin: 8px 0 4px; color: var(--ink-3); font-size: 12.5px; }
+.ap-turnbar button { font-size: 22px; }
+.ap-units { display: flex; flex-direction: column; gap: 10px; padding-bottom: 10px; }
+.ap-unit { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: 12px; align-items: center; padding: 8px 12px 10px 6px; border-radius: var(--r-lg); border: 1px solid var(--hair);
+  background: radial-gradient(ellipse 55% 85% at 16% 60%, #2d2318 0%, #1a140d 80%); box-shadow: var(--sh-1); }
+.ap-unit.king, .ap-unit.champ { border-color: var(--brass); box-shadow: inset 0 0 0 1px var(--brass), 0 0 16px rgba(212, 173, 98, .16); }
+.ap-fig { height: 124px; display: grid; place-items: center; touch-action: pan-y; cursor: grab; user-select: none; -webkit-user-select: none; }
+.ap-fig img { max-width: 100%; max-height: 124px; object-fit: contain; filter: drop-shadow(0 5px 6px rgba(0, 0, 0, .5)); pointer-events: none; }
+.ap-info { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
+.ap-info b { font: 400 19px/1.1 var(--display); color: var(--ink); }
+.ap-info small { font-size: 12.5px; line-height: 1.35; color: var(--ink-3); }
+.ap-info .ap-champ { color: var(--brass-hi); }
+.ap-badge { font: 800 9.5px/1 var(--ui); letter-spacing: .12em; text-transform: uppercase; color: var(--on-brass); background: var(--brass-fill); padding: 4px 7px; border-radius: 999px; }
+.ap-info .stats { margin-top: 2px; }
+.ap-info .st { font-size: 12.5px; padding: 3px 7px; }
+.st.cost { background: #3d3115; color: var(--brass-hi); }
+
+/* =====================================================================================
+   SPACE PASS (2026-11-18): the board gets the screen.
+   Landscape phone: every control is a small translucent token hugging an edge — the player chip top
+   left, hints and the selected piece top right, the turn buttons bottom right.
+   Portrait: the hint and the piece chip float over the board; the dock below keeps only the buttons.
+   ===================================================================================== */
+:root { --glass: rgba(21, 17, 12, .64); --glass-sh: 0 2px 10px rgba(0, 0, 0, .32); }
+
+/* ---- landscape phone: thin player chip, top left ---- */
+.screen.phone .hud {
+  justify-self: start; align-self: start; flex-wrap: nowrap;
+  margin: max(6px, env(safe-area-inset-top, 0px)) 0 0 max(8px, env(safe-area-inset-left, 0px));
+  min-height: 0; height: 36px; gap: 7px; padding: 0 0 0 3px;
+  background: var(--glass); border: 1px solid var(--hair); border-radius: 999px; box-shadow: var(--glass-sh);
+}
+.screen.phone .who { flex: 0 1 auto; gap: 6px; font-size: 13.5px; }
+.screen.phone .who .crest { width: 28px; height: 28px; }
+.screen.phone .who .crest svg { width: 15px; height: 18px; }
+.screen.phone .who > span:last-child { max-width: 118px; color: var(--ink-2); }
+/* Dice and points: small and quiet; they light up only while rolling or when the points change. */
+.screen.phone .dice { gap: 3px; opacity: .7; transition: opacity .2s; }
+.screen.phone .dice:has(.spin) { opacity: 1; }
+.screen.phone .die { width: 15px; height: 15px; padding: 2px; gap: 0; border-radius: 3.5px; transform: none; margin: 0; box-shadow: 0 1px 2px rgba(0, 0, 0, .5); }
+.screen.phone .die i { width: 2.6px; height: 2.6px; box-shadow: none; }
+.screen.phone .points { min-width: 0; padding: 0 1px; }
+.screen.phone .points b { font-size: 18px; color: var(--ink-2); text-shadow: none; }
+.screen.phone .points.bump b { animation: space-bump 1s ease; }
+@keyframes space-bump { 0%, 55% { color: var(--brass-hi); } 25% { transform: scale(1.3); } }
+.screen.phone .hud .icon { order: 2; width: 44px; height: 44px; min-height: 44px; margin: -4px 0; background: transparent; border: 0; box-shadow: none; }
+.screen.phone .hud .icon .ic { width: 18px; height: 18px; }
+/* Captured pieces ride in the same chip, after the points. */
+.screen.phone .tally { order: 1; display: flex; flex-basis: auto; flex-wrap: nowrap; gap: 8px; margin: 0; padding: 0 0 0 8px; min-height: 0; border-top: 0; border-left: 1px solid var(--hair); }
+.screen.phone .tside { flex-wrap: nowrap; }
+.screen.phone .tk svg { width: 14px; height: 10px; }
+.screen.phone .tk i, .screen.phone .tside b { font-size: 9.5px; }
+.screen.phone .viewcube { top: calc(max(6px, env(safe-area-inset-top, 0px)) + 44px); }
+body:has(.screen.phone) .tut-coach { top: calc(max(6px, env(safe-area-inset-top, 0px)) + 46px); }
+
+/* ---- landscape phone: hints and the piece chip, top right ---- */
+.screen.phone .info {
+  justify-self: end; align-self: start; text-align: left;
+  margin: max(6px, env(safe-area-inset-top, 0px)) max(8px, env(safe-area-inset-right, 0px)) 0 0;
+  max-width: min(44vw, 400px); min-height: 0; padding: 7px 12px;
+  font: 400 12.5px/1.3 var(--ui);
+  background: var(--glass); border: 1px solid var(--hair); border-radius: 14px; box-shadow: var(--glass-sh);
+}
+
+/* ---- the selected piece: a slim chip (phones, both ways round); a tap opens the full card ---- */
+.screen:is(.phone, .portrait) .info.unit { display: flex; align-items: center; gap: 8px; padding: 3px 10px 3px 3px; border-radius: 999px; cursor: pointer; }
+.screen:is(.phone, .portrait) .info.unit .uport { width: 32px; height: 32px; border-radius: 50%; }
+.screen:is(.phone, .portrait) .info.unit .uport .figpic { height: 42px; margin-bottom: -6px; }
+.screen:is(.phone, .portrait) .info.unit .uport svg { width: 26px; height: 20px; }
+.screen:is(.phone, .portrait) .info.unit .ubody { flex-direction: row; align-items: center; gap: 8px; }
+.screen:is(.phone, .portrait) .info.unit .ubody > b { font-size: 14.5px; white-space: nowrap; }
+.screen:is(.phone, .portrait) .info.unit .stats { flex-wrap: nowrap; gap: 3px; }
+.screen:is(.phone, .portrait) .info.unit .st { font-size: 11.5px; padding: 2px 6px; gap: 3px; }
+.screen:is(.phone, .portrait) .info.unit .st i { font-size: 8px; }
+.screen:is(.phone, .portrait) .info.unit::after { content: '›'; flex: none; font: 400 18px/1 var(--ui); color: var(--ink-3); transition: transform .15s; }
+/* Full card: big portrait, and every stat spelled out. */
+.screen:is(.phone, .portrait) .info.unit.open { align-items: flex-start; gap: 10px; padding: 8px 12px 8px 8px; border-radius: 16px; }
+.screen:is(.phone, .portrait) .info.unit.open .uport { width: 52px; height: 52px; border-radius: 14px; }
+.screen:is(.phone, .portrait) .info.unit.open .uport .figpic { height: 64px; margin-bottom: -8px; }
+.screen:is(.phone, .portrait) .info.unit.open .ubody { flex-direction: column; align-items: flex-start; gap: 6px; }
+.screen:is(.phone, .portrait) .info.unit.open .ubody > b { font-size: 18px; }
+.screen:is(.phone, .portrait) .info.unit.open .stats { flex-direction: column; align-items: flex-start; gap: 4px; }
+.screen:is(.phone, .portrait) .info.unit.open .st::after { content: attr(title); font: 400 11.5px/1 var(--ui); color: var(--ink-2); margin-left: 4px; }
+.screen:is(.phone, .portrait) .info.unit.open::after { transform: rotate(90deg); align-self: flex-start; margin-top: 4px; }
+
+/* ---- landscape phone: turn buttons, bottom right ---- */
+.screen.phone .bar { gap: 6px; align-items: flex-end; margin: 0 max(8px, env(safe-area-inset-right, 0px)) max(8px, env(safe-area-inset-bottom, 0px)) 0; }
+.screen.phone .bar .row { gap: 6px; align-items: center; justify-content: flex-end; }
+.screen.phone .bar .row button { flex: none; min-height: 44px; height: 44px; padding: 0 18px; border-radius: 999px; font-size: 14px; }
+.screen.phone .bar .row button.withicon { width: 44px; padding: 0; background: var(--glass); border-color: var(--hair); box-shadow: var(--glass-sh); }
+.screen.phone .bar .row button.withicon:disabled { opacity: .45; }
+.screen.phone .bar .withicon .ic { width: 19px; height: 19px; }
+.screen.phone .bar .row button[data-act='share'] { padding: 0 14px; font-size: 12.5px; font-weight: 700; color: var(--ink-2); background: var(--glass); border-color: var(--hair); box-shadow: var(--glass-sh); }
+/* Waiting / thinking: a small pill, never a banner. */
+.screen.phone .thinking, .screen.portrait .thinking {
+  flex: 0 1 auto; min-height: 0; padding: 7px 14px; border-radius: 999px; max-width: 48vw;
+  font: 500 12.5px/1.25 var(--ui); letter-spacing: .01em; color: var(--ink-2);
+  background: var(--glass); border: 1px solid var(--hair); box-shadow: var(--glass-sh);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;
+}
+.screen.phone .tray { max-width: 54vw; gap: 6px; }
+.screen.phone .chip { min-height: 44px; padding: 2px 10px 2px 4px; background: var(--glass); border-color: var(--hair); font-size: 13px; }
+.screen.phone .chip.on { background: linear-gradient(180deg, #3a2e1c, #2a2115); border-color: var(--brass); }
+.screen.phone .chip svg { width: 30px; height: 22px; }
+.screen.phone :is(.cam, .zoom) button, .screen.portrait :is(.cam, .zoom) button { background: var(--glass); border-color: var(--hair); box-shadow: var(--glass-sh); }
+
+/* ---- portrait: hint and piece chip float over the board; the dock keeps only the buttons ---- */
+.screen.portrait .hud { min-height: 0; padding: 5px 6px; gap: 8px; margin-bottom: 6px; }
+.screen.portrait .who { font-size: 17px; }
+.screen.portrait .who .crest { width: 36px; height: 36px; }
+.screen.portrait .who .crest svg { width: 20px; height: 24px; }
+.screen.portrait .dice { gap: 3px; opacity: .8; }
+.screen.portrait .dice:has(.spin) { opacity: 1; }
+.screen.portrait .die { width: 20px; height: 20px; padding: 2.5px; border-radius: 5px; }
+.screen.portrait .die i { width: 3.6px; height: 3.6px; }
+.screen.portrait .points b { font-size: 24px; }
+.screen.portrait .points span { font-size: 8px; }
+.screen.portrait .info {
+  grid-area: stage; align-self: start; justify-self: center; z-index: 3;
+  margin: 8px max(10px, env(safe-area-inset-right, 0px)) 0 max(10px, env(safe-area-inset-left, 0px));
+  max-width: calc(100% - 20px); min-height: 0; padding: 7px 12px;
+  font: 400 12.5px/1.3 var(--ui); text-align: center;
+  background: var(--glass); border: 1px solid var(--hair); border-radius: 14px; box-shadow: var(--glass-sh);
+}
+.screen.portrait .info:empty { display: none; }
+.screen.portrait .info.unit { text-align: left; }
+.screen.portrait .bar {
+  padding-top: 10px; border-top: 1px solid var(--hair); border-radius: var(--r-xl) var(--r-xl) 0 0;
+  box-shadow: 0 -10px 24px rgba(0, 0, 0, .35);
+}
+.screen.portrait .bar .row button { min-height: 46px; }
+.screen.portrait .bar .row:has(.thinking) { justify-content: center; align-items: center; }
+/* Reroll / march / undo: icon tokens (the label stays for screen readers). */
+.screen:is(.phone, .portrait) .bar .withicon span { display: inline; position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.screen.portrait .bar .row button.withicon { flex: none; width: 46px; padding: 0; border-radius: 50%; }
+.screen.portrait .bar .row button[data-act='end'] { white-space: nowrap; }
+/* ===== end space pass ===== */

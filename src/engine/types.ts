@@ -17,6 +17,9 @@ export interface Unit {
   ran?: number;
   /** Arrows shot this battle (when volleys are limited). */
   shots?: number;
+  /** Which way the piece faces: from the first hex towards the second (its last step, or the piece it last
+   *  struck). Kept until it next moves; none = facing the enemy's side of the board. */
+  face?: [Hex, Hex];
 }
 
 /** draft = buying an army, deploy = placing it in secret, then the battle: roll / act. */
@@ -45,6 +48,8 @@ export type LogEntry =
       from: Hex;
       at: Hex;
       cost: number;
+      /** The target stood in the cover of the trees (forest cover rule): the shot did 1 less. */
+      covered?: boolean;
     }
   | { kind: 'endTurn'; turn: number; player: Player }
   | { kind: 'win'; turn: number; player: Player; reason: WinReason };

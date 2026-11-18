@@ -4,13 +4,14 @@
 // far rows are squashed and smaller, and pieces, trees and bridges stand up from the ground.
 
 import { CONFIG, type GameConfig, type TerrainId, type TimeOfDay, type UnitTypeId, type WeatherKind } from '../config';
-import type { AttackPreview, GameState, Hex, Player, Reach } from '../engine';
+import type { AttackPreview, GameState, Hex, Player, Reach, Unit } from '../engine';
 import { maxHp, neighbors } from '../engine';
 import { sides } from './factions';
 import { hexName } from './i18n';
 import { ART_VERSION, SPRITES } from './sprites';
 import { artAt, BUILD_SCALE, TREE_SCALE, BIOME_SCENERY, biomeId, biomeOf, biomePics, detailUrlOf, groundUrlOf, propsOf, riverFile, treeKinds, treeUrlOf } from './biomes';
 import { armyColor, healthBar, unitSymbol } from './symbols';
+import { sideColor, sideColorsOn, sideDashed } from './sides';
 
 const S = 34; // hex radius in SVG units
 const R3 = Math.sqrt(3);
@@ -307,9 +308,9 @@ const PROP_MIX = [0, 1, 0, 1, 0, 2, 1, 3, 0, 4, 1, 6, 0, 5, 2, 7];
 const PROP_URL = (i: number) => `${import.meta.env.BASE_URL}map/prop-${i + 1}.webp?v=2`;
 /** Carved castle and village pieces, each drawn from 8 directions (sc-<name>-<direction>.webp).
  *  Picture size in pixels (_art/scenery-manifest.json), foot at bottom centre. */
-export const SCENERY = { wall: [250, 311], gate: [258, 316], tower: [270, 502], house: [296, 311], house2: [296, 310], reeds: [110, 153], boulder: [166, 94] } as const satisfies Record<string, Pt>;
+export const SCENERY = { wall: [250, 311], gate: [258, 316], tower: [270, 502], house: [306, 323], house2: [302, 310], reeds: [110, 153], boulder: [196, 94] } as const satisfies Record<string, Pt>;
 export type SceneryId = keyof typeof SCENERY;
-export const SC_URL = (name: SceneryId, dir: string) => `${import.meta.env.BASE_URL}map/sc-${name}-${dir}.webp?v=1`;
+export const SC_URL = (name: SceneryId, dir: string) => `${import.meta.env.BASE_URL}map/sc-${name}-${dir}.webp?v=2`;
 // ---------- pictures ----------
 // Every picture on the board (pieces, trees, scenery) is loaded once into a hidden sheet that stays in the page,
 // and the board only points at it. Turning a piece to another view is then instant: nothing is loaded, so nothing blinks.
@@ -524,7 +525,7 @@ function carved(name: SceneryId | string, gx: number, gy: number, turn: number, 
   const size = (SCENERY as Record<string, Pt>)[name] ?? BIOME_SCENERY[name] ?? SCENERY.house; // biomes: a saloon, a yurt, a pagoda...
   const f = 0.27 * k * scale;
   const [w, hh] = [size[0] * f, size[1] * f];
-  return { svg: pic((name in SCENERY ? SC_URL(name as SceneryId, dir) : `${import.meta.env.BASE_URL}map/sc-${name}-${dir}.webp?v=1`), size as unknown as Pt, sx - w / 2, sy - hh + 1.5 * k, w, hh), sy };
+  return { svg: pic((name in SCENERY ? SC_URL(name as SceneryId, dir) : `${import.meta.env.BASE_URL}map/sc-${name}-${dir}.webp?v=2`), size as unknown as Pt, sx - w / 2, sy - hh + 1.5 * k, w, hh), sy };
 }
 
 /** Castle walls, towers, gateways and houses, standing on their hex. In the flat top-down view they are drawn as roofs. */
@@ -663,6 +664,8 @@ export interface Overlay {
   danger: Hex[];
   /** A move waiting for a second tap: the route to show, ending at the destination. */
   route: Hex[];
+  /** camera v2: your pieces an enemy could reach and hit next turn (unit ids): a soft red pulse under each. */
+  threat?: Set<string>;
 }
 
 /** One-off effects for what just happened: they play once, on the render right after. */
@@ -710,12 +713,28 @@ function lookFor(owner: Player, v: View, s: GameState): Look {
   const redSide = flat({ col: 0, row: mid }, v);
   const blueSide = flat({ col: cols - 1, row: mid }, v);
   const [from, to] = owner === 'red' ? [redSide, blueSide] : [blueSide, redSide];
+  return lookAlong(v, from, to);
+}
+
+/** The side of its figure a piece shows when it faces from map point `from` towards map point `to`. */
+function lookAlong(v: View, from: Pt, to: Pt): Look {
   const [rx, ry] = turned(v, to[0] - from[0], to[1] - from[1]); // ry > 0 = towards the viewer
   const turn = Math.atan2(Math.abs(rx), ry); // 0 = facing us, π = facing away
   const n = Math.round(turn / (Math.PI / 4)); // 0 front, 1 front diagonal, 2 side, 3 back diagonal, 4 back
   const side = rx > 0 ? 'right' : 'left';
   const dir = ['front', `front-${side}`, side, `back-${side}`, 'back'][n];
   return { view: VIEWS[n], flip: rx > 0, dir };
+}
+
+/** Forest cover: a small leaf beside a target's damage badge, the trees take 1 off the shot. */
+const COVER_LEAF = '<g transform="translate(-13 -9)" class="cover-leaf"><circle r="7.5" fill="#2f6b2a" stroke="#d9f2c4" stroke-width="1.2"/><path d="M-3.6 3.4C-3.8-1.8.2-4.6 4-4.2 4.2.6.8 3.8-3.6 3.4ZM-3.6 3.4L1.6-1.6" fill="#bfe8a0" stroke="#173d14" stroke-width=".8"/></g>';
+
+/** A piece's own facing: the way it last walked or struck (kept by the engine until it moves again),
+ *  else its army's facing towards the enemy. Snapped to the 8 views like everything else. */
+function lookOf(u: Unit, v: View, looks: Record<Player, Look>): Look {
+  if (!u.face) return looks[u.owner];
+  const [a, b] = [flat(u.face[0], v), flat(u.face[1], v)];
+  return a[0] === b[0] && a[1] === b[1] ? looks[u.owner] : lookAlong(v, a, b);
 }
 
 /** Which straight views of an aiming piece show it shooting sideways (see figure()). */
@@ -739,6 +758,15 @@ const ART_SCALE = 0.26 * 80 / 150;
 const ART_OF: Record<string, string> = { deputy: 'lightInfantry' };
 const SPRITE_URL = (fac: string, type: string, view: string) => `${import.meta.env.BASE_URL}pieces/${fac}/${ART_OF[type] ?? type}-${view}.webp?v=${ART_VERSION}`;
 
+/** side colours: the ring on the ground round a piece's base. With side colours on (src/ui/sides.ts) it says whose
+ *  piece it is: yours solid and bright, the enemy's dashed and darker, over a thin dark line so it reads on any ground. */
+function baseRing(owner: Player, k: number): string {
+  const ell = `cx="0" cy="${k.toFixed(1)}" rx="${(17 * k).toFixed(1)}" ry="${(5.6 * k).toFixed(1)}" fill="none"`;
+  if (!sideColorsOn()) return `<ellipse ${ell} stroke="${armyColor(owner)}" stroke-width="${(2 * k).toFixed(1)}" opacity=".9"/>`;
+  const dash = sideDashed(owner) ? ` stroke-dasharray="${(5 * k).toFixed(1)} ${(3 * k).toFixed(1)}"` : '';
+  return `<ellipse ${ell} stroke="#140d06" stroke-width="${(4.2 * k).toFixed(1)}" opacity=".55"/><ellipse ${ell} stroke="${sideColor(owner)}" stroke-width="${(2.6 * k).toFixed(1)}"${dash}/>`;
+}
+
 /** The carved figure for this piece in 2.5D, if its army has one. */
 function figure(type: UnitTypeId, owner: Player, hp: number, k: number, look: Look): string | null {
   const fac = sides[owner];
@@ -753,7 +781,7 @@ function figure(type: UnitTypeId, owner: Player, hp: number, k: number, look: Lo
     const full8 = maxHp(type);
     const bar8 = hp > 0 && hp < full8 ? `<g transform="translate(0 ${(7 * k).toFixed(1)}) scale(${(0.7 * k).toFixed(3)}) translate(0 -16)">${healthBar(hp, full8)}</g>` : '';
     return `${castShadow(k)}<ellipse cx="0" cy="${k.toFixed(1)}" rx="${(13 * k).toFixed(1)}" ry="${(4 * k).toFixed(1)}" fill="#000" opacity=".35"/>
-    <ellipse cx="0" cy="${k.toFixed(1)}" rx="${(17 * k).toFixed(1)}" ry="${(5.6 * k).toFixed(1)}" fill="none" stroke="${armyColor(owner)}" stroke-width="${(2 * k).toFixed(1)}" opacity=".9"/>
+    ${baseRing(owner, k)}
     ${pic(SPRITE_URL(fac, type, look.dir), true8, -w8 / 2, -h8 + 4 * k, w8, h8)}${bar8}`;
   }
   const wanted: ViewId = AIMS_FORWARD[`${fac}/${type}`]?.includes(look.view) ? (look.view === 'front' ? 'fdiag' : set.bdiag ? 'bdiag' : 'side') : look.view;
@@ -766,7 +794,7 @@ function figure(type: UnitTypeId, owner: Player, hp: number, k: number, look: Lo
   const bar = hp > 0 && hp < full ? `<g transform="translate(0 ${(7 * k).toFixed(1)}) scale(${(0.7 * k).toFixed(3)}) translate(0 -16)">${healthBar(hp, full)}</g>` : '';
   const flip = view !== 'front' && view !== 'back' && look.flip ? ' transform="scale(-1 1)"' : '';
   return `${castShadow(k)}<ellipse cx="0" cy="${k.toFixed(1)}" rx="${(13 * k).toFixed(1)}" ry="${(4 * k).toFixed(1)}" fill="#000" opacity=".35"/>
-    <ellipse cx="0" cy="${k.toFixed(1)}" rx="${(17 * k).toFixed(1)}" ry="${(5.6 * k).toFixed(1)}" fill="none" stroke="${armyColor(owner)}" stroke-width="${(2 * k).toFixed(1)}" opacity=".9"/>
+    ${baseRing(owner, k)}
     ${pic(SPRITE_URL(fac, type, view), size, -w / 2, -h + 4 * k, w, h, flip !== '')}${bar}`;
 }
 
@@ -794,12 +822,19 @@ function piece(type: UnitTypeId, owner: Player, hp: number, L: Lens, [sx, sy]: P
   const fig = L.tilt && look ? figure(type, owner, hp, k, look) : null;
   if (fig) return `<g transform="translate(${sx} ${sy})">${baseGlow(k)}<g class="${cls}">${fig}</g></g>`;
   const counter = unitSymbol(type, owner, hp);
-  if (!L.tilt) return `<g transform="translate(${sx} ${sy}) scale(${k.toFixed(3)})">${baseGlow(1, true)}<g class="${cls}">${counter}</g></g>`;
+  if (!L.tilt) return `<g transform="translate(${sx} ${sy}) scale(${k.toFixed(3)})">${baseGlow(1, true)}${flatRing(owner)}<g class="${cls}">${counter}</g></g>`;
   return `<g transform="translate(${sx} ${sy})"><g class="${cls}">
     <ellipse cx="${5 * k}" cy="${1 * k}" rx="${19 * k}" ry="${5.5 * k}" fill="#000" opacity=".35"/>
-    <rect x="${-16.4 * k}" y="${-4 * k}" width="${32.8 * k}" height="${4 * k}" rx="${1.5 * k}" fill="${armyColor(owner)}" filter="brightness(.6)" opacity=".9"/>
+    <rect x="${-16.4 * k}" y="${-4 * k}" width="${32.8 * k}" height="${4 * k}" rx="${1.5 * k}" fill="${sideColorsOn() ? sideColor(owner) : armyColor(owner)}" filter="${sideColorsOn() ? 'none' : 'brightness(.6)'}" opacity=".9"/>
     <g transform="translate(0 ${-15.5 * k}) scale(${0.82 * k})">${counter}</g>
   </g></g>`;
+}
+
+/** side colours: a flat counter (seen from straight above) gets a frame in its side colour round its army-coloured box. */
+function flatRing(owner: Player): string {
+  if (!sideColorsOn()) return '';
+  const dash = sideDashed(owner) ? ' stroke-dasharray="6 3.5"' : '';
+  return `<rect x="-23.5" y="-17.5" width="47" height="35" rx="5" fill="none" stroke="#140d06" stroke-width="5" opacity=".5"/><rect x="-23.5" y="-17.5" width="47" height="35" rx="5" fill="none" stroke="${sideColor(owner)}" stroke-width="3"${dash}/>`;
 }
 
 /** Height of a piece's middle above its hex, for badges, numbers and arrows. */
@@ -1204,11 +1239,13 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
     const at = L.pt(x, y);
     const k = L.size(x, y);
     if (u.id === o.selected) onHex(u.pos, `<polygon points="${corners(u.pos, v, L, S - 2)}" fill="#ffe27a" fill-opacity=".6" stroke="#c99a00" stroke-width="3"/>`);
+    // camera v2: a piece of yours within an enemy's reach breathes a soft red ring on the ground.
+    if (o.threat?.has(u.id)) onHex(u.pos, `<ellipse class="threat-ring" cx="${at[0].toFixed(1)}" cy="${(at[1] + (L.tilt ? k : 0)).toFixed(1)}" rx="${(23 * k).toFixed(1)}" ry="${((L.tilt ? 7.5 : 21) * k).toFixed(1)}" pointer-events="none"/>`);
     const p = o.targets.get(u.id);
     if (p) onHex(u.pos, `<polygon points="${corners(u.pos, v, L, S - 3)}" fill="#e53935" fill-opacity=".2" stroke="#d32f2f" stroke-width="3" stroke-dasharray="6 4"/>`);
     const hit = fx.hits.find((h) => !h.killed && same(h.at, u.pos));
     lastPic = null;
-    let svg = piece(u.type, u.owner, u.hp, L, at, k, o.spent.has(u.id) ? 'spent' : '', looks[u.owner]);
+    let svg = piece(u.type, u.owner, u.hp, L, at, k, o.spent.has(u.id) ? 'spent' : '', lookOf(u, v, looks));
     const figBox = figureBoxAt(L, at, k);
     if (hit) svg = `<g class="hit" style="animation-delay:${impact(hit)}s">${svg}</g>`;
     // A melee attacker lunges at its target and comes back.
@@ -1233,7 +1270,7 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
     standing.push({ depth: L.depth(x, y), svg, box: u.id === o.selected ? null : figBox, on: `${u.pos.col},${u.pos.row}` });
     if (p) {
       const by = at[1] - lift(L, k) - 17 * k;
-      top.push(`<g transform="translate(${(at[0] + 17 * k).toFixed(1)} ${by.toFixed(1)})" class="badge"><circle r="10" fill="#d32f2f"/><text y="4">${p.kills ? '✕' : `−${p.damage}`}</text></g>`);
+      top.push(`<g transform="translate(${(at[0] + 17 * k).toFixed(1)} ${by.toFixed(1)})" class="badge"><circle r="10" fill="#d32f2f"/><text y="4">${p.kills ? '✕' : `−${p.damage}`}</text>${p.covered ? COVER_LEAF : ''}</g>`);
     }
   }
 
@@ -1563,7 +1600,7 @@ export function pickHex(s: GameState, o: Overlay, v: View, X: number, Y: number,
       const at = L.pt(x, y);
       const k = L.size(x, y);
       lastPic = null;
-      piece(u.type, u.owner, u.hp, L, at, k, '', looks[u.owner]);
+      piece(u.type, u.owner, u.hp, L, at, k, '', lookOf(u, v, looks));
       const b = figureBoxAt(L, at, k);
       if (!b) continue;
       const [x0, y0, x1, y1] = inner(b, 0.22);
@@ -1605,7 +1642,54 @@ export function targetFrame(s: GameState, o: Overlay, v: View, withCover: boolea
     const [, sy] = L.pt(x, y);
     b[1] = Math.min(b[1], sy - 45 * L.size(x, y));
   }
+  // camera v2: the enemy pieces it can strike stand up from their hexes too; keep their heads on screen as well.
+  if (L.tilt) {
+    const looks: Record<Player, Look> = { red: lookFor('red', v, s), blue: lookFor('blue', v, s) };
+    for (const id of o.targets.keys()) {
+      const u = s.units.find((x) => x.id === id);
+      if (!u) continue;
+      const [x, y] = flat(u.pos, v);
+      const at = L.pt(x, y);
+      const k = L.size(x, y);
+      lastPic = null;
+      piece(u.type, u.owner, u.hp, L, at, k, '', lookOf(u, v, looks));
+      const fb = figureBoxAt(L, at, k);
+      if (fb) b[1] = Math.min(b[1], inner(fb)[1]);
+    }
+  }
   if (!withCover) return { box: b, total: 0, covered: 0 };
   renderBoard(s, o, v);
   return { box: b, ...lastCover };
+}
+
+// ---------- camera v2 helpers ----------
+
+/** camera v2: where a hex's middle is on screen (on top of raised ground), in stage pixels. */
+export function hexScreen(s: GameState, v: View, h: Hex): Pt {
+  const L = lens(v, terraces(s, v));
+  return L.pt(...flat(h, v));
+}
+
+/** camera v2: the screen box round some hexes and the figures standing on them (heads included), or null. */
+export function hexesBox(s: GameState, v: View, hexes: Hex[]): Box | null {
+  if (!hexes.length) return null;
+  const L = lens(v, terraces(s, v));
+  const looks: Record<Player, Look> = { red: lookFor('red', v, s), blue: lookFor('blue', v, s) };
+  const b = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const h of hexes) {
+    for (const [px, py] of cornerPts(h, v, L, S * 0.8)) {
+      if (!Number.isFinite(px) || !Number.isFinite(py)) return null;
+      b[0] = Math.min(b[0], px); b[1] = Math.min(b[1], py); b[2] = Math.max(b[2], px); b[3] = Math.max(b[3], py);
+    }
+    const u = L.tilt ? s.units.find((x) => x.pos.col === h.col && x.pos.row === h.row) : undefined;
+    if (!u) continue;
+    const [x, y] = flat(h, v);
+    const at = L.pt(x, y);
+    const k = L.size(x, y);
+    lastPic = null;
+    piece(u.type, u.owner, u.hp, L, at, k, '', lookOf(u, v, looks));
+    const fb = figureBoxAt(L, at, k);
+    if (fb) b[1] = Math.min(b[1], inner(fb)[1]);
+  }
+  return b;
 }

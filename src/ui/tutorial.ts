@@ -118,7 +118,7 @@ export function enemyAction(s: GameState): AiAction | null {
   const a = ENEMY[s.turn]?.[done];
   if (!a) return null;
   // Anything off-script (a piece gone) just ends the turn.
-  if (a.kind !== 'take' && a.kind !== 'reroll' && !getUnit(s, a.unitId)) return null;
+  if (a.kind !== 'take' && a.kind !== 'reroll' && a.kind !== 'march' && !getUnit(s, a.unitId)) return null;
   if ((a.kind === 'attack' || a.kind === 'shoot') && !getUnit(s, a.targetId)) return null;
   return a;
 }
@@ -164,8 +164,8 @@ export const STEPS: Step[] = [
   {
     id: 'points', lesson: 1, next: true,
     text: (s) => ({
-      en: `The dice gave you ${s.points} move points (top right): walking, hitting and shooting all spend them.`,
-      ru: `Кубики дали вам ${s.points} очков хода (справа вверху): на них вы ходите, бьёте и стреляете.`,
+      en: `The dice gave you ${s.points} move points (at the top): walking, hitting and shooting all spend them.`,
+      ru: `Кубики дали вам ${s.points} очков хода (вверху): на них вы ходите, бьёте и стреляете.`,
     }),
     target: () => ({ kind: 'look', sel: '.points' }),
     done: (_s, _sel, acked) => acked.has('points'),

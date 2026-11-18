@@ -1,8 +1,8 @@
 // The campaign: eight historical battles (and two clearly labelled "what ifs"), played in order against the computer.
 // Each one has a fixed map, fixed armies already standing where they stood, and sometimes a turn limit.
 // The player always leads Red (moves first, left side); the computer leads Blue.
-// Progress lives in localStorage 'boc-campaign': the stars won per scenario. The normal saved game is only
-// replaced when a scenario is actually started (it then becomes the current game like any battle).
+// Progress lives in localStorage 'boc-campaign': the stars won per scenario. A started scenario gets its own
+// slot in the saved-games list (src/ui/saves.ts) like any battle; it never replaces another saved game.
 
 import { CONFIG, type GameConfig, type Placement } from '../config';
 import { armyValue, makeUnit, newGame, type GameState, type Player } from '../engine';

@@ -217,6 +217,12 @@ export interface GameConfig {
     snowCavalry: boolean;
     /** Fog: no shot reaches further than `weatherRules.fogMaxRange` hexes. */
     fogCap: boolean;
+    /** Cover of the trees: a shot at a piece standing at the edge of a wood, with the trees between it and the
+     *  shooter (a forest hex next to the target that is nearer the shooter), does 1 less damage (0 = wasted). */
+    forestCover: boolean;
+    /** Battle lines: how far apart the armies set up. 'normal' = each at its own edge (Dad's rules),
+     *  'close' = both deploy zones moved towards the middle, 'far' = only the back columns. */
+    battleLines: 'close' | 'normal' | 'far';
   };
   /** The battle's light and weather (set from the battle settings; none = a clear day). */
   weather?: { time: TimeOfDay; kind: WeatherKind };
@@ -334,6 +340,8 @@ export const CONFIG: GameConfig = {
     rainRange: false,
     snowCavalry: false,
     fogCap: false,
+    forestCover: false,
+    battleLines: 'normal',
   },
   weatherRules: { rainRangeLoss: 1, fogMaxRange: 4, snowRiderSlow: 1 },
   army: {

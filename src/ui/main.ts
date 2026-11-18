@@ -28,6 +28,9 @@ import {
   routeTo,
   startSession,
   takeHex,
+  canMarch,
+  march,
+  noContact,
   strikeTargets,
   undo,
   unitAt,
@@ -49,18 +52,21 @@ import {
   type Result,
   type Session,
 } from '../engine';
-import { ARROW_S, groundSize, groundUrl, NO_EFFECTS, STEP_MS, groundTransform, hasGround, groundParts, detailBox, DETAIL_URL, hexOnMap, loadGround, mapSize, pickHex, renderBoard, screenToGround, targetFrame, viewCube, type Camera, type Effects, type Overlay } from './board';
+import { ARROW_S, groundSize, groundUrl, NO_EFFECTS, STEP_MS, groundTransform, hasGround, groundParts, detailBox, DETAIL_URL, hexOnMap, loadGround, mapSize, pickHex, renderBoard, screenToGround, targetFrame, viewCube, hexScreen, hexesBox, type Camera, type Effects, type Overlay } from './board';
 import { errorText, logText, playerName, reasonText, t, unitName, type Key, type Lang } from './i18n';
 import { unitIcon } from './symbols';
+import { paintSideVars, setMine, setSideMode, sideColor, sideMode } from './sides';
 import { ERAS, ERA_OF, FACTIONS, FACTION_ORDER, factionOf, rosterOf, sides, type FactionId } from './factions';
 import { morph, morphInto } from './morph';
 import { placeWeather, weatherPanel } from './weather';
 import { ART_VERSION, SPRITES } from './sprites';
 import { createCode, fetchGame, newId, normCode, pushGame, resolveCode } from './online';
+import { agoText, browserStore, deleteSlot, listSlots, migrate, newSlotId, readSlot, writeSlot } from './saves';
 import { initReplay, replayControls, replayState, replaying, resultButtons } from './replay';
 import { isMuted, mixerHtml, musicOn, setMusic, sound, toggleMusic, toggleMute } from './sound';
 import { fightSounds, marchSounds, prepareVoices, selectVoice, toggleVoices, victoryVoice, voiceMode } from './voices';
 import { cachedThumb, paintThumb, thumbAspect } from './thumb';
+import { READY_ARMIES, armyGallery, armyShowcase, choiceList, initShowcase, st, summaryRow, turnFigures } from './setupui';
 import { enemyAction as tutorialEnemy, initTutorial, startTutorial, tutorialLabel, tutorialOn, tutorialRng } from './tutorial';
 import { BIOME_IDS, BIOMES, HOME, HOME_NAMES, type BiomeId } from './biomes';
 import { DADS_RULES, RECOMMENDED, applySettings, boardFor, fixedPoints, loadSettings, newSeed, saveSettings, type DiceId, type MapId, type Settings } from './settings';
@@ -80,8 +86,7 @@ function loadLang(): Lang {
 
 // ---------- saving ----------
 // The game is saved after every change, so closing the app or locking the phone loses nothing.
-
-const SAVE_KEY = 'boc-save-v1';
+// Every game has its own slot in the saved-games list (src/ui/saves.ts): a new game never erases the last.
 
 type Mode = 'pvp' | 'ai' | 'online';
 /** An online game: its id (the invite link), which side this phone plays, and the last version seen (-1 = not loaded yet). */
@@ -104,28 +109,75 @@ interface Saved {
   net?: Net | null;
 }
 
+// ---------- saved games ----------
+/** What the saved-games list shows for a slot, kept in the small index so the list never parses whole games. */
+interface SlotInfo {
+  mode: Mode;
+  red: FactionId;
+  blue: FactionId;
+  turn: number;
+  phase: GameState['phase'];
+  current: Player;
+  winner?: Player | null;
+  scenario?: string;
+  /** Online: the game's id in Firestore (games/{id}) and this phone's side. */
+  net?: string;
+  me?: Player;
+}
+const store = browserStore();
+function validSaved(d: unknown): d is Saved {
+  const saved = d as Saved;
+  const ok = saved?.state?.phase && Array.isArray(saved.state.units) && saved.state.reserve && 'advance' in saved.state;
+  if (!ok) return false;
+  const want = saved.settings?.size === 'large' ? [33, 19] : [25, 15];
+  return saved.board?.[0] === want[0] && saved.board?.[1] === want[1];
+}
+function slotInfo(d: Saved): SlotInfo {
+  const sides = d.settings?.sides ?? { red: 'novgorod', blue: 'teutonic' };
+  return {
+    mode: d.mode, red: sides.red as FactionId, blue: sides.blue as FactionId, turn: d.state.turn, phase: d.state.phase,
+    current: d.state.current, winner: d.state.winner ?? null, scenario: d.settings?.scenario,
+    ...(d.mode === 'online' && d.net ? { net: d.net.id, me: d.net.me } : {}),
+  };
+}
+migrate(store, (d) => (validSaved(d) ? slotInfo(d) : null));
+/** The slot the game on screen saves into (null: nothing to save yet). */
+let slotId: string | null = null;
+/** The saved-games list is open (over the start screen or the game). */
+let savesOpen = false;
+/** The slot whose Delete was tapped once: it asks before deleting. */
+let confirmDelete: string | null = null;
+/** Online, before setup: "Host a game" or "Join with code" ('pick'), or the code box ('join'). */
+let onlineStep: null | 'pick' | 'join' = null;
+/** What was last written, so redraws that change nothing don't rewrite (or re-date) the slot. */
+let lastSaved: unknown[] = [];
+
 function loadGame(): Saved | null {
-  try {
-    const raw = localStorage.getItem(SAVE_KEY);
-    if (!raw) return null;
-    const saved = JSON.parse(raw) as Saved;
-    const ok = saved?.state?.phase && Array.isArray(saved.state.units) && saved.state.reserve && 'advance' in saved.state;
-    const want = saved.settings?.size === 'large' ? [33, 19] : [25, 15];
-    const sameBoard = saved.board?.[0] === want[0] && saved.board?.[1] === want[1];
-    return ok && sameBoard ? saved : null;
-  } catch {
-    return null;
+  // Opened from an invite link to a game this phone already has: that one. Otherwise the newest.
+  const g = new URLSearchParams(location.search).get('g');
+  const list = listSlots<SlotInfo>(store);
+  const first = g ? list.find((m) => m.info?.net === g) : undefined;
+  for (const m of first ? [first, ...list.filter((x) => x !== first)] : list) {
+    const d = readSlot<Saved>(store, m.id);
+    if (validSaved(d)) {
+      slotId = m.id;
+      return d;
+    }
   }
+  return null;
 }
 
 function saveGame() {
-  if (tutorialOn()) return; // the tutorial plays in memory: the player's saved game stays as it was
-  try {
-    const data: Saved = { board: [CONFIG.board.cols, CONFIG.board.rows], state: sess.state, cover, mode, settings, net };
-    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
-  } catch {
-    /* storage full or blocked: play on without saving */
-  }
+  if (tutorialOn()) return; // the tutorial plays in memory: the player's saved games stay as they were
+  // Nothing is written while a menu screen is up over the game (picking a mode may already have changed it),
+  // nor for an online game that hasn't arrived yet.
+  if (!slotId || choosing || setupOpen || savesOpen || onlineStep || replaying()) return;
+  if (mode === 'online' && (!net || net.rev < 0)) return;
+  const key = [slotId, sess.state, cover, mode, settings, net?.id, net?.rev, net?.blue];
+  if (key.length === lastSaved.length && key.every((v, i) => v === lastSaved[i])) return;
+  const data: Saved = { board: [CONFIG.board.cols, CONFIG.board.rows], state: sess.state, cover, mode, settings, net };
+  if (writeSlot(store, slotId, data, slotInfo(data))) lastSaved = key;
+  /* storage full or blocked: play on without saving */
 }
 
 const saved = loadGame();
@@ -139,6 +191,8 @@ let setupOpen = false;
 let selected: string | null = null;
 let lang: Lang = loadLang();
 let message: string | null = null;
+/** The selected piece's card shows as a slim chip on phones; a tap on it opens the full card (and back). */
+let unitOpen = false;
 let rolling = false;
 let rollFaces: number[] = [];
 let confirmNew = false;
@@ -176,6 +230,7 @@ const roleKey = (id: string) => `boc-net-${id}`;
     net = { id: g, me, rev: -1 };
     netState = null;
     choosing = false;
+    slotId = newSlotId(); // saved games: the link's game gets its own slot once it arrives
   }
   if (mode === 'online') cover = false;
 }
@@ -210,6 +265,9 @@ async function joinByCode() {
   try { id = await resolveCode(code); } catch { joinBusy = false; joinErr = t(lang, 'codeNetErr'); return render(); }
   joinBusy = false;
   if (!id) { joinErr = t(lang, 'codeNone'); return render(); }
+  // Saved games: a game this phone already has is simply resumed.
+  const had = listSlots<SlotInfo>(store).find((m) => m.info?.net === id);
+  if (had && resumeSlot(had.id)) { joinText = ''; return; }
   // From here exactly as if the invite link had been opened.
   let me: Player = 'blue';
   try {
@@ -219,8 +277,11 @@ async function joinByCode() {
   mode = 'online';
   net = { id, me, rev: -1 };
   netState = null;
+  unsent = null;
+  slotId = newSlotId();
   choosing = false;
   setupOpen = false;
+  onlineStep = null;
   cover = false;
   joinText = '';
   history.replaceState(null, '', `?g=${id}`);
@@ -232,6 +293,47 @@ function leaveNet() {
   net = null;
   netState = null;
   history.replaceState(null, '', location.pathname);
+}
+
+// ---------- saved games: resume ----------
+/** Opens a saved game exactly where it was left. Online, it reconnects to the same game (games/{id}) and syncs on. */
+function resumeSlot(id: string): boolean {
+  const d = readSlot<Saved>(store, id);
+  if (!validSaved(d)) {
+    message = t(lang, 'slotGone');
+    render();
+    return false;
+  }
+  if (net) leaveNet();
+  unsent = null;
+  slotId = id;
+  lastSaved = [];
+  mode = d.mode === 'ai' ? 'ai' : d.mode === 'online' && d.net ? 'online' : 'pvp';
+  settings = d.settings ? { ...d.settings, options: { ...DADS_RULES, ...d.settings.options } } : loadSettings();
+  applySettings(settings);
+  sess = startSession(d.state);
+  net = mode === 'online' ? { ...d.net! } : null;
+  netState = net ? sess.state : null;
+  cover = mode !== 'online' && (d.cover || (mode === 'pvp' && (d.state.phase === 'draft' || d.state.phase === 'deploy')));
+  choosing = setupOpen = campaignOpen = savesOpen = menuOpen = inviting = pickingArmy = overHidden = false;
+  onlineStep = null;
+  confirmDelete = null;
+  selected = pending = null;
+  message = null;
+  draft = {};
+  tray = null;
+  joinCode = null;
+  prevLog = sess.state.log.length;
+  prevPos = new Map(sess.state.units.map((u) => [u.id, u.pos]));
+  if (net) {
+    try { store.set(roleKey(net.id), net.me); } catch { /* fine */ }
+    history.replaceState(null, '', `?g=${net.id}`);
+    cam = { ...cam, yaw: yawFor(net.me) };
+    lastAsk = 0;
+    lastBlueAsk = 0;
+  }
+  render();
+  return true;
 }
 let sending = false;
 let unsent: { rev: number; body: string } | null = null;
@@ -299,6 +401,14 @@ async function syncIn() {
   settings = { ...data.settings, options: { ...DADS_RULES, ...data.settings.options } };
   applySettings(settings);
   applyBlue();
+  // camera v2: the other player's moves arrive together; first glide to where they happened, then play them there.
+  if (!first) {
+    const ms = watchOnline(data.state);
+    if (ms) {
+      await new Promise((ok) => setTimeout(ok, ms));
+      if (!net || net.id !== id) return;
+    }
+  }
   sess = startSession(data.state);
   netState = sess.state;
   net.rev = r.rev;
@@ -372,6 +482,11 @@ let smartCam = (() => { try { return localStorage.getItem(SMART_KEY) !== '0'; } 
 /** smart camera: the selection it last looked at, and the glide it started (cancelled by any wheel or touch). */
 let smartFor: string | null = null;
 let leanGlide = -1;
+// camera v2 (see the "camera v2" section): enemy warnings on/off, and whether the player took the camera during the enemy's turn.
+const WARN_KEY = 'boc-warn';
+let warnOn = (() => { try { return localStorage.getItem(WARN_KEY) !== '0'; } catch { return true; } })();
+let userTookCam = false;
+let threatCache: { s: GameState; me: Player; mine: Set<string>; foes: Set<string> } | null = null;
 
 /** The camera turn that puts this side's army at the bottom of the screen, enemy at the top. */
 function yawFor(p: Player): number {
@@ -523,7 +638,7 @@ function tally(s: GameState): string {
     for (const ty of took[p]) counts.set(ty, (counts.get(ty) ?? 0) + 1);
     const lead = worth(p) - worth(other(p));
     const icons = [...counts].map(([ty, n]) => `<span class="tk">${unitIcon(ty, other(p))}${n > 1 ? `<i>×${n}</i>` : ''}</span>`).join('');
-    return `<span class="tside" title="${playerName(lang, p)}"><span class="fdot" style="background:${factionOf(p).color}"></span>${icons || '<i class="tnone">–</i>'}${lead > 0 ? `<b>+${lead}</b>` : ''}</span>`;
+    return `<span class="tside" title="${playerName(lang, p)}"><span class="fdot" style="background:${sideColor(p)}"></span>${icons || '<i class="tnone">–</i>'}${lead > 0 ? `<b>+${lead}</b>` : ''}</span>`;
   };
   return `<div class="tally" aria-label="${t(lang, 'statKills')}">${side('red')}${side('blue')}</div>`;
 }
@@ -533,7 +648,8 @@ function previewText(s: GameState, targetId: string, p: AttackPreview): string {
   const what = p.kind === 'attack' ? t(lang, 'attack') : t(lang, 'shoot');
   const end = p.kills ? `, ${t(lang, 'kills')}` : ` (${t(lang, 'hp')} ${target.hp} → ${p.hpAfter})`;
   const back = p.counter ? ` · ${t(lang, 'spearsBack')} −${p.counter}` : '';
-  return `${what}: ${unitName(lang, target.type, target.owner).toLowerCase()} −${p.damage} ${t(lang, 'hp')}${end} · ${t(lang, 'cost')} ${p.cost}${back}`;
+  const cover = p.covered ? ` · ${t(lang, p.damage > 0 ? 'inCover' : 'inCoverWasted')}` : '';
+  return `${what}: ${unitName(lang, target.type, target.owner).toLowerCase()} −${p.damage} ${t(lang, 'hp')}${end} · ${t(lang, 'cost')} ${p.cost}${back}${cover}`;
 }
 
 const setupPhase = (s: GameState) => s.phase === 'draft' || s.phase === 'deploy';
@@ -556,6 +672,7 @@ function overlay(s: GameState): Overlay {
     trail: battle ? lastEnemyTurn(s) : { moves: [], kills: [] },
     rings: own && CONFIG.units[own.type].ranged && !setupPhase(s) ? shotZone(s, own) : [],
     danger: dangerOn && battle ? threatZone(s) : [],
+    threat: warnOn && battle && !replaying() ? threats(s, sideMine(s)).mine : undefined,
     route: mine && pending ? routeTo(s, own.id, pending) : [],
   };
 }
@@ -806,11 +923,23 @@ const RULES: { key: keyof Settings['options']; on: Settings['options'][keyof Set
   { key: 'rainRange', on: true },
   { key: 'snowCavalry', on: true },
   { key: 'fogCap', on: true },
+  { key: 'forestCover', on: true },
 ];
 
 /** Which side's army the New battle screen is choosing, and whether the detailed rules are open. */
 let pickSide: Player = 'red';
 let rulesOpen = false;
+// ---- setup summary state: which sub-page of New battle is open, its slide, the army being shown, the title-screen gallery ----
+let setupPage: string | null = null;
+let setupAnim = '';
+let apFac: FactionId | null = null;
+let galleryOpen = false;
+/** A newly opened page starts at its top (render keeps the old scroll otherwise). */
+const toTop = () => {
+  const el = app.querySelector<HTMLElement>('.sheet-scroll');
+  if (el) el.scrollTop = 0;
+};
+initShowcase();
 
 /** Small white glyphs (24 x 24) for the rule rows, drawn on a coloured square. */
 const RULE_ICON: Record<keyof Settings['options'], string> = {
@@ -834,11 +963,13 @@ const RULE_ICON: Record<keyof Settings['options'], string> = {
   rainRange: '<path d="M7 13a4 4 0 0 1-.5-8 5.5 5.5 0 0 1 10.6 1.5A3.3 3.3 0 0 1 17 13z"/><path d="M8 16l-1 4M12 16l-1 4M16 16l-1 4" fill="none"/>',
   snowCavalry: '<path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9" fill="none"/>',
   fogCap: '<path d="M3 8c3-2 6 2 9 0s6-2 9 0M3 13c3-2 6 2 9 0s6-2 9 0M3 18c3-2 6 2 9 0s6-2 9 0" fill="none"/>',
+  forestCover: '<path d="M12 3l6 8h-3l4 6H5l4-6H6z"/><path d="M12 17v4" fill="none"/>',
+  battleLines: '<path d="M4 5v14M20 5v14M8 12h8" fill="none"/>',
 };
 
 const RULE_GROUPS: { title: Key; color: string; keys: (keyof Settings['options'])[] }[] = [
   { title: 'groupCombat', color: '#c2453a', keys: ['toughness', 'flanking', 'shieldWall', 'spears', 'charge', 'kingAura', 'kingsGuard'] },
-  { title: 'groupRanged', color: '#3f8f5a', keys: ['longShotFrom', 'volleys'] },
+  { title: 'groupRanged', color: '#3f8f5a', keys: ['longShotFrom', 'volleys', 'forestCover'] },
   { title: 'groupMove', color: '#3a6fb0', keys: ['stepMoves', 'unitSpeeds', 'zoneOfControl'] },
   { title: 'groupTurn', color: '#a8811a', keys: ['routAt', 'carryMax', 'rerolls', 'firstTurnBonus'] },
   { title: 'groupWeather', color: '#5a7f9e', keys: ['rainRange', 'snowCavalry', 'fogCap'] },
@@ -936,10 +1067,8 @@ function randomMapPanel(): string {
 }
 
 function setupScreen(): string {
-  const seg = (field: string, values: [string, string][], current: string) =>
-    `<div class="seg" role="radiogroup">${values
-      .map(([v, label]) => `<button role="radio" data-act="set" data-field="${field}" data-value="${v}" class="${v === current ? 'on' : ''}" aria-checked="${v === current}">${label}</button>`)
-      .join('')}</div>`;
+  // ---- setup summary: "View army" showcase sits over the whole sheet ----
+  if (apFac) return armyShowcase(lang, apFac, icon('back'), { side: mode === 'online' ? 'red' : pickSide });
   const isDad = RULES.every((r) => settings.options[r.key] === DADS_RULES[r.key]);
   const isRec = RULES.every((r) => settings.options[r.key] === RECOMMENDED[r.key]);
   const onCount = RULES.filter((r) => settings.options[r.key] !== DADS_RULES[r.key]).length;
@@ -955,8 +1084,8 @@ function setupScreen(): string {
     const f = FACTIONS[id];
     const mine = settings.sides[pickSide] === id;
     const theirs = settings.sides[other(pickSide)] === id;
-    return `<button data-act="faction" data-side="${pickSide}" data-value="${id}" class="ftile ${mine ? 'on' : ''} ${theirs ? 'taken' : ''}" aria-pressed="${mine}" style="--fc:${f.color}">
-      ${figurePic(id, 'king', 'front') || f.emblem}<span>${f.name[lang]}</span></button>`;
+    return `<div class="ftile-wrap"><button data-act="faction" data-side="${pickSide}" data-value="${id}" class="ftile ${mine ? 'on' : ''} ${theirs ? 'taken' : ''}" aria-pressed="${mine}" style="--fc:${f.color}">
+      ${figurePic(id, 'king', 'front') || f.emblem}<span>${f.name[lang]}</span></button><button data-act="ap-open" data-value="${id}" class="ftile-view" title="${st(lang, 'viewArmy')}" aria-label="${st(lang, 'viewArmy')}: ${f.name[lang]}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div>`;
   };
   // Armies grouped by the age they fought in.
   const tiles = ERAS.filter((era) => READY().some((id) => ERA_OF[id] === era)).map((era) => `<h4 class="era">${t(lang, `era${era[0].toUpperCase()}${era.slice(1)}` as Key)}</h4><div class="ftiles">${READY().filter((id) => ERA_OF[id] === era).map(tile).join('')}</div>`).join('');
@@ -985,46 +1114,64 @@ function setupScreen(): string {
         })
         .join('')}</div></div>`).join('');
 
-  return `<div class="sheet"><div class="sheet-body setup">
-    <h2><button data-act="setup-back" class="ghost back" aria-label="${t(lang, 'back')}">${icon('back')}</button>${t(lang, 'newBattle')}</h2>
-    <div class="sheet-scroll">
-      ${mode === 'online' ? `<div class="join-box"><h3>${t(lang, 'hostGame')}</h3><p class="join-host-sub">${t(lang, 'hostGameSub')}</p><button data-act="begin" class="primary wide">${t(lang, 'hostGameBtn')}</button><h3>${t(lang, 'joinWithCode')}</h3><div class="join-row"><input class="join-input" maxlength="7" value="${joinText}" placeholder="ABCDE" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" inputmode="text" aria-label="${t(lang, 'joinWithCode')}"><button data-act="join-code" class="primary" ${joinBusy ? 'disabled' : ''}>${t(lang, 'join')}</button></div>${joinErr ? `<p class="join-err">${joinErr}</p>` : ''}<h3>${t(lang, 'orNewGame')}</h3></div>` : ''}
+  // ---- setup summary: one screen of rows (iOS Settings), each opening its own page with a back arrow ----
+  const cap = (x: string) => x[0].toUpperCase() + x.slice(1);
+  const mapName = settings.map === 'home' ? st(lang, 'armyHome') : HOME_NAMES[settings.map]?.[lang] ?? t(lang, `map${cap(settings.map)}` as Key);
+  const mapPic = `<span class="srow-pic">${mapThumb((settings.map === 'home' ? HOME[settings.sides.red] : settings.map) as MapId, 120)}</span>`;
+  const time = settings.time ?? 'day';
+  const kind = settings.weather ?? 'clear';
+  const wxVal = `${t(lang, (time === 'random' ? 'wx_random' : `time_${time}`) as Key)}, ${t(lang, `wx_${kind}` as Key).toLowerCase()}`;
+  const diffs: [string, string][] = [['easy', t(lang, 'diffEasy')], ['normal', t(lang, 'diffNormal')], ['hard', t(lang, 'diffHard')]];
+  const budgets: [string, string, string?][] = [['20', `20 ${st(lang, 'points')}`, t(lang, 'skirmish')], ['30', `30 ${st(lang, 'points')}`], ['50', `50 ${st(lang, 'points')}`], ['80', `80 ${st(lang, 'points')}`, t(lang, 'epic')]];
+  const sizes: [string, string][] = [['standard', t(lang, 'sizeStandard')], ['large', t(lang, 'sizeLarge')]];
+  const lines: [string, string, string?][] = [['close', t(lang, 'linesClose'), t(lang, 'linesCloseSub')], ['normal', t(lang, 'linesNormal'), t(lang, 'linesNormalSub')], ['far', t(lang, 'linesFar'), t(lang, 'linesFarSub')]];
+  const dice: [string, string][] = [['1d6', t(lang, 'dice1')], ['2d6', t(lang, 'dice2')], ['3d6', t(lang, 'dice3')], ['fixed', `${t(lang, 'always')} ${fixedPoints(settings)}`]];
+  const valOf = (list: [string, string, string?][], v: string) => list.find((x) => x[0] === v)?.[1] ?? v;
+  const rulesVal = isRec ? t(lang, 'presetRecommended') : isDad ? t(lang, 'presetDad') : `${t(lang, 'presetCustom')} · ${onCount}`;
+
+  const pages: Record<string, [string, () => string]> = {
+    army: [st(lang, 'army'), () => `${mode === 'online' ? '' : `<div class="seg sub-tabs" role="radiogroup">${(['red', 'blue'] as Player[]).map((p) => `<button role="radio" data-act="pick-side" data-side="${p}" class="${pickSide === p ? 'on' : ''}" aria-checked="${pickSide === p}">${p === 'red' ? (mode === 'pvp' ? t(lang, 'sideFirst') : t(lang, 'sideYou')) : mode === 'ai' ? t(lang, 'sideComputer') : t(lang, 'sideSecond')}</button>`).join('')}</div>`}
+      ${tiles}
+      <p class="blurb">${FACTIONS[settings.sides[pickSide]].blurb[lang]}</p>
+      ${FACTIONS[settings.sides[pickSide]].champion ? `<p class="blurb champ">${FACTIONS[settings.sides[pickSide]].champion![lang]}</p>` : ''}`],
+    map: [t(lang, 'map'), () => `<div class="mtiles" style="margin-top:12px">${mapTiles}</div>${settings.map === 'random' ? randomMapPanel() : ''}${homeSection()}`],
+    rules: [t(lang, 'rules'), () => `<div class="presets" style="margin-top:14px">
+        ${preset('recommended', isRec, t(lang, 'presetRecommended'), t(lang, 'presetRecSub'), '<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z" fill="currentColor"/>')}
+        ${preset('dad', isDad, t(lang, 'presetDad'), t(lang, 'presetSimpleSub'), '<rect x="4" y="4" width="16" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="2" fill="currentColor"/>')}
+      </div>
+      <h3>${t(lang, 'customize')} <small style="letter-spacing:0;text-transform:none;font-weight:500">${onCount} ${t(lang, 'rulesOnCount')}</small></h3>
+      <div class="rgroups" style="margin-top:0">${groups}</div>`],
+    weather: [t(lang, 'weatherTitle'), () => weatherPanel(settings, lang).replace(/^\s*<h3>[^<]*<\/h3>/, '')],
+    budget: [st(lang, 'armySize'), () => choiceList('budget', budgets, String(settings.budget))],
+    difficulty: [t(lang, 'difficulty'), () => choiceList('difficulty', diffs, settings.difficulty ?? 'normal')],
+    size: [t(lang, 'boardSize'), () => choiceList('size', sizes, settings.size ?? 'standard')],
+    lines: [t(lang, 'battleLines'), () => choiceList('lines', lines, settings.options.battleLines ?? 'normal')],
+    dice: [t(lang, 'pointsEachTurn'), () => choiceList('dice', dice, settings.dice)],
+  };
+  const page = setupPage && pages[setupPage] ? setupPage : null;
+  const anim = setupAnim;
+  setupAnim = '';
+
+  const summary = `
       <div class="vs">
         ${side('red', mode === 'pvp' ? t(lang, 'sideFirst') : t(lang, 'sideYou'))}
         ${mode === 'online' ? `<span class="vs-mid">${t(lang, 'vs')}</span>` : `<button data-act="swap-sides" class="vs-swap" title="${t(lang, 'swapSides')}" aria-label="${t(lang, 'swapSides')}"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h15M15 4l4 4-4 4M20 16H5M9 12l-4 4 4 4"/></svg></button>`}
         ${mode === 'online' ? `<div class="vs-card" style="--fc:#6b6b6b"><span class="vs-who">${t(lang, 'sideOpponent')}</span><b style="font-size:34px;line-height:48px">?</b><b>${t(lang, 'theyPick')}</b></div>` : side('blue', mode === 'ai' ? t(lang, 'sideComputer') : t(lang, 'sideSecond'))}
       </div>
-      ${mode === 'ai' ? `<h3>${t(lang, 'difficulty')}</h3>${seg('difficulty', [['easy', t(lang, 'diffEasy')], ['normal', t(lang, 'diffNormal')], ['hard', t(lang, 'diffHard')]], settings.difficulty ?? 'normal')}` : ''}
-      ${tiles}
-      <p class="blurb">${FACTIONS[settings.sides[pickSide]].blurb[lang]}</p>
-      ${FACTIONS[settings.sides[pickSide]].champion ? `<p class="blurb champ">${FACTIONS[settings.sides[pickSide]].champion![lang]}</p>` : ''}
+      <div class="srows">
+        ${summaryRow('map', t(lang, 'map'), mapName, mapPic)}
+        ${summaryRow('budget', st(lang, 'armySize'), `${settings.budget} ${st(lang, 'points')}`)}
+        ${summaryRow('rules', t(lang, 'rules'), rulesVal)}
+        ${summaryRow('weather', t(lang, 'weatherTitle'), wxVal)}
+        ${mode === 'ai' ? summaryRow('difficulty', t(lang, 'difficulty'), valOf(diffs, settings.difficulty ?? 'normal')) : ''}
+        ${summaryRow('size', t(lang, 'boardSize'), valOf(sizes, settings.size ?? 'standard'))}
+        ${summaryRow('lines', t(lang, 'battleLines'), valOf(lines, settings.options.battleLines ?? 'normal'))}
+        ${summaryRow('dice', t(lang, 'pointsEachTurn'), valOf(dice, settings.dice))}
+      </div>`;
 
-      <h3>${t(lang, 'map')}</h3>
-      <div class="mtiles">${mapTiles}</div>
-      ${settings.map === 'random' ? randomMapPanel() : ''}
-      ${homeSection()}
-
-      <h3>${t(lang, 'armyPoints')}</h3>
-      ${seg('budget', [['20', `20 <small>${t(lang, 'skirmish')}</small>`], ['30', '30'], ['50', '50'], ['80', `80 <small>${t(lang, 'epic')}</small>`]], String(settings.budget))}
-
-      <h3>${t(lang, 'boardSize')}</h3>
-      ${seg('size', [['standard', t(lang, 'sizeStandard')], ['large', t(lang, 'sizeLarge')]], settings.size ?? 'standard')}
-
-      <h3>${t(lang, 'pointsEachTurn')}</h3>
-      ${seg('dice', [['1d6', t(lang, 'dice1')], ['2d6', t(lang, 'dice2')], ['3d6', t(lang, 'dice3')], ['fixed', `${t(lang, 'always')} ${fixedPoints(settings)}`]], settings.dice)}
-
-      ${weatherPanel(settings, lang)}
-
-      <h3>${t(lang, 'rules')}</h3>
-      <div class="presets">
-        ${preset('recommended', isRec, t(lang, 'presetRecommended'), t(lang, 'presetRecSub'), '<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z" fill="currentColor"/>')}
-        ${preset('dad', isDad, t(lang, 'presetDad'), t(lang, 'presetSimpleSub'), '<rect x="4" y="4" width="16" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="2" fill="currentColor"/>')}
-      </div>
-      <button data-act="rules-open" class="disclose ${rulesOpen ? 'open' : ''}" aria-expanded="${rulesOpen}">
-        <span>${t(lang, 'customize')}</span><small>${!isDad && !isRec ? `${t(lang, 'presetCustom')} · ` : ''}${onCount} ${t(lang, 'rulesOnCount')}</small><i aria-hidden="true">›</i>
-      </button>
-      ${rulesOpen ? `<div class="rgroups">${groups}</div>` : ''}
-    </div>
+  return `<div class="sheet"><div class="sheet-body setup">
+    <h2><button data-act="${page ? 'setup-sub-back' : 'setup-back'}" class="ghost back" aria-label="${t(lang, 'back')}">${icon('back')}</button>${page ? pages[page][0] : t(lang, 'newBattle')}</h2>
+    <div class="sheet-scroll ${page ? `setup-sub sub-${page}` : 'setup-sum'} ${anim}">${page ? pages[page][1]() : summary}</div>
     <div class="sheet-foot"><button data-act="begin" class="primary wide">${t(lang, mode === 'online' ? 'hostGameBtn' : 'startBattle')}</button></div>
   </div></div>`;
 }
@@ -1051,10 +1198,12 @@ function startScreen(): string {
       <h2>${t(lang, 'title')}</h2>
       <p>${t(lang, 'chooseMode')}</p>
     </div>
+    ${listSlots(store).length ? `<button data-act="saves" class="choice continue">${icon('<path d="M7 4.5v15l12-7.5z" fill="currentColor"/>')}<span class="ctext"><b>${t(lang, 'continueGame')}</b><span>${t(lang, 'continueSub')}</span></span><i aria-hidden="true">›</i></button>` : ''}
     <button data-act="mode" data-mode="pvp" class="choice">${icon(people)}<span class="ctext"><b>${t(lang, 'twoPlayers')}</b><span>${t(lang, 'twoPlayersSub')}</span></span><i aria-hidden="true">›</i></button>
     <button data-act="mode" data-mode="ai" class="choice">${icon(robot)}<span class="ctext"><b>${t(lang, 'vsComputer')}</b><span>${t(lang, 'vsComputerSub')}</span></span><i aria-hidden="true">›</i></button>
     <button data-act="mode" data-mode="online" class="choice">${icon('<circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3.5 12h17M12 3.5c3 3 3 14 0 17M12 3.5c-3 3-3 14 0 17" fill="none" stroke="currentColor" stroke-width="2"/>')}<span class="ctext"><b>${t(lang, 'playOnline')}</b><span>${t(lang, 'playOnlineSub')}</span></span><i aria-hidden="true">›</i></button>
     <button data-act="campaign" class="choice">${icon('<path d="M5 3v18M5 4h11l-2.5 4L16 12H5" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>')}<span class="ctext"><b>${campaignText(lang).campaign}</b><span>${campaignText(lang).campaignSub}</span></span><i aria-hidden="true">›</i></button>
+    <button data-act="armies" class="choice">${icon('<path d="M12 2.5l8 3v6c0 5-3.4 8.6-8 10-4.6-1.4-8-5-8-10v-6z"/>')}<span class="ctext"><b>${st(lang, 'armies')}</b><span>${st(lang, 'armiesSub')}</span></span><i aria-hidden="true">›</i></button>
   </div></div>`;
 }
 
@@ -1067,6 +1216,74 @@ function inviteScreen(): string {
     <button data-act="copy-link" class="primary wide">${t(lang, 'copyLink')}</button>
     ${typeof navigator.share === 'function' ? `<button data-act="share" class="wide">${t(lang, 'shareLink')}</button>` : ''}
     <button data-act="invite-ok" class="ghost wide">${t(lang, 'inviteContinue')}</button>
+  </div></div>`;
+}
+
+// ---------- online: host or join ----------
+/** Play online, first step: two big choices before any setup. */
+function onlineChoiceScreen(): string {
+  const ic = (d: string) => `<span class="cicon" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22">${d}</svg></span>`;
+  return `<div class="cover"><div class="card start online-pick">
+    <div class="chero"><button data-act="online-back" class="ghost">‹ ${t(lang, 'back')}</button></div>
+    <div class="hero"><h2>${t(lang, 'playOnline')}</h2><p>${t(lang, 'onlineChooseSub')}</p></div>
+    <button data-act="online-host" class="choice big">${ic('<path d="M5 3v18M5 4h11l-2.5 4L16 12H5" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>')}<span class="ctext"><b>${t(lang, 'hostGame')}</b><span>${t(lang, 'hostGameSub')}</span></span><i aria-hidden="true">›</i></button>
+    <button data-act="online-join" class="choice big">${ic('<rect x="3" y="7" width="18" height="10" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7 12h.01M11 12h.01M15 12h.01" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>')}<span class="ctext"><b>${t(lang, 'joinWithCode')}</b><span>${t(lang, 'joinSub')}</span></span><i aria-hidden="true">›</i></button>
+  </div></div>`;
+}
+
+/** Play online → Join with code: just the code box. */
+function joinScreen(): string {
+  return `<div class="cover"><div class="card start join-card">
+    <div class="chero"><button data-act="join-back" class="ghost">‹ ${t(lang, 'back')}</button></div>
+    <div class="hero"><h2>${t(lang, 'joinWithCode')}</h2><p>${t(lang, 'joinSub')}</p></div>
+    <div class="join-box"><div class="join-row"><input class="join-input" maxlength="7" value="${joinText}" placeholder="ABCDE" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" inputmode="text" aria-label="${t(lang, 'joinWithCode')}"></div>
+    <button data-act="join-code" class="primary wide" ${joinBusy ? 'disabled' : ''}>${joinBusy ? t(lang, 'connecting') : t(lang, 'join')}</button>
+    ${joinErr ? `<p class="join-err">${joinErr}</p>` : ''}</div>
+  </div></div>`;
+}
+
+// ---------- saved games: the list ----------
+/** Online games in the list: whose turn it is right now, asked of the server when the list opens. */
+const liveTurn = new Map<string, Player | 'over'>();
+function refreshLiveTurns() {
+  for (const m of listSlots<SlotInfo>(store)) {
+    const id = m.info?.net;
+    if (!id) continue;
+    fetchGame(id).then((r) => {
+      if (!r) return;
+      const st = (JSON.parse(r.state) as { state: GameState }).state;
+      liveTurn.set(id, st.phase === 'over' ? 'over' : st.current);
+      if (savesOpen) render();
+    }, () => {});
+  }
+}
+
+function savesScreen(): string {
+  const now = Date.now();
+  const rows = listSlots<SlotInfo>(store).filter((m) => m.info && FACTIONS[m.info.red] && FACTIONS[m.info.blue]).map((m) => {
+    const i = m.info;
+    const r = FACTIONS[i.red], b = FACTIONS[i.blue];
+    const sc = i.scenario ? scenarioById(i.scenario) : undefined;
+    const modeText = sc ? `${campaignText(lang).campaign}: ${sc.title[lang]}` : t(lang, i.mode === 'ai' ? 'modeAi' : i.mode === 'online' ? 'modeOnline' : 'modePvp');
+    const live = i.net ? liveTurn.get(i.net) : undefined;
+    const over = i.phase === 'over' || live === 'over';
+    const stage = over ? t(lang, 'slotOver') : i.phase === 'draft' || i.phase === 'deploy' ? t(lang, 'slotSetup') : `${t(lang, 'slotTurn')} ${i.turn}`;
+    const cur = live && live !== 'over' ? live : i.current;
+    const whose = i.mode === 'online' && i.me && !over ? `<span class="slot-turn ${cur === i.me ? 'mine' : ''}">${t(lang, cur === i.me ? 'slotYours' : 'slotTheirs')}</span>` : '';
+    const isNow = m.id === slotId && !choosing;
+    const asking = confirmDelete === m.id;
+    return `<li class="slot ${isNow ? 'now' : ''}">
+      <div class="slot-crests"><span style="--fc:${r.color}">${r.emblem}</span><span style="--fc:${b.color}">${b.emblem}</span></div>
+      <div class="slot-text"><b>${r.name[lang]} <span class="hero-vs">${t(lang, 'vs')}</span> ${b.name[lang]}</b>
+        <small>${modeText} · ${stage} · ${isNow ? t(lang, 'slotNow') : agoText(lang, now - m.at)}</small>${whose}</div>
+      ${asking
+        ? `<div class="slot-ask"><p>${t(lang, 'deleteAsk')}</p><div class="slot-btns"><button data-act="slot-delete-yes" data-value="${m.id}" class="danger">${t(lang, 'deleteGame')}</button><button data-act="slot-delete-no" class="ghost">${t(lang, 'keepGame')}</button></div></div>`
+        : `<div class="slot-btns"><button data-act="slot-resume" data-value="${m.id}" class="primary">${t(lang, 'resume')}</button><button data-act="slot-delete" data-value="${m.id}" class="ghost">${t(lang, 'deleteGame')}</button></div>`}
+    </li>`;
+  }).join('');
+  return `<div class="cover saves"><div class="card start saves-card">
+    <div class="chero"><button data-act="saves-back" class="ghost">‹ ${t(lang, 'back')}</button><h2>${t(lang, 'savedGames')}</h2><p>${t(lang, 'savesSub')}</p></div>
+    ${rows ? `<ol class="slots">${rows}</ol>` : `<p class="slots-empty">${t(lang, 'noSaves')}</p>`}
   </div></div>`;
 }
 
@@ -1171,6 +1388,8 @@ function menuBody(s: GameState): string {
       ${row('labels', '#5b7a4a', '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z" fill="none"/><path d="M9 10l3-1.5v7" fill="none"/>', t(lang, 'rowLabels'), '', showLabels)}
       ${row('cube', '#7a5bb0', G.cube, t(lang, 'rowCube'), '', showCube)}
       ${row('smartcam', '#5b6b7a', G.target, t(lang, 'rowSmartCam'), '', smartCam)}
+      ${row('sidecols', '#b08a2a', '<circle cx="8" cy="12" r="4.5" fill="none"/><circle cx="16" cy="12" r="4.5" fill="none" stroke-dasharray="2.5 2"/>', t(lang, 'rowSideColors'), sideMode === 'mine' ? t(lang, 'sideMine') : t(lang, 'sideArmy'))}
+      ${row('warn', '#b0443a', '<path d="M12 4l9 16H3z" fill="none"/><path d="M12 10v4M12 17v.5" fill="none"/>', t(lang, 'rowWarnings'), '', warnOn)}
       ${row('cam-reset', '#5b6b7a', G.target, t(lang, 'camResetMenu'))}
       ${mode === 'pvp' ? row('table', '#a8811a', G.seats, t(lang, 'rowSeating'), table === 'pass' ? t(lang, 'seatPass') : t(lang, 'seatAcross')) : ''}
       ${mode === 'online' && net ? row('share', '#3a6fb0', G.globe, t(lang, 'inviteLink')) : ''}
@@ -1180,6 +1399,7 @@ function menuBody(s: GameState): string {
       ${mixerHtml({ fx: t(lang, 'mixFx'), voice: t(lang, 'mixVoices'), music: t(lang, 'mixMusic') })}
     </div>
     <div class="mgroup">
+      ${row('saves', '#a8811a', '<path d="M5 4h11l3 3v13H5z" fill="none"/><path d="M8 4v5h7V4M8 20v-6h8v6" fill="none"/>', t(lang, 'savedGames'), String(listSlots(store).length))}
       ${row('quick', '#c2453a', G.bolt, t(lang, 'quick'))}
       ${row('tutorial', '#3a8f8a', '<circle cx="12" cy="12" r="8.5" fill="none"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .8-1 1.5v.7M12 16.5v.5" fill="none"/>', tutorialLabel(lang))}
       ${row('new', '#c2453a', G.plus, confirmNew ? t(lang, 'confirmNew') : t(lang, 'newGame'), '', undefined, confirmNew ? 'danger' : '')}
@@ -1201,6 +1421,7 @@ function menu(s: GameState): string {
 const ICON = {
   back: '<path d="M15 5l-7 7 7 7"/>',
   undo: '<path d="M9 7L4 12l5 5"/><path d="M4 12h10a5 5 0 0 1 0 10h-3"/>',
+  march: '<path d="M4 6l5 6-5 6M11 6l5 6-5 6M18 6l2 6-2 6"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
   flip: '<path d="M7 4v16M7 4L3.5 7.5M7 4l3.5 3.5M17 20V4M17 20l-3.5-3.5M17 20l3.5-3.5"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
@@ -1237,6 +1458,7 @@ function bar(s: GameState): string {
       : '';
     return `${take}<div class="row">
       ${canReroll(s) ? `<button data-act="reroll" class="withicon" ${rolling ? 'disabled' : ''}>${icon('reroll')}<span>${t(lang, 'reroll')}</span></button>` : ''}
+      ${!s.advance && !notMine(s) && canMarch(s) ? `<button data-act="march" class="withicon" title="${t(lang, 'marchHelp')}">${icon('march')}<span>${t(lang, 'march')}</span></button>` : ''}
       <button data-act="undo" class="withicon" ${canUndo(sess) ? '' : 'disabled'}>${icon('undo')}<span>${t(lang, 'undo')}</span></button>
       <button data-act="end" class="${s.advance ? '' : 'primary'} ${confirmEnd ? 'warn' : ''} ${!s.advance && !confirmEnd && allSpent(s) ? 'ready' : ''}">${confirmEnd ? t(lang, 'endAnyway') : t(lang, 'endTurn')}</button>
     </div>`;
@@ -1378,11 +1600,21 @@ let fxUntil = 0;
 function effects(s: GameState): Effects {
   const fresh: LogEntry[] = s.log.length > prevLog ? s.log.slice(prevLog) : [];
   const fx: Effects = { from: fresh.length ? prevPos : new Map(), hits: [], walks: new Map() };
+  // Who stands where as the new moves play out (a March is many moves at once, several by the same piece).
+  const hk = (h: Hex) => `${h.col},${h.row}`;
+  const standing = new Map<string, string>([...prevPos].map(([id, h]) => [hk(h), id]));
+  const moves = fresh.filter((e) => e.kind === 'move').length;
+  let voiced = 0;
   for (const e of fresh) {
     if (e.kind === 'move' && e.path?.length) {
-      // The piece now standing where the move ended walks the route hex by hex.
-      const u = s.units.find((x) => x.pos.col === e.to.col && x.pos.row === e.to.row);
-      if (u) fx.walks.set(u.id, [e.from, ...e.path]);
+      // The piece that stood where the move began walks the route hex by hex (joined onto any walk it already made).
+      const id = standing.get(hk(e.from)) ?? s.units.find((x) => x.pos.col === e.to.col && x.pos.row === e.to.row)?.id;
+      if (id) {
+        const before = fx.walks.get(id);
+        fx.walks.set(id, before ? [...before, ...e.path] : [e.from, ...e.path]);
+        standing.delete(hk(e.from));
+        standing.set(hk(e.to), id);
+      }
     }
     if (e.kind === 'attack' || e.kind === 'shoot') {
       fx.hits.push({ at: e.at, damage: e.damage, killed: e.killed, type: e.target, owner: other(e.player), shotFrom: e.kind === 'shoot' ? e.from : null, by: e.unit, from: e.from, advanced: !!e.advanced });
@@ -1394,12 +1626,15 @@ function effects(s: GameState): Effects {
     } else if (e.kind === 'move') {
       // A footstep (or hoofbeat, splash, thud on a bridge) for every hex walked, in time with the piece; and its "Moving!".
       const ground = (e.path?.length ? e.path : [e.to]).map((h) => s.board[h.row]?.[h.col] ?? 'plain');
+      // A March is many moves at once: a couple of them make the sound, not a din of every piece.
+      if (moves > 3 && ++voiced > 2) continue;
       marchSounds(sides[e.player], e.unit, ground, STEP_MS, nearSide(e.player), !!e.path?.length);
     } else if (e.kind === 'win') {
       setTimeout(() => sound(mode === 'ai' && e.player === AI_SIDE ? 'lose' : 'win'), 400);
       victoryVoice(sides[e.player], s.units.filter((u) => u.owner === e.player).map((u) => u.type), nearSide(e.player));
     }
   }
+  if (fresh.length) lastWalkMs = Math.max(0, ...[...fx.walks.values()].map((w) => (w.length - 1) * STEP_MS));
   prevLog = s.log.length;
   prevPos = new Map(s.units.map((u) => [u.id, u.pos]));
   // A piece you just picked answers you.
@@ -1413,6 +1648,7 @@ function effects(s: GameState): Effects {
 
 /** Music for this moment: the theme of the army to move, and war drums while a King is in danger. */
 function score(s: GameState) {
+  if (apFac && (galleryOpen || setupOpen)) return setMusic([apFac], apFac, false); // setup summary: the showcased army's theme
   if (setupPhase(s) || s.phase === 'over') return setMusic([], null, false);
   const danger = s.units.some((k) => k.type === 'king' && s.units.some((e) => e.owner !== k.owner && distance(e.pos, k.pos) <= 2));
   setMusic([sides.red, sides.blue], sides[s.current], danger);
@@ -1444,6 +1680,9 @@ function draw() {
     cam = { ...cam, yaw: yawFor(s.current) };
     saveCam();
   }
+  // side colours: whose pieces are "yours" in this game, for the rings and the side-coloured bits of the page.
+  setMine(sideMine(s));
+  paintSideVars();
   const fx = effects(s);
   score(s);
   portrait = isPortrait();
@@ -1475,7 +1714,7 @@ function draw() {
 
   if (s.phase !== 'over') overHidden = false;
   // The result stays put while a new battle is being set up on top of the finished one.
-  const over = s.phase === 'over' && s.winner && !overHidden && !choosing && !setupOpen && !replaying() ? victory(s, s.winner) : '';
+  const over = s.phase === 'over' && s.winner && !overHidden && !choosing && !setupOpen && !savesOpen && !replaying() ? victory(s, s.winner) : '';
 
   const html = `
     <div class="screen ${portrait ? 'portrait' : 'landscape'} ${withPanel() ? 'desktop' : desktop ? 'full' : portrait ? '' : 'phone'} ${message ? 'has-msg' : ''} ${s.current} ${upsideDown() ? 'flipped' : ''}">
@@ -1490,6 +1729,7 @@ function draw() {
       </header>
       <div class="stage-wrap">
         <div class="stage">${renderBoard(s, overlay(s), view(), fx)}</div>
+        <div class="edge-chips">${edgeChips(s)}</div>
         ${showCube ? `<div class="viewcube" title="${t(lang, 'cubeHelp')}" aria-label="${t(lang, 'cubeHelp')}">${viewCube(view())}</div>` : ''}
         <div class="cam" aria-label="${t(lang, 'camera')}">
           <button data-act="cam-flip" title="${t(lang, 'camFlip')}" aria-label="${t(lang, 'camFlip')}">${icon('flip')}</button>
@@ -1499,7 +1739,7 @@ function draw() {
           <button data-act="zoom-out" aria-label="Zoom out" ${cam.zoom <= ZOOM_MIN + 0.01 ? 'disabled' : ''}>${icon('minus')}</button>
         </div>
       </div>
-      <p class="info ${unitCard ? 'unit' : ''}" id="info">${info}</p>
+      <p class="info ${unitCard ? `unit ${unitOpen ? 'open' : ''}` : ''}" id="info"${unitCard ? ` data-act="unit-more" role="button" aria-expanded="${unitOpen}"` : ''}>${info}</p>
       <footer class="bar">${bar(s)}</footer>
       ${withPanel() ? `<aside class="side">${menuBody(s)}</aside>` : ''}
     </div>
@@ -1507,8 +1747,10 @@ function draw() {
     ${inviting && net && !choosing && !setupOpen ? inviteScreen() : ''}
     ${pickingArmy && net && !choosing && !setupOpen ? armyPickScreen() : ''}
     ${cover && s.phase !== 'over' && !choosing && !setupOpen && !replaying() ? passScreen(s) : ''}
-    ${choosing ? (campaignOpen ? campaignScreen(lang) : startScreen()) : ''}
+    ${choosing && !onlineStep && !savesOpen ? (galleryOpen ? (apFac ? armyShowcase(lang, apFac, icon('back')) : armyGallery(lang, icon('back'), (id) => figurePic(id, 'king', 'front'))) : campaignOpen ? campaignScreen(lang) : startScreen()) : ''}
+    ${onlineStep === 'pick' ? onlineChoiceScreen() : onlineStep === 'join' ? joinScreen() : ''}
     ${setupOpen ? setupScreen() : ''}
+    ${savesOpen ? savesScreen() : ''}
     ${over}
     ${replayControls()}
     ${menuOpen && !withPanel() ? menu(s) : ''}`;
@@ -1563,7 +1805,7 @@ function aiSetup() {
 /** On the computer's turn, take one step every so often so the player can follow it. */
 function scheduleAi() {
   const s = sess.state;
-  if (camHome && !aiTurn(s) && !rolling) comeHome();
+  if (camHome && !notMine(s) && !rolling) comeHome();
   if (aiTimer !== null || rolling || cover || choosing || !aiTurn(s)) return;
   // Each computer attack gets its own beat: the target is marked first, then the hit lands,
   // so a volley never looks like one click doing several attacks at once.
@@ -1571,8 +1813,17 @@ function scheduleAi() {
   const strike = next && (next.kind === 'attack' || next.kind === 'shoot');
   // Let the last blow finish playing before the board is drawn again, or its arrow would be wiped mid-flight.
   let wait = Math.max(0, fxUntil - Date.now());
-  // The computer's turn is watched from further back, so the whole board shows; nothing moves until the camera has settled.
-  wait += watchWholeBoard();
+  // camera v2: with the smart camera on, the camera frames each piece about to act together with its target or
+  // destination (only when they don't already show), after the last walk or blow has finished playing. With it off,
+  // the computer's turn is watched from further back, so the whole board shows. Nothing moves until the camera has settled.
+  let glided = 0;
+  // faster opening: while the armies are still closing in, the computer's turn goes by quickly.
+  const calm = noContact(s);
+  if (smartCam) {
+    const pre = Math.max(wait, walkTime(s));
+    glided = watchAction(s, next, pre);
+    if (glided) wait = pre + glided;
+  } else wait += watchWholeBoard(calm ? 500 : 1100);
   const mark = () => {
     if (!next || !strike || !aiTurn(sess.state)) return;
     aiAim = next.targetId;
@@ -1591,7 +1842,7 @@ function scheduleAi() {
       run((x) => applyAi(x, a));
       if (a.kind === 'attack' || a.kind === 'shoot') selected = null;
     } else run((x) => endTurn(x), true);
-  }, wait + (s.phase === 'roll' ? 1000 : strike ? 1700 : Math.max(1100, 650 + walkTime(s))));
+  }, wait + (calm ? (s.phase === 'roll' ? 450 : Math.max(500, 300 + walkTime(s))) : s.phase === 'roll' ? 1000 : strike ? 1700 : glided ? 650 : Math.max(1100, 650 + walkTime(s))));
   // The target is marked once the timer is set, so that render doesn't schedule a second move.
   if (strike) wait ? setTimeout(mark, wait) : mark();
 }
@@ -1621,13 +1872,12 @@ function glideTo(to: { x: number; y: number; zoom: number; pitch?: number }, ms:
   requestAnimationFrame(step);
 }
 /** When the computer's turn starts, pull back to show the whole board; returns how long that takes (ms). */
-function watchWholeBoard(): number {
+function watchWholeBoard(ms = 1100): number {
   if (camHome) return 0;
   const [fw, fh] = mapSize(portrait);
   camHome = { ...cam };
   const [x, y] = [cam.x ?? fw / 2, cam.y ?? fh / 2];
   if (cam.zoom <= 1.05 && Math.hypot(x - fw / 2, y - fh / 2) < 30) return 0;
-  const ms = 1100;
   glideTo({ x: fw / 2, y: fh / 2, zoom: Math.min(cam.zoom, 1) }, ms);
   return ms + 150;
 }
@@ -1636,6 +1886,8 @@ function comeHome() {
   const home = camHome;
   if (!home) return;
   camHome = null;
+  // camera v2: the player moved the camera themselves while the enemy was on; leave it where they put it.
+  if (userTookCam) return void (userTookCam = false);
   const [fw, fh] = mapSize(portrait);
   const to = { x: home.x ?? fw / 2, y: home.y ?? fh / 2, zoom: home.zoom };
   if (Math.abs(to.zoom - cam.zoom) < 0.02 && Math.hypot(to.x - (cam.x ?? fw / 2), to.y - (cam.y ?? fh / 2)) < 10) return;
@@ -1648,8 +1900,11 @@ function comeHome() {
 /** How long the last move's walk takes to play, in ms (the computer waits for it). */
 function walkTime(s: GameState): number {
   const e = s.log[s.log.length - 1];
-  return e?.kind === 'move' && e.path ? e.path.length * STEP_MS : 0;
+  // A March moves many pieces at once: wait for the longest walk the last drawing started.
+  return Math.max(lastWalkMs, e?.kind === 'move' && e.path ? e.path.length * STEP_MS : 0);
 }
+/** The longest walk (ms) the last batch of moves started playing (set by effects()). */
+let lastWalkMs = 0;
 
 // ---------- actions ----------
 
@@ -1680,6 +1935,7 @@ function autoEndIfDone() {
 }
 
 function restart(state: GameState) {
+  if (!(mode === 'online' && net)) slotId = newSlotId(); // saved games: never overwrite the last game
   sess = startSession(state);
   selected = null;
   message = null;
@@ -1817,7 +2073,7 @@ app.addEventListener('click', (e) => {
   if (act !== 'new') confirmNew = false;
   if (act !== 'end') confirmEnd = false;
   // Online, while the other player is on: look around freely, but nothing that plays the game.
-  if (theirTurn(sess.state) && !choosing && !setupOpen && ['ack', 'auto', 'auto-all', 'auto-army', 'done', 'draft', 'end', 'less', 'more', 'next', 'reroll', 'roll', 'take', 'tray', 'undo', 'quick'].includes(act)) return;
+  if (theirTurn(sess.state) && !choosing && !setupOpen && ['ack', 'auto', 'auto-all', 'auto-army', 'done', 'draft', 'end', 'less', 'more', 'next', 'reroll', 'roll', 'take', 'tray', 'undo', 'quick', 'march'].includes(act)) return;
   switch (act) {
     case 'copy-link':
       void navigator.clipboard?.writeText(inviteUrl()).then(() => { message = t(lang, 'linkCopied'); render(); }, () => {});
@@ -1896,18 +2152,78 @@ app.addEventListener('click', (e) => {
       return;
     }
     case 'setup-back':
-      // Picked the wrong mode: back to "how do you want to play?".
+      // Picked the wrong mode: back to "how do you want to play?" (online: back to Host or Join).
       setupOpen = false;
       choosing = true;
+      setupPage = apFac = null;
+      if (mode === 'online') onlineStep = 'pick';
       return render();
     case 'mode':
       mode = (btn!.getAttribute('data-mode') ?? 'pvp') as Mode;
       if (net) leaveNet(); // picking a way to play always starts afresh; an online game gets a new link
       pickSide = 'red';
+      setupPage = apFac = null;
+      settings = loadSettings();
+      // Online asks first: host a new game, or join a friend's with a code.
+      if (mode === 'online') {
+        onlineStep = 'pick';
+        return render();
+      }
       choosing = false;
       setupOpen = true;
-      settings = loadSettings();
       return render();
+    // ---------- online: host or join ----------
+    case 'online-back':
+      onlineStep = null;
+      return render();
+    case 'online-host':
+      onlineStep = null;
+      choosing = false;
+      setupOpen = true;
+      return render();
+    case 'online-join':
+      onlineStep = 'join';
+      joinErr = null;
+      render();
+      app.querySelector<HTMLInputElement>('.join-input')?.focus();
+      return;
+    case 'join-back':
+      onlineStep = 'pick';
+      joinErr = null;
+      return render();
+    // ---------- saved games ----------
+    case 'saves':
+      savesOpen = true;
+      menuOpen = false;
+      confirmDelete = null;
+      refreshLiveTurns();
+      return render();
+    case 'saves-back':
+      savesOpen = false;
+      confirmDelete = null;
+      return render();
+    case 'slot-resume':
+      return void resumeSlot(btn!.getAttribute('data-value') ?? '');
+    case 'slot-delete':
+      confirmDelete = btn!.getAttribute('data-value');
+      return render();
+    case 'slot-delete-no':
+      confirmDelete = null;
+      return render();
+    case 'slot-delete-yes': {
+      const id = btn!.getAttribute('data-value') ?? '';
+      deleteSlot(store, id);
+      confirmDelete = null;
+      if (id === slotId) {
+        // The game on screen was deleted: it stops saving, and the player goes back to "how do you want to play?".
+        slotId = null;
+        if (!choosing) {
+          if (net) leaveNet();
+          choosing = true;
+        }
+      }
+      return render();
+    }
     case 'set': {
       // One choice on the New battle screen: army points, map or points per turn.
       const field = btn!.getAttribute('data-field');
@@ -1918,11 +2234,14 @@ app.addEventListener('click', (e) => {
       // Choosing Random grows a map straight away (tapping it again rolls a new one).
       if (field === 'map' && value === 'random') settings = { ...settings, mapSeed: settings.mapSeed && !wasRandom ? settings.mapSeed : newSeed(), mapStyle: settings.mapStyle ?? 'valley' };
       if (field === 'size') settings = { ...settings, size: value === 'large' ? 'large' : 'standard' };
+      if (field === 'lines') settings = { ...settings, options: { ...settings.options, battleLines: value === 'close' || value === 'far' ? value : 'normal' } };
       if (field === 'dice') settings = { ...settings, dice: value as DiceId };
       // Weather and light: a new choice is rolled afresh when the battle starts.
       if (field === 'time') settings = { ...settings, time: value as Settings['time'], sky: undefined };
       if (field === 'weather') settings = { ...settings, weather: value as Settings['weather'], sky: undefined };
       if (field === 'difficulty') settings = { ...settings, difficulty: value === 'easy' || value === 'hard' ? value : 'normal' };
+      // setup summary: a one-tap choice page closes itself (chess.com's time-control sheet).
+      if (setupPage && setupPage === (field === 'budget' ? 'budget' : field) && ['budget', 'difficulty', 'size', 'dice'].includes(setupPage)) (setupPage = null), (setupAnim = 'sub-back');
       return render();
     }
     case 'faction': {
@@ -1935,6 +2254,7 @@ app.addEventListener('click', (e) => {
       settings = { ...settings, sides: sidesNext };
       // Yours is chosen: move straight on to the other side's army.
       if (side === 'red' && mode !== 'online') pickSide = 'blue';
+      apFac = null; // "Choose this army" on the showcase lands back on the army page
       return render();
     }
     case 'map-style': {
@@ -1966,6 +2286,43 @@ app.addEventListener('click', (e) => {
       return render();
     case 'pick-side':
       pickSide = mode === 'online' ? 'red' : (btn!.getAttribute('data-side') as Player);
+      // setup summary: tapping a side on the face-off opens the Army page.
+      if (setupPage !== 'army') return (setupPage = 'army'), (setupAnim = 'sub-in'), render(), toTop();
+      return render();
+    // ---- setup summary: sub-pages, the army showcase and the title-screen gallery ----
+    case 'setup-page':
+      setupPage = btn!.getAttribute('data-page');
+      setupAnim = 'sub-in';
+      render();
+      return toTop();
+    case 'setup-sub-back':
+      setupPage = null;
+      setupAnim = 'sub-back';
+      return render();
+    case 'ap-open':
+      apFac = btn!.getAttribute('data-value') as FactionId;
+      render();
+      return toTop();
+    case 'ap-back':
+      apFac = null;
+      return render();
+    case 'ap-prev':
+    case 'ap-next': {
+      const list = READY_ARMIES();
+      const i = Math.max(0, list.indexOf(apFac ?? list[0]));
+      apFac = list[(i + (act === 'ap-next' ? 1 : -1) + list.length) % list.length];
+      render();
+      return toTop();
+    }
+    case 'ap-turn':
+      return turnFigures(Number(btn!.getAttribute('data-dir')) || 1);
+    case 'armies':
+      galleryOpen = true;
+      render();
+      return toTop();
+    case 'gallery-back':
+      galleryOpen = false;
+      apFac = null;
       return render();
     case 'rules-open':
       rulesOpen = !rulesOpen;
@@ -1982,15 +2339,22 @@ app.addEventListener('click', (e) => {
     }
     case 'begin':
       setupOpen = false;
+      setupPage = apFac = null;
       saveSettings(settings);
       applySettings(settings);
       return restart(newGame());
     case 'take':
       return void run((s) => takeHex(s));
+    case 'march':
+      selected = null;
+      return void run((s) => march(s));
     case 'roll':
       return notMine(sess.state) ? undefined : roll();
     case 'reroll':
       return notMine(sess.state) ? undefined : rerollDice();
+    case 'unit-more':
+      unitOpen = !unitOpen;
+      return render();
     case 'undo':
       sess = undo(sess);
       message = null;
@@ -2082,6 +2446,18 @@ app.addEventListener('click', (e) => {
       showCube = !showCube;
       setFlag('boc-cube', showCube);
       return render();
+    case 'sidecols':
+      setSideMode(sideMode === 'mine' ? 'army' : 'mine');
+      return render();
+    case 'warn':
+      warnOn = !warnOn;
+      setFlag(WARN_KEY, warnOn);
+      return render();
+    case 'edge-chip': {
+      const u = getUnit(sess.state, btn!.getAttribute('data-unit') ?? '');
+      if (u) lookAtHex(u.pos);
+      return;
+    }
     case 'smartcam':
       smartCam = !smartCam;
       setFlag(SMART_KEY, smartCam);
@@ -2238,32 +2614,13 @@ function withCam<T>(c: Camera, fn: () => T): T {
 }
 
 function leanFits(b: number[]): boolean {
-  const [vw, vh] = stageSize;
-  return b[0] >= LEAN_M.l - 1 && b[2] <= vw - LEAN_M.r + 1 && b[1] >= LEAN_M.t - 1 && b[3] <= vh - LEAN_M.b + 1;
+  const a = clearArea();
+  return b[0] >= a[0] - 1 && b[2] <= a[2] + 1 && b[1] >= a[1] - 1 && b[3] <= a[3] + 1;
 }
 
-/** The smallest zoom-out and pan that bring the targets inside the margins, starting from camera `c`. */
+/** The smallest zoom-out and pan that bring the targets inside the clear part of the screen, starting from camera `c`. */
 function leanFit(s: GameState, o: Overlay, c: Camera): Camera | null {
-  const [vw, vh] = stageSize;
-  const [aw, ah] = [vw - LEAN_M.l - LEAN_M.r, vh - LEAN_M.t - LEAN_M.b];
-  let cur = c;
-  for (let i = 0; i < 10; i++) {
-    const b = withCam(cur, () => targetFrame(s, o, view(), false).box);
-    if (!b) return null;
-    const [bw, bh] = [b[2] - b[0], b[3] - b[1]];
-    if (bw > aw || bh > ah) {
-      const z = Math.max(ZOOM_MIN, cur.zoom * Math.min(aw / bw, ah / bh) * 0.96);
-      if (z >= cur.zoom - 1e-3) return cur; // already as far out as it goes
-      cur = withCam(cur, () => (zoomAt(z / cam.zoom, vw / 2, vh / 2), cam));
-      continue;
-    }
-    const dX = b[0] < LEAN_M.l ? LEAN_M.l - b[0] : b[2] > vw - LEAN_M.r ? vw - LEAN_M.r - b[2] : 0;
-    const dY = b[1] < LEAN_M.t ? LEAN_M.t - b[1] : b[3] > vh - LEAN_M.b ? vh - LEAN_M.b - b[3] : 0;
-    if (Math.abs(dX) < 1 && Math.abs(dY) < 1) return cur;
-    // A little beyond the edge so perspective doesn't leave the last hex just outside.
-    cur = withCam(cur, () => (panBy(dX * 1.05, dY * 1.05), cam));
-  }
-  return cur;
+  return fitCam(c, (cc) => withCam(cc, () => targetFrame(s, o, view(), false).box), clearArea(), false);
 }
 
 /** Where the camera should go for the selected piece, or null if everything already shows. */
@@ -2308,6 +2665,258 @@ app.addEventListener('wheel', () => {
   if (leanGlide === glideId) ++glideId;
 }, { passive: true, capture: true });
 
+// ---------- camera v2 ----------
+// See _art/CAMERA-V2.md. (1) Watching the enemy: during the computer's (or the online opponent's) turn the camera
+// frames each acting piece together with its target or destination, only when they don't already show, then glides
+// back to the player's own view when the turn comes back. A drag, pinch or wheel from the player during the enemy's
+// turn hands the camera to them for the rest of that turn. (2) Enemy warnings: a soft red pulse under each of your
+// pieces an enemy could reach and hit next turn (average roll), and small arrow chips at the screen edges pointing at
+// off-screen enemies that just acted or have one of your pieces in reach; tap a chip to look there. (3) The clear part
+// of the screen: what floats over the board (the phone strip, the action bar, a message) is kept clear by every frame.
+
+/** Whose pieces are "yours": against the computer the player's, online this phone's side, two on one phone the side to move. */
+function sideMine(s: GameState): Player {
+  return mode === 'ai' ? other(AI_SIDE) : mode === 'online' && net ? net.me : s.current;
+}
+
+/** Your pieces an enemy could reach and hit on its next turn with an average roll, and the enemies that could. */
+function threats(s: GameState, me: Player): { mine: Set<string>; foes: Set<string> } {
+  if (threatCache && threatCache.s === s && threatCache.me === me) return threatCache;
+  const them = other(me);
+  const theirGo: GameState = { ...s, current: them, phase: 'act', points: AVERAGE_ROLL, advance: null };
+  const ours = s.units.filter((u) => u.owner === me);
+  const mine = new Set<string>();
+  const foes = new Set<string>();
+  for (const e of s.units) {
+    if (e.owner !== them) continue;
+    const r = CONFIG.units[e.type];
+    const stands = [{ hex: e.pos, cost: 0 }, ...reachable(theirGo, e.id).values()];
+    for (const { hex, cost } of stands) {
+      const left = AVERAGE_ROLL - cost;
+      const melee = r.attack > 0 && left >= CONFIG.combat.attackCost;
+      const shots = !!r.ranged && left >= r.ranged.cost;
+      if (!melee && !shots) continue;
+      const far = shots ? maxRangeAt(s, hex, r.ranged!.maxRange) : 0;
+      for (const m of ours) {
+        if (mine.has(m.id) && foes.has(e.id)) continue;
+        const d = distance(hex, m.pos);
+        if ((melee && d === 1) || (shots && d >= r.ranged!.minRange && d <= far && hasLineOfSight(s, hex, m.pos))) {
+          mine.add(m.id);
+          foes.add(e.id);
+        }
+      }
+    }
+  }
+  threatCache = { s, me, mine, foes };
+  return threatCache;
+}
+
+/** The enemy pieces that acted on the enemy's most recent turn (read from the log). */
+function recentActors(s: GameState, them: Player): string[] {
+  const out = new Set<string>();
+  let i = s.log.length - 1;
+  while (i >= 0 && s.log[i].player !== them) i--;
+  for (; i >= 0 && s.log[i].player === them; i--) {
+    const e = s.log[i];
+    const at = e.kind === 'move' ? e.to : e.kind === 'attack' || e.kind === 'shoot' ? (e.advanced ? e.at : e.from) : null;
+    const u = at && s.units.find((x) => x.owner === them && x.pos.col === at.col && x.pos.row === at.row);
+    if (u) out.add(u.id);
+  }
+  return [...out];
+}
+
+/** The part of the board's picture nothing floats over (stage pixels: left, top, right, bottom). */
+let areaMemo: { at: number; key: string; a: number[] } | null = null;
+function clearArea(): number[] {
+  const [vw, vh] = stageSize;
+  // The unit card that floats under the phone strip comes and goes with the selection, so it is part of the key.
+  const key = `${vw}x${vh}|${message ? 1 : 0}|${selected ?? ''}`;
+  const now = performance.now();
+  if (areaMemo && areaMemo.key === key && now - areaMemo.at < 400) return areaMemo.a;
+  let [l, t, r, b] = [LEAN_M.l, LEAN_M.t, vw - LEAN_M.r, vh - LEAN_M.b];
+  const st = app.querySelector('.stage')?.getBoundingClientRect();
+  if (st && st.height > 0 && !upsideDown()) {
+    // On a phone held sideways the player strip floats over the top of the board and the action bar over the bottom.
+    for (const sel of ['.hud', '.bar', '.info']) {
+      const rc = app.querySelector(sel)?.getBoundingClientRect();
+      if (!rc || rc.width < 1 || rc.height < 1) continue;
+      if (rc.right <= st.left || rc.left >= st.right || rc.bottom <= st.top || rc.top >= st.bottom) continue;
+      const [y0, y1] = [rc.top - st.top, rc.bottom - st.top];
+      if (y0 + y1 < st.height) t = Math.max(t, y1 + 8);
+      else b = Math.min(b, y0 - 8);
+    }
+    if (b - t < vh * 0.4) [t, b] = [LEAN_M.t, vh - LEAN_M.b];
+  }
+  const a = [l, t, r, b];
+  areaMemo = { at: now, key, a };
+  return a;
+}
+
+/** From camera `c`, the pan (and zoom-out, only if needed) that brings `boxAt`'s box inside `area`: by the
+ *  smallest shift, or with the box centred (`centre`). Null if there is nothing to frame. */
+function fitCam(c: Camera, boxAt: (c: Camera) => number[] | null, area: number[], centre: boolean): Camera | null {
+  const [aw, ah] = [area[2] - area[0], area[3] - area[1]];
+  let cur = c;
+  for (let i = 0; i < 14; i++) {
+    const b = boxAt(cur);
+    if (!b) return null;
+    const [bw, bh] = [b[2] - b[0], b[3] - b[1]];
+    const big = bw > aw || bh > ah;
+    if (big) {
+      const z = Math.max(ZOOM_MIN, cur.zoom * Math.min(aw / bw, ah / bh) * 0.96);
+      if (z < cur.zoom - 1e-3) {
+        // Zoom about the box's own middle, so what is framed stays put while the rest pulls back.
+        cur = withCam(cur, () => (zoomAt(z / cam.zoom, (b[0] + b[2]) / 2, (b[1] + b[3]) / 2), cam));
+        continue;
+      }
+    }
+    let dX: number, dY: number;
+    if (centre || big) {
+      dX = (area[0] + area[2]) / 2 - (b[0] + b[2]) / 2;
+      dY = (area[1] + area[3]) / 2 - (b[1] + b[3]) / 2;
+    } else {
+      dX = b[0] < area[0] ? area[0] - b[0] : b[2] > area[2] ? area[2] - b[2] : 0;
+      dY = b[1] < area[1] ? area[1] - b[1] : b[3] > area[3] ? area[3] - b[3] : 0;
+      // A little beyond the edge so perspective doesn't leave the last hex just outside.
+      [dX, dY] = [dX * 1.06, dY * 1.06];
+    }
+    if (Math.abs(dX) < 1 && Math.abs(dY) < 1) return cur;
+    const before = cur;
+    cur = withCam(cur, () => (panBy(dX, dY), cam));
+    if (Math.abs((cur.x ?? 0) - (before.x ?? 0)) < 0.05 && Math.abs((cur.y ?? 0) - (before.y ?? 0)) < 0.05) return cur; // at the board's edge
+  }
+  return cur;
+}
+
+/** Where the camera should go to watch something happen on these hexes, or null if they already show well. */
+function watchPlan(s: GameState, hexes: Hex[]): Camera | null {
+  const a = clearArea();
+  // Watched action sits a little further in from the edges than a lean-in does.
+  const pad = Math.min(30, (a[2] - a[0]) * 0.06);
+  const area = [a[0] + pad, a[1] + pad, a[2] - pad, a[3] - pad];
+  const boxAt = (c: Camera) => withCam(c, () => hexesBox(s, view(), hexes));
+  const now = boxAt(cam);
+  if (!now) return null;
+  if (now[0] >= a[0] && now[2] <= a[2] && now[1] >= a[1] && now[3] <= a[3]) return null;
+  const [fw, fh] = mapSize(portrait);
+  const pts = hexes.map((h) => hexOnMap(h, { portrait }));
+  const mid = { x: pts.reduce((n, p) => n + p[0], 0) / pts.length, y: pts.reduce((n, p) => n + p[1], 0) / pts.length };
+  const c0 = { ...cam, x: Math.min(fw, Math.max(0, mid.x)), y: Math.min(fh, Math.max(0, mid.y)) };
+  return fitCam(c0, boxAt, area, true);
+}
+
+/** A calm glide time for moving from the camera now to `to` (ms). */
+function watchMs(to: Camera): number {
+  const [fw, fh] = mapSize(portrait);
+  const dist = Math.hypot((to.x ?? fw / 2) - (cam.x ?? fw / 2), (to.y ?? fh / 2) - (cam.y ?? fh / 2)) * cam.zoom;
+  return Math.round(Math.min(950, 520 + (dist / Math.max(fw, fh)) * 700 + Math.abs(Math.log(to.zoom / cam.zoom)) * 250));
+}
+/** Glides to `to` at a calm pace for the distance; returns the glide's length (ms). */
+function watchGlide(to: Camera, ms = watchMs(to)): number {
+  const [fw, fh] = mapSize(portrait);
+  glideTo({ x: to.x ?? fw / 2, y: to.y ?? fh / 2, zoom: to.zoom }, ms);
+  return ms;
+}
+
+/** The computer's next step: frame its piece and target (or destination) after `pre` ms. Returns the extra wait (ms). */
+function watchAction(s: GameState, a: ReturnType<typeof aiNextAction>, pre: number): number {
+  if (!camHome) {
+    camHome = { ...cam };
+    userTookCam = false;
+  }
+  if (!a || userTookCam || replaying() || (a.kind !== 'move' && a.kind !== 'attack' && a.kind !== 'shoot')) return 0;
+  const u = getUnit(s, a.unitId);
+  const to = a.kind === 'move' ? a.to : getUnit(s, a.targetId)?.pos;
+  if (!u || !to) return 0;
+  const hexes = a.kind === 'move' ? [u.pos, ...routeTo(s, u.id, a.to)] : [u.pos, to];
+  const plan = watchPlan(s, hexes);
+  if (!plan) return 0;
+  // Worked out now; started once the last walk or blow has finished, unless the player has taken the camera meanwhile.
+  const ms = watchMs(plan);
+  setTimeout(() => {
+    if (!drag && !touch && !userTookCam && aiTurn(sess.state)) watchGlide(plan, ms);
+  }, pre);
+  return ms + 200;
+}
+
+/** Online: the other player's newest moves, about to be shown. Glides to where they happen; returns the wait (ms). */
+function watchOnline(next: GameState): number {
+  const s = sess.state;
+  if (!smartCam || mode !== 'online' || !net || drag || touch || replaying() || next.log.length <= s.log.length) return 0;
+  const me = net.me;
+  const hexes: Hex[] = [];
+  for (const e of next.log.slice(s.log.length)) {
+    if (e.player === me) continue;
+    if (e.kind === 'move') hexes.push(e.from, e.to);
+    else if (e.kind === 'attack' || e.kind === 'shoot') hexes.push(e.from, e.at);
+  }
+  if (!hexes.length) return 0;
+  if (!camHome) {
+    camHome = { ...cam };
+    userTookCam = false;
+  }
+  if (userTookCam) return 0;
+  const plan = watchPlan(s, hexes);
+  return plan ? watchGlide(plan) + 120 : 0;
+}
+
+/** Tapping an edge chip: glide over to that hex, keeping the zoom. */
+function lookAtHex(h: Hex) {
+  const [x, y] = hexOnMap(h, { portrait });
+  if (camHome) userTookCam = true;
+  glideTo({ x, y, zoom: cam.zoom }, 520);
+}
+
+/** Small arrow chips at the screen edges pointing at enemies off screen that just acted or have one of yours in reach. */
+function edgeChips(s: GameState): string {
+  if (!warnOn || s.phase === 'over' || setupPhase(s) || replaying() || choosing || !stageSize[0]) return '';
+  const me = sideMine(s);
+  const them = other(me);
+  const want = new Map<string, boolean>(); // id -> it just acted
+  for (const id of threats(s, me).foes) want.set(id, false);
+  for (const id of recentActors(s, them)) want.set(id, true);
+  if (!want.size) return '';
+  const v = view();
+  const a = clearArea();
+  const [cx, cy] = [(a[0] + a[2]) / 2, (a[1] + a[3]) / 2];
+  const R = 19;
+  const chips: { x: number; y: number; ang: number; ids: string[]; acted: boolean }[] = [];
+  for (const [id, acted] of want) {
+    const u = getUnit(s, id);
+    if (!u) continue;
+    const [X, Y] = hexScreen(s, v, u.pos);
+    if (!Number.isFinite(X) || !Number.isFinite(Y)) continue;
+    // On screen at all (even under the bar) needs no chip: the piece itself shows.
+    if (X >= 8 && X <= stageSize[0] - 8 && Y >= 8 && Y <= stageSize[1] - 8) continue;
+    const [dx, dy] = [X - cx, Y - cy];
+    const k = Math.min(((a[2] - a[0]) / 2 - R) / Math.max(1e-6, Math.abs(dx)), ((a[3] - a[1]) / 2 - R) / Math.max(1e-6, Math.abs(dy)));
+    const [x, y] = [cx + dx * k, cy + dy * k];
+    const near = chips.find((c) => Math.hypot(c.x - x, c.y - y) < 2 * R);
+    if (near) {
+      near.ids.push(id);
+      near.acted ||= acted;
+      continue;
+    }
+    chips.push({ x, y, ang: (Math.atan2(dy, dx) * 180) / Math.PI, ids: [id], acted });
+  }
+  return chips
+    .map((c) => `<button class="edge-chip${c.acted ? ' acted' : ''}" data-act="edge-chip" data-unit="${c.ids[0]}" style="left:${c.x.toFixed(0)}px;top:${c.y.toFixed(0)}px" title="${t(lang, 'edgeEnemy')}" aria-label="${t(lang, 'edgeEnemy')}"><svg viewBox="-12 -12 24 24" width="22" height="22" aria-hidden="true"><path transform="rotate(${c.ang.toFixed(0)})" d="M-6 -7L8 0L-6 7L-2.5 0Z"/></svg>${c.ids.length > 1 ? `<i>${c.ids.length}</i>` : ''}</button>`)
+    .join('');
+}
+
+// The player moving the camera during the enemy's turn (a drag, a pinch, the wheel) takes it over for that turn.
+{
+  let down: [number, number] | null = null;
+  const took = () => {
+    if (camHome && notMine(sess.state)) userTookCam = true;
+  };
+  app.addEventListener('pointerdown', (e) => { down = (e.target as Element).closest?.('.stage') ? [e.clientX, e.clientY] : null; }, { capture: true, passive: true });
+  app.addEventListener('pointermove', (e) => { if (down && e.buttons && Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 8) took(); }, { capture: true, passive: true });
+  app.addEventListener('pointerup', () => { down = null; }, { capture: true, passive: true });
+  app.addEventListener('touchmove', (e) => { if ((e.target as Element).closest?.('.stage')) took(); }, { capture: true, passive: true });
+  app.addEventListener('wheel', (e) => { if ((e.target as Element).closest?.('.stage')) took(); }, { capture: true, passive: true });
+}
+
 // ---------- camera moves without a full re-render ----------
 // While the camera moves only the board is redrawn, once per frame, with the highlights
 // frozen as they were when the move began.
@@ -2340,6 +2949,8 @@ function camFrame() {
     placeGround();
     const cube = app.querySelector('.viewcube');
     if (cube) cube.innerHTML = viewCube(view());
+    const chips = app.querySelector('.edge-chips');
+    if (chips) chips.innerHTML = edgeChips(replayState() ?? sess.state);
   });
 }
 function camDone() {
@@ -2585,6 +3196,10 @@ document.addEventListener('keydown', (e) => {
   if (k === '+' || k === '=') return click('zoom-in');
   if (k === '-' || k === '_') return click('zoom-out');
   if (k === 'escape') {
+    // setup summary: Escape steps back one page (showcase, then sub-page, then the gallery).
+    if (apFac && (setupOpen || galleryOpen)) return click('ap-back');
+    if (setupOpen && setupPage) return click('setup-sub-back');
+    if (choosing && galleryOpen) return click('gallery-back');
     if (menuOpen) menuOpen = false;
     selected = null;
     message = null;

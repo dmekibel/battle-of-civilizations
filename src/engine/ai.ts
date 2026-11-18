@@ -6,14 +6,16 @@
 
 import { CONFIG, type GameConfig, type UnitTypeId } from '../config';
 import { distance, key, neighbors, type Hex } from './hex';
-import { armyValue, attack, canReroll, getUnit, previewStrike, weatherRange, endTurn, hasLineOfSight, kingCapturedBy, maxHp, maxRangeAt, kingOf, moveUnit, onBoard, other, reachable, reroll, rollDice, shoot, strikeTargets, takeHex, terrainAt, type Rng } from './game';
+import { armyValue, attack, canMarch, canReroll, inCover, march, getUnit, previewStrike, weatherRange, endTurn, hasLineOfSight, kingCapturedBy, maxHp, maxRangeAt, kingOf, moveUnit, onBoard, other, reachable, reroll, rollDice, shoot, strikeTargets, takeHex, terrainAt, type Rng } from './game';
 import type { GameState, Player, Result, Unit } from './types';
 
 export type AiAction =
   | { kind: 'move'; unitId: string; to: Hex }
   | { kind: 'attack' | 'shoot'; unitId: string; targetId: string }
   | { kind: 'take' }
-  | { kind: 'reroll' };
+  | { kind: 'reroll' }
+  /** The whole army steps forward together (only while the armies are still far apart). */
+  | { kind: 'march' };
 
 /** How much a piece is worth: its price, and the King above everything. */
 function worth(type: UnitTypeId, cfg: GameConfig): number {
@@ -33,7 +35,8 @@ function danger(s: GameState, u: Unit, at: Hex, cfg: GameConfig): number {
     const dist = distance(e.pos, at);
     if (dist === 1) d += cfg.units[e.type].attack;
     const r = cfg.units[e.type].ranged;
-    if (r && dist >= r.minRange && dist <= r.maxRange) d += r.damage * 0.5;
+    // Forest cover: a piece sheltered by the trees from this shooter takes 1 less from it.
+    if (r && dist >= r.minRange && dist <= r.maxRange) d += Math.max(0, r.damage - (inCover(s, e.pos, at, cfg) ? 1 : 0)) * 0.5;
   }
   return d;
 }
@@ -47,7 +50,9 @@ function bestHitFrom(s: GameState, u: Unit, at: Hex, pointsLeft: number, cfg: Ga
     const d = distance(at, e.pos);
     if (r.attack > 0 && d === 1 && pointsLeft >= cfg.combat.attackCost) best = Math.max(best, strikeScore(e, r.attack, cfg));
     if (r.ranged && d >= r.ranged.minRange && d <= maxRangeAt(s, at, r.ranged.maxRange, cfg) && pointsLeft >= r.ranged.cost && hasLineOfSight(s, at, e.pos, cfg)) {
-      best = Math.max(best, strikeScore(e, r.ranged.damage, cfg));
+      // Don't walk somewhere only to shoot into the trees for nothing.
+      const dmg = r.ranged.damage - (inCover(s, at, e.pos, cfg) ? 1 : 0);
+      if (dmg > 0) best = Math.max(best, strikeScore(e, dmg, cfg));
     }
   }
   return best;
@@ -138,6 +143,10 @@ export const DIFFICULTIES: Difficulty[] = ['easy', 'normal', 'hard'];
 /** The next action for the side to move at this difficulty, or null to end the turn. The same state
  *  always gives the same answer (Easy's randomness comes from the position itself). */
 export function aiNextAction(s: GameState, cfg: GameConfig = CONFIG, level: Difficulty = 'normal'): AiAction | null {
+  // While the armies are still far apart, the whole army marches forward in one go (after any reroll).
+  // Only an army marches: a handful of pieces still pick their own way. Only on close battle lines: from the
+  // edges the greedy advance below reaches the enemy sooner than a march in formation.
+  if (cfg.options.battleLines === 'close' && s.phase === 'act' && !s.advance && !canReroll(s, cfg) && s.units.filter((u) => u.owner === s.current && u.type !== 'king').length >= 3 && canMarch(s, cfg)) return { kind: 'march' };
   if (level === 'easy') return easyAction(s, cfg);
   if (level === 'hard') return hardAction(s, cfg);
   return normalAction(s, cfg);
@@ -155,6 +164,7 @@ function normalAction(s: GameState, cfg: GameConfig): AiAction | null {
   const mine = s.units.filter((u) => u.owner === s.current);
   for (const u of mine) {
     for (const { targetId, preview } of strikeTargets(s, u.id, cfg)) {
+      if (preview.damage <= 0) continue; // a blow that can't hurt (a gate, the trees' cover) wastes the points
       const target = s.units.find((e) => e.id === targetId)!;
       const score = strikeScore(target, preview.damage, cfg) - preview.cost * 0.2;
       if (score > bestScore) [best, bestScore] = [{ kind: preview.kind, unitId: u.id, targetId }, score];
@@ -183,6 +193,8 @@ export function applyAi(s: GameState, a: AiAction, cfg: GameConfig = CONFIG, rng
       return shoot(s, a.unitId, a.targetId, cfg);
     case 'take':
       return takeHex(s);
+    case 'march':
+      return march(s, cfg);
   }
 }
 
@@ -223,6 +235,7 @@ function normalCandidates(s: GameState, cfg: GameConfig): Scored[] {
   const mine = s.units.filter((u) => u.owner === s.current);
   for (const u of mine) {
     for (const { targetId, preview } of strikeTargets(s, u.id, cfg)) {
+      if (preview.damage <= 0) continue;
       const target = s.units.find((e) => e.id === targetId)!;
       out.push({ action: { kind: preview.kind, unitId: u.id, targetId }, score: strikeScore(target, preview.damage, cfg) - preview.cost * 0.2, unit: u, target, damage: preview.damage });
     }
@@ -409,7 +422,8 @@ function killCost(s: GameState, t: Unit, th: Threat, cfg: GameConfig, dead: Set<
     }
     const rg = rules.ranged;
     if (rg && !(cfg.options.volleys !== null && (r.u.shots ?? 0) >= cfg.options.volleys)) {
-      const dmg = Math.max(rg.damage, Math.ceil(maxHp(t.type, cfg) / 2)) - guard;
+      // Forest cover, judged from where the shooter stands now (close enough for weighing danger).
+      const dmg = Math.max(rg.damage, Math.ceil(maxHp(t.type, cfg) / 2)) - guard - (inCover(s, r.u.pos, t.pos, cfg) ? 1 : 0);
       if (dmg > 0) {
         const { near, far } = shotField(s, r, cfg);
         const i = t.pos.row * s.board[0].length + t.pos.col;
@@ -505,6 +519,12 @@ function hardMarch(s: GameState, u: Unit, to: Hex, cost: number, cfg: GameConfig
   if (rules.ranged) {
     if (distance(to, goal) < rules.ranged.minRange) return -5;
     if (cfg.terrain[terrainAt(s, to)].highGround) place += 3;
+    // ...and in the cover of the trees from the enemy's nearest shooter.
+    const shooters = s.units.filter((e) => e.owner !== u.owner && cfg.units[e.type].ranged);
+    if (shooters.length) {
+      const near = shooters.reduce((a, b) => (distance(b.pos, to) < distance(a.pos, to) ? b : a));
+      if (inCover(s, near.pos, to, cfg)) place += 2;
+    }
   }
   return gain * 2 - cost * 0.15 - ahead * 2.5 + place;
 }

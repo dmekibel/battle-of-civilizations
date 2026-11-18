@@ -267,7 +267,7 @@ describe('melee', () => {
 
   it('previews the outcome without changing state', () => {
     const s = scenario([['red', 'lightInfantry', 3, 3], ['blue', 'heavyInfantry', 3, 4]]);
-    expect(previewStrike(s, s.units[0].id, s.units[1].id, 'attack', OPEN)).toEqual({ kind: 'attack', damage: 1, hpAfter: 1, kills: false, cost: 1, counter: 0 });
+    expect(previewStrike(s, s.units[0].id, s.units[1].id, 'attack', OPEN)).toEqual({ kind: 'attack', damage: 1, hpAfter: 1, kills: false, cost: 1, counter: 0, covered: false });
     expect(strikeTargets(s, s.units[0].id, OPEN).map((t) => t.targetId)).toEqual([s.units[1].id]);
   });
 });

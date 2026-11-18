@@ -109,7 +109,7 @@ export function biomePics(b: Board, large: boolean): string[] {
     groundUrlOf(id, large),
     ...treeKinds(b).flatMap(([k]) => DIRS.map((d) => treeUrlOf(id, k, d))),
     ...(p ? p.list.map((_, i) => p.url(i)) : []),
-    ...[...sc].flatMap((n) => DIRS.map((d) => `${BASE()}sc-${n}-${d}.webp?v=1`)),
+    ...[...sc].flatMap((n) => DIRS.map((d) => `${BASE()}sc-${n}-${d}.webp?v=2`)),
   ];
 }
 

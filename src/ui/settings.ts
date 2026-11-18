@@ -59,6 +59,8 @@ export const RECOMMENDED: GameConfig['options'] = {
   rainRange: true,
   snowCavalry: true,
   fogCap: true,
+  forestCover: true,
+  battleLines: 'close',
 };
 
 export const TIMES: readonly TimeOfDay[] = ['day', 'dusk', 'night'];
@@ -87,6 +89,11 @@ export function loadSettings(): Settings {
     if (s && typeof s.budget === 'number' && s.options && s.options.rainRange === undefined) {
       const rec = (Object.keys(RECOMMENDED) as (keyof typeof RECOMMENDED)[]).every((k) => k === 'rainRange' || k === 'snowCavalry' || k === 'fogCap' || s.options[k] === undefined || s.options[k] === RECOMMENDED[k]);
       if (rec) s.options = { ...s.options, rainRange: true, snowCavalry: true, fogCap: true };
+    }
+    // Forest cover and close battle lines (2026-11-18): someone on the Recommended rules gets them too.
+    if (s && typeof s.budget === 'number' && s.options && s.options.forestCover === undefined) {
+      const rec = (Object.keys(RECOMMENDED) as (keyof typeof RECOMMENDED)[]).every((k) => k === 'forestCover' || k === 'battleLines' || s.options[k] === undefined || s.options[k] === RECOMMENDED[k]);
+      if (rec) s.options = { ...s.options, forestCover: true, battleLines: 'close' };
     }
     if (s && typeof s.budget === 'number') return { ...DEFAULT_SETTINGS, ...s, options: { ...DADS_RULES, ...s.options }, sides: { red: known(s.sides?.red, 'novgorod'), blue: known(s.sides?.blue, 'teutonic') }, difficulty: s.difficulty === 'easy' || s.difficulty === 'hard' ? s.difficulty : 'normal' };
   } catch {

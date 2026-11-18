@@ -3,7 +3,8 @@
 
 import { CONFIG, type GameConfig, type UnitTypeId } from '../config';
 import type { Hex } from './hex';
-import { getUnit, makeUnit, onBoard, other, terrainAt, unitAt, type Rng } from './game';
+import { buildBoard, getUnit, makeUnit, onBoard, other, terrainAt, unitAt, type Rng } from './game';
+import type { TerrainId } from '../config';
 import type { GameState, Player, Result } from './types';
 
 export type ArmyCounts = Partial<Record<Exclude<UnitTypeId, 'king'>, number>>;
@@ -14,9 +15,54 @@ export function armyCost(counts: ArmyCounts, cfg: GameConfig = CONFIG): number {
   return Object.entries(counts).reduce((sum, [t, n]) => sum + cfg.army.cost[t as keyof ArmyCounts] * (n ?? 0), 0);
 }
 
+/** Ground a 'close' deploy zone may not be pushed onto: a river or a castle the classic zone doesn't reach. */
+const BARRIER = new Set<TerrainId>(['river', 'bridge', 'ford', 'wall', 'tower', 'gate']);
+const bandMemo = new WeakMap<object, Map<string, DeployBand>>();
+
+/** A side's deploy zone as columns counted from its own edge: `near` up to (not including) `near + depth`. */
+export interface DeployBand { near: number; depth: number }
+
+/** Where a side sets up, by the "battle lines" setting. Normal: the first `deploy.depth` columns from its edge
+ *  (Dad's rules). Far: only the back columns. Close: the zone moved towards the middle, leaving about 30% of the
+ *  board's width between the armies, but never pushed over a river or into a castle the normal zone doesn't
+ *  touch, and never onto ground with much less room than the normal zone has. */
+export function deployBand(p: Player, cfg: GameConfig = CONFIG): DeployBand {
+  const depth = cfg.deploy.depth;
+  const lines = cfg.options.battleLines ?? 'normal';
+  if (lines === 'far') return { near: 0, depth: Math.max(3, depth - 2) };
+  if (lines !== 'close') return { near: 0, depth };
+  let memo = bandMemo.get(cfg.board);
+  if (!memo) bandMemo.set(cfg.board, (memo = new Map()));
+  const mk = `${p}|${depth}`;
+  const hit = memo.get(mk);
+  if (hit) return hit;
+  const { cols, rows } = cfg.board;
+  const board = buildBoard(cfg);
+  const colOf = (d: number) => (p === 'red' ? d : cols - 1 - d);
+  const room = (near: number) => {
+    let n = 0;
+    for (let d = near; d < near + depth; d++) for (let r = 0; r < rows; r++) if (cfg.terrain[board[r][colOf(d)]].passable) n++;
+    return n;
+  };
+  const clean = (d: number) => {
+    for (let r = 0; r < rows; r++) if (BARRIER.has(board[r][colOf(d)])) return false;
+    return true;
+  };
+  const base = room(0);
+  const want = Math.max(0, Math.floor((cols - 2 * depth - Math.round(cols * 0.36)) / 2));
+  let near = 0;
+  // Push forward one column at a time while the newly added column is clear and the zone keeps its room.
+  while (near < want && clean(near + depth) && room(near + 1) >= base * 0.8) near++;
+  const band = { near, depth };
+  memo.set(mk, band);
+  return band;
+}
+
 export function inZone(p: Player, h: Hex, cfg: GameConfig = CONFIG): boolean {
   const { cols } = cfg.board;
-  return p === 'red' ? h.col < cfg.deploy.depth : h.col >= cols - cfg.deploy.depth;
+  const { near, depth } = deployBand(p, cfg);
+  const d = p === 'red' ? h.col : cols - 1 - h.col;
+  return d >= near && d < near + depth;
 }
 
 /** Free hexes in a side's zone where a piece could stand. */
@@ -124,8 +170,9 @@ export function autoDeploy(s: GameState, cfg: GameConfig = CONFIG): Result {
   let state = s;
   const p = s.current;
   const mid = (cfg.board.rows - 1) / 2;
-  const front = cfg.deploy.depth - 1;
-  const depthOf = (h: Hex) => (p === 'red' ? h.col : cfg.board.cols - 1 - h.col);
+  const band = deployBand(p, cfg);
+  const front = band.depth - 1;
+  const depthOf = (h: Hex) => (p === 'red' ? h.col : cfg.board.cols - 1 - h.col) - band.near;
   const left = state.reserve[p];
   for (const type of DEPLOY_ORDER) {
     for (let n = left.filter((t) => t === type).length; n > 0; n--) {

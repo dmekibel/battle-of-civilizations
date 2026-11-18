@@ -198,6 +198,16 @@ export interface AttackPreview {
   cost: number;
   /** Damage the attacker would take back (spears against cavalry). */
   counter: number;
+  /** The target is in the cover of the trees: the shot does 1 less (forest cover rule). */
+  covered: boolean;
+}
+
+/** Forest cover rule: a shot from `from` at a piece on `at` is slowed by the trees when a forest hex touching
+ *  the target lies nearer the shooter than the target does (the trees stand between them). */
+export function inCover(s: GameState, from: Hex, at: Hex, cfg: GameConfig = CONFIG): boolean {
+  if (!cfg.options.forestCover) return false;
+  const d = distance(from, at);
+  return neighbors(at).some((n) => onBoard(s, n) && terrainAt(s, n) === 'forest' && distance(from, n) < d);
 }
 
 /** Damage after the target's ground and, with the shield-wall rule, its neighbours. */
@@ -233,7 +243,7 @@ function checkStrike(
   targetId: string,
   kind: 'attack' | 'shoot',
   cfg: GameConfig,
-): ErrorCode | { a: Unit; t: Unit; cost: number; damage: number; counter: number } {
+): ErrorCode | { a: Unit; t: Unit; cost: number; damage: number; counter: number; covered: boolean } {
   if (s.phase !== 'act') return 'wrongPhase';
   const a = getUnit(s, attackerId);
   const t = getUnit(s, targetId);
@@ -246,6 +256,7 @@ function checkStrike(
   const rules = cfg.units[a.type];
   let cost: number;
   let raw: number;
+  let covered = false;
   if (kind === 'attack') {
     if (rules.attack <= 0) return 'cannotMelee';
     if (distance(a.pos, t.pos) !== 1) return 'notAdjacent';
@@ -264,12 +275,13 @@ function checkStrike(
     // Two hits from a bow or gun are always enough: a shot takes at least half the target's full health
     // (this only matters when pieces are made tougher). David, 2026-11-17.
     raw = Math.max(r.damage, Math.ceil(maxHp(t.type, cfg) / 2));
+    covered = inCover(s, a.pos, t.pos, cfg);
   }
   if (s.points < cost) return 'notEnoughPoints';
-  const damage = damageOn(s, t, raw, cfg);
+  const damage = Math.max(0, damageOn(s, t, raw, cfg) - (covered ? 1 : 0));
   // Spears: cavalry charging into infantry takes a hit back, unless the infantry falls.
   const counter = kind === 'attack' && cfg.options.spears && mounted(a, cfg) && INFANTRY.has(t.type) && t.hp > damage ? 1 : 0;
-  return { a, t, cost, damage, counter };
+  return { a, t, cost, damage, counter, covered };
 }
 
 export function previewStrike(
@@ -282,7 +294,7 @@ export function previewStrike(
   const c = checkStrike(s, attackerId, targetId, kind, cfg);
   if (typeof c === 'string') return null;
   const hpAfter = Math.max(0, c.t.hp - c.damage);
-  return { kind, damage: c.damage, hpAfter, kills: hpAfter === 0, cost: c.cost, counter: c.counter };
+  return { kind, damage: c.damage, hpAfter, kills: hpAfter === 0, cost: c.cost, counter: c.counter, covered: c.covered };
 }
 
 /** Enemy units this unit can hit right now, with what would happen. */
@@ -360,7 +372,9 @@ export function moveUnit(s: GameState, unitId: string, to: Hex, cfg: GameConfig 
   if (!r) return fail('unreachable');
   const hexes = r.steps;
   const path = routeTo(s, unitId, to, cfg);
-  const units = s.units.map((x) => (x.id === unitId ? { ...x, pos: to, moved: true, ran: (x.ran ?? 0) + hexes } : x));
+  // A walking piece faces the way it walks: along its last step.
+  const face: [Hex, Hex] = [path.length > 1 ? path[path.length - 2] : u.pos, to];
+  const units = s.units.map((x) => (x.id === unitId ? { ...x, pos: to, moved: true, ran: (x.ran ?? 0) + hexes, face } : x));
   const next: GameState = { ...s, units, points: s.points - r.cost, advance: null };
   return {
     ok: true,
@@ -382,7 +396,7 @@ function strike(s: GameState, attackerId: string, targetId: string, kind: 'attac
       x.id === c.t.id
         ? { ...x, hp }
         : x.id === c.a.id
-          ? { ...x, hp: attackerHp, attacked: true, pos: mode === 'must' ? c.t.pos : x.pos, shots: (x.shots ?? 0) + (kind === 'shoot' ? 1 : 0) }
+          ? { ...x, hp: attackerHp, attacked: true, pos: mode === 'must' ? c.t.pos : x.pos, shots: (x.shots ?? 0) + (kind === 'shoot' ? 1 : 0), face: [c.a.pos, c.t.pos] as [Hex, Hex] }
           : x,
     );
   let next = withLog(
@@ -393,6 +407,7 @@ function strike(s: GameState, attackerId: string, targetId: string, kind: 'attac
       from: c.a.pos,
       at: c.t.pos,
       ...(c.counter ? { counter: c.counter, attackerKilled } : {}),
+      ...(c.covered ? { covered: true } : {}),
     },
   );
   if (killed && c.t.type === 'king' && cfg.win.killKing) return { ok: true, state: declareWin(next, s.current, 'kingKilled') };
@@ -415,7 +430,7 @@ export function takeHex(s: GameState): Result {
   const a = s.advance;
   const u = a && getUnit(s, a.unitId);
   if (!a || !u || unitAt(s, a.to)) return fail('nothingToTake');
-  const units = s.units.map((x) => (x.id === u.id ? { ...x, pos: a.to } : x));
+  const units = s.units.map((x) => (x.id === u.id ? { ...x, pos: a.to, face: [u.pos, a.to] as [Hex, Hex] } : x));
   return {
     ok: true,
     state: withLog({ ...s, units, advance: null }, { kind: 'move', turn: s.turn, player: s.current, unit: u.type, from: u.pos, to: a.to, cost: 0 }),
@@ -459,4 +474,86 @@ export function endTurn(s: GameState, cfg: GameConfig = CONFIG): Result {
     advance: null,
   };
   return { ok: true, state: next };
+}
+
+// ---------- March: the whole army steps forward together ----------
+
+/** March is offered while no enemy is within this many hexes of any of your pieces, and never ends a step closer. */
+export const MARCH_RANGE = 6;
+
+const enemyWithin = (s: GameState, p: Player, h: Hex, range: number) => s.units.some((e) => e.owner !== p && distance(e.pos, h) <= range);
+
+/** Steps from every hex to the nearest enemy piece, walking round impassable ground (pieces ignored). */
+function enemyField(s: GameState, p: Player, cfg: GameConfig): Map<string, number> {
+  const dist = new Map<string, number>();
+  const queue: Hex[] = [];
+  for (const e of s.units) if (e.owner !== p && !dist.has(key(e.pos))) { dist.set(key(e.pos), 0); queue.push(e.pos); }
+  for (let i = 0; i < queue.length; i++) {
+    const h = queue[i];
+    const d = dist.get(key(h))!;
+    for (const n of neighbors(h)) {
+      if (!onBoard(s, n) || dist.has(key(n)) || !cfg.terrain[terrainAt(s, n)].passable) continue;
+      dist.set(key(n), d + 1);
+      queue.push(n);
+    }
+  }
+  return dist;
+}
+
+/** One forward step for this piece (towards the enemy, staying near its own lane), or null if it has none. */
+function marchStep(s: GameState, u: Unit, lane: number, field: Map<string, number>, cfg: GameConfig): GameState | null {
+  const here = field.get(key(u.pos));
+  if (here === undefined) return null;
+  const steps = neighbors(u.pos)
+    .filter((n) => onBoard(s, n) && (field.get(key(n)) ?? Infinity) < here && !unitAt(s, n) && !enemyWithin(s, u.owner, n, MARCH_RANGE))
+    .sort((a, b) => Math.abs(a.row - lane) - Math.abs(b.row - lane) || Math.abs(a.row - u.pos.row) - Math.abs(b.row - u.pos.row));
+  for (const n of steps) {
+    const r = moveUnit(s, u.id, n, cfg);
+    if (r.ok) return r.state;
+  }
+  return null;
+}
+
+/** March: every piece of the side to move steps forward one hex at a time along its own row, front pieces
+ *  first, round after round, so the army keeps its order. It stops when the points run out, or before any
+ *  piece would come within MARCH_RANGE hexes of an enemy. Only while no enemy is that close yet. */
+export function march(s: GameState, cfg: GameConfig = CONFIG): Result {
+  if (s.phase !== 'act' || s.advance) return fail('wrongPhase');
+  const p = s.current;
+  const mine = s.units.filter((u) => u.owner === p);
+  if (!mine.length || mine.some((u) => enemyWithin(s, p, u.pos, MARCH_RANGE))) return fail('unreachable');
+  const field = enemyField(s, p, cfg);
+  const lanes = new Map(mine.map((u) => [u.id, u.pos.row]));
+  let state = s;
+  const stuck = new Set<string>();
+  for (let round = 0; round < 50 && state.points > 0; round++) {
+    let moved = false;
+    // Front pieces step first so they never block the ones behind them in the same row.
+    const order = state.units
+      .filter((u) => u.owner === p && !stuck.has(u.id))
+      .sort((a, b) => (field.get(key(a.pos)) ?? 99) - (field.get(key(b.pos)) ?? 99) || a.pos.row - b.pos.row);
+    for (const u of order) {
+      if (state.points <= 0) break;
+      const next = marchStep(state, getUnit(state, u.id)!, lanes.get(u.id)!, field, cfg);
+      if (next) [state, moved] = [next, true];
+      else stuck.add(u.id);
+    }
+    if (!moved) break;
+  }
+  return state === s ? fail('unreachable') : { ok: true, state };
+}
+
+/** The March order is open: nothing of the enemy within MARCH_RANGE of the side's pieces, and a step to take. */
+export function canMarch(s: GameState, cfg: GameConfig = CONFIG): boolean {
+  if (s.phase !== 'act' || s.advance || s.points <= 0) return false;
+  const p = s.current;
+  const mine = s.units.filter((u) => u.owner === p);
+  if (!mine.length || mine.some((u) => enemyWithin(s, p, u.pos, MARCH_RANGE))) return false;
+  const field = enemyField(s, p, cfg);
+  return mine.some((u) => marchStep(s, u, u.pos.row, field, cfg) !== null);
+}
+
+/** No piece of either side is within MARCH_RANGE hexes of an enemy: the armies are still closing in. */
+export function noContact(s: GameState): boolean {
+  return !s.units.some((u) => enemyWithin(s, u.owner, u.pos, MARCH_RANGE));
 }
