@@ -249,13 +249,28 @@ const ARMY_MIX: Record<keyof ArmyCounts, number> = {
 /** The pieces most armies can buy (factions add or swap some). */
 export const STANDARD_ROSTER: (keyof ArmyCounts)[] = ['lightInfantry', 'heavyInfantry', 'archer', 'lightCavalry', 'heavyCavalry'];
 
-/** A balanced army that spends the budget: each step buys whatever is furthest below its share. */
-export function suggestArmy(rng: Rng = Math.random, cfg: GameConfig = CONFIG, roster: (keyof ArmyCounts)[] = STANDARD_ROSTER): ArmyCounts {
-  const types = roster;
+/** An army's doctrine: the share of the budget it likes to spend on each piece (any scale; missing = not wanted). */
+export type ArmyMix = Partial<Record<keyof ArmyCounts, number>>;
+/** Doctrines registered by roster (src/ui/factions.ts registers each army's own), so every caller that passes an
+ *  army's roster gets that army's way of fighting without knowing about factions. */
+const MIXES = new WeakMap<readonly string[], ArmyMix>();
+export const registerArmyMix = (roster: readonly string[], mix: ArmyMix) => void MIXES.set(roster, mix);
+
+/** A balanced army that spends the budget: each step buys whatever is furthest below its share. With a doctrine
+ *  (an army's own mix) the shares follow it, but the army still opens with one shooter and one spearman (the
+ *  doctrine's favourite of each) when its roster has them, so an auto army is never all one kind of piece. */
+export function suggestArmy(rng: Rng = Math.random, cfg: GameConfig = CONFIG, roster: (keyof ArmyCounts)[] = STANDARD_ROSTER, mix: ArmyMix | undefined = MIXES.get(roster)): ArmyCounts {
+  const types = mix ? roster.filter((t) => (mix[t] ?? 0) > 0) : roster;
+  const share = (t: keyof ArmyCounts) => (mix ? mix[t] ?? 0 : ARMY_MIX[t]);
   // A little randomness so two auto armies are rarely identical.
-  const want = Object.fromEntries(types.map((t) => [t, ARMY_MIX[t] * (0.75 + rng() * 0.5)])) as Record<keyof ArmyCounts, number>;
+  const want = Object.fromEntries(types.map((t) => [t, share(t) * (0.75 + rng() * 0.5)])) as Record<keyof ArmyCounts, number>;
   const total = types.reduce((a, t) => a + want[t], 0);
   const counts: ArmyCounts = {};
+  if (mix) {
+    const best = (ok: (t: keyof ArmyCounts) => boolean) => types.filter(ok).sort((a, b) => share(b) - share(a))[0];
+    for (const t of [best((t) => !!cfg.units[t].ranged), best((t) => !!cfg.units[t].antiCavalry)])
+      if (t && !counts[t] && armyCost({ ...counts, [t]: 1 }, cfg) <= cfg.army.budget) counts[t] = 1;
+  }
   for (;;) {
     const spent = armyCost(counts, cfg);
     const left = cfg.army.budget - spent;

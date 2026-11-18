@@ -2,7 +2,7 @@
 // a faction gives a side its name, colours, coat of arms and the pieces it can buy.
 
 import type { UnitTypeId } from '../config';
-import type { ArmyCounts, Player } from '../engine';
+import { registerArmyMix, type ArmyCounts, type ArmyMix, type Player } from '../engine';
 import type { Lang } from './i18n';
 import type { ArtId } from './symbols';
 
@@ -190,8 +190,8 @@ export const FACTIONS: Record<FactionId, Faction> = {
     name: { en: 'British', ru: 'Британцы' },
     color: '#2f5d3a',
     text: '#8fd19e',
-    roster: ['skirmisher', 'lineInfantry', 'lightCavalry', 'heavyCavalry', 'cannon', 'rocket'],
-    blurb: { en: 'Napoleonic redcoats: a firing line that shoots and stands, riflemen who pick off targets from far, cannon, and Congreve rockets that fly over anything.', ru: 'Красные мундиры наполеоновских войн: стойкая стреляющая линия, стрелки, бьющие издалека, пушки и ракеты Конгрива, летящие поверх всего.' },
+    roster: ['skirmisher', 'lineInfantry', 'lightCavalry', 'heavyCavalry', 'cannon'],
+    blurb: { en: 'Napoleonic redcoats: a firing line that shoots and stands, riflemen who pick off targets from far, and cannon.', ru: 'Красные мундиры наполеоновских войн: стойкая стреляющая линия, стрелки, бьющие издалека, и пушки.' },
     emblem: shield('#f4f1e8', '#2f5d3a', '<path d="M26 6H34V28H54V36H34V64H26V36H6V28H26Z" fill="#c8202c"/>'),
     names: {
       king: { en: 'Duke', ru: 'Герцог' },
@@ -200,7 +200,6 @@ export const FACTIONS: Record<FactionId, Faction> = {
       heavyCavalry: { en: 'Scots Greys', ru: 'Шотландские серые' },
       lightCavalry: { en: 'Hussars', ru: 'Гусары' },
       cannon: { en: 'Cannon', ru: 'Пушка' },
-      rocket: { en: 'Congreve rockets', ru: 'Ракеты Конгрива' },
     },
   },
   french: {
@@ -226,14 +225,14 @@ export const FACTIONS: Record<FactionId, Faction> = {
     color: '#b8901f',
     text: '#f0d27a',
     roster: ['lightInfantry', 'heavyInfantry', 'jaguar', 'archer', 'chariot', 'champion'],
-    blurb: { en: "Pharaoh's army: spearmen and archers on foot, the royal guard, hard-hitting Sherden swordsmen, and war chariots that ride fast and shoot on the move.", ru: 'Войско фараона: копейщики и лучники, царская стража, шерданы с мечами, которые бьют сильно, и боевые колесницы, которые быстро мчатся и стреляют на ходу.' },
-    champion: { en: 'Champion: the Khopesh champion in gold-trimmed scale, with the sickle sword. Takes 3 hits, hits for 2.', ru: 'Чемпион: воин с хопешем в чешуйчатом доспехе с золотом, с серповидным мечом. Выдерживает 3 удара, бьёт на 2.' },
+    blurb: { en: "Pharaoh's army: spearmen and archers on foot, the royal guard, the Braves of the King with their battle-axes, and war chariots that ride fast and shoot on the move.", ru: 'Войско фараона: копейщики и лучники, царская стража, храбрецы царя с боевыми топорами и боевые колесницы, которые быстро мчатся и стреляют на ходу.' },
+    champion: { en: 'Champion: the Khopesh champion, a giant in gold-trimmed scale and a gold-banded wig, with the sickle sword. Takes 3 hits, hits for 2.', ru: 'Чемпион: воин с хопешем, великан в чешуйчатом доспехе с золотом и в парике с золотым обручем, с серповидным мечом. Выдерживает 3 удара, бьёт на 2.' },
     emblem: shield('#1f3f8f', '#d9a521', '<path d="M12 28Q30 14 48 28Q30 40 12 28Z" fill="none" stroke="#e8b923" stroke-width="3" stroke-linejoin="round"/><circle cx="30" cy="27.5" r="5" fill="#e8b923"/><path d="M12 22Q30 10 48 20" fill="none" stroke="#e8b923" stroke-width="3" stroke-linecap="round"/><path d="M27 37L24 52M24 52Q28 56 31 51" fill="none" stroke="#e8b923" stroke-width="2.6" stroke-linecap="round"/><path d="M35 36Q42 44 44 54" fill="none" stroke="#e8b923" stroke-width="2.6" stroke-linecap="round"/>'),
     names: {
       king: { en: 'Pharaoh', ru: 'Фараон' },
       lightInfantry: { en: 'Spearmen', ru: 'Копейщики' },
       heavyInfantry: { en: 'Royal guard', ru: 'Царская стража' },
-      jaguar: { en: 'Sherden guard', ru: 'Шерданы' },
+      jaguar: { en: 'Braves of the King', ru: 'Храбрецы царя' },
       champion: { en: 'Khopesh champion', ru: 'Воин с хопешем' },
       chariot: { en: 'War chariots', ru: 'Боевые колесницы' },
     },
@@ -312,6 +311,43 @@ export const FACTIONS: Record<FactionId, Faction> = {
     art: { king: 'inkosi' },
   },
 };
+
+/** Each army's doctrine for the Auto army (the computer's and the "Auto" button's): the share of the budget it
+ *  spends on each piece, after its real way of fighting. Same budget for everyone; suggestArmy still opens with a
+ *  shooter and a spearman where the roster has them, so no auto army is all one kind of piece. */
+export const DOCTRINE: Record<FactionId, ArmyMix> = {
+  // The legion: a heavy-infantry core round the eagle, auxiliaries and archers on the flanks, a few horse, one engine.
+  romans: { heavyInfantry: 0.4, lightInfantry: 0.15, banner: 0.08, archer: 0.15, heavyCavalry: 0.12, ballista: 0.1, champion: 0.12 },
+  // Pharaoh's host: chariots and archers win, spearmen and guards hold.
+  egypt: { chariot: 0.25, archer: 0.25, lightInfantry: 0.2, heavyInfantry: 0.15, jaguar: 0.15, champion: 0.1 },
+  // A foot army: the shield wall with berserkers behind it, a few axes and bows.
+  vikings: { heavyInfantry: 0.25, shieldbearer: 0.15, lightInfantry: 0.2, berserker: 0.2, axeThrower: 0.1, archer: 0.1, champion: 0.12 },
+  // Rus: the druzhina riders with a militia and archer screen.
+  novgorod: { heavyCavalry: 0.25, heavyInfantry: 0.2, lightInfantry: 0.2, archer: 0.2, lightCavalry: 0.1, champion: 0.1 },
+  // The Order: the knights' charge is everything, crossbows and sergeants support it.
+  teutonic: { heavyCavalry: 0.35, heavyInfantry: 0.2, archer: 0.2, lightInfantry: 0.1, lightCavalry: 0.1, champion: 0.1 },
+  // Nearly all riders: horse archers first, lancers to finish, almost no foot.
+  mongols: { horseArcher: 0.45, heavyCavalry: 0.25, lightCavalry: 0.2, archer: 0.08, lightInfantry: 0.05, championRider: 0.12 },
+  // Ashigaru masses with samurai as the elite, matchlocks and bows, few horse.
+  japanese: { ashigaru: 0.3, samurai: 0.25, crossbow: 0.12, archer: 0.12, heavyCavalry: 0.1, lightCavalry: 0.06, scout: 0.05, champion: 0.1 },
+  // Massed warriors, eagle and jaguar elites, darts and arrows.
+  aztecs: { lightInfantry: 0.3, heavyInfantry: 0.2, jaguar: 0.2, atlatl: 0.15, archer: 0.15 },
+  // Janissary firepower, azaps, akinji and sipahi horse, the great gun.
+  ottomans: { skirmisher: 0.3, heavyCavalry: 0.2, lightInfantry: 0.15, lightCavalry: 0.15, wildRider: 0.1, cannon: 0.1 },
+  // Guns everywhere, cowboys in the saddle, a few troopers.
+  frontier: { gunslinger: 0.2, rifleman: 0.2, cowboy: 0.2, deputy: 0.15, heavyCavalry: 0.12, longRifle: 0.08, championGun: 0.1 },
+  // Riders above all: horse archers and mounted warriors, few on foot.
+  comanche: { horseArcher: 0.4, lightCavalry: 0.3, lightInfantry: 0.1, archer: 0.1, championRider: 0.12 },
+  // The thin red line: line infantry core, riflemen out front, cavalry and guns.
+  british: { lineInfantry: 0.45, skirmisher: 0.15, heavyCavalry: 0.15, lightCavalry: 0.1, cannon: 0.12 },
+  // The column: line infantry, voltigeurs, cuirassiers and lancers, the guns and the Guard.
+  french: { lineInfantry: 0.4, skirmisher: 0.15, heavyCavalry: 0.15, lightCavalry: 0.12, cannon: 0.1, champion: 0.1 },
+  // Boarding parties with musket cover, grenades and a deck gun.
+  pirates: { boarder: 0.35, skirmisher: 0.2, bomber: 0.15, rifleman: 0.1, cannon: 0.1, championGun: 0.1 },
+  // The impi: masses of stabbing spears, veterans and young warriors, throwers, a few scouts.
+  zulus: { impi: 0.35, lightInfantry: 0.25, heavyInfantry: 0.15, thrower: 0.15, scout: 0.05, champion: 0.1 },
+};
+for (const id of Object.keys(FACTIONS) as FactionId[]) registerArmyMix(FACTIONS[id].roster, DOCTRINE[id]);
 
 export const FACTION_ORDER: FactionId[] = ['romans', 'egypt', 'vikings', 'novgorod', 'teutonic', 'mongols', 'japanese', 'aztecs', 'ottomans', 'frontier', 'comanche', 'british', 'french', 'pirates', 'zulus'];
 

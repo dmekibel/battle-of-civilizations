@@ -111,7 +111,11 @@ describe('lobbed shots', () => {
 describe('batch one rosters', () => {
   const NEW: [string, UnitTypeId][] = [['romans', 'champion'], ['romans', 'banner'], ['egypt', 'jaguar'], ['egypt', 'champion'], ['pirates', 'championGun'], ['pirates', 'rifleman'],
     ['zulus', 'champion'], ['zulus', 'scout'], ['japanese', 'scout'], ['japanese', 'crossbow'], ['vikings', 'shieldbearer'], ['ottomans', 'wildRider'], ['french', 'champion'],
-    ['british', 'rocket'], ['frontier', 'longRifle']];
+    ['frontier', 'longRifle']];
+
+  it('the British have no rockets (owner, 2026-11-18): the lobbed-shot chassis stays in the rules, unused', () => {
+    expect(FACTION_ORDER.some((id) => FACTIONS[id].roster.includes('rocket'))).toBe(false);
+  });
 
   it('every new piece is on its army roster, named, priced and drawn from all 8 sides', () => {
     for (const [army, type] of NEW) {
