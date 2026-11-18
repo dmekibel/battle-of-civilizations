@@ -703,7 +703,7 @@ export const NO_EFFECTS: Effects = { from: new Map(), hits: [], walks: new Map()
 /** Time for one step of a walk, in ms. */
 export const STEP_MS = 130;
 /** Pieces that fire guns: a quick tracer and smoke instead of an arrow in flight. */
-const GUNS = new Set<UnitTypeId>(['gunslinger', 'championGun', 'rifleman', 'cowboy', 'deputy', 'lineInfantry', 'skirmisher', 'cannon', 'bomber', 'crossbow', 'longRifle', 'rocket']);
+const GUNS = new Set<UnitTypeId>(['gunslinger', 'championGun', 'rifleman', 'cowboy', 'deputy', 'lineInfantry', 'skirmisher', 'cannon', 'bomber']);
 /** When the blow lands after the attack starts (seconds): arrows fly, bullets and blades are quick. */
 /** How long an arrow is in the air (seconds): slow enough to follow with the eye. */
 export const ARROW_S = 0.65;
