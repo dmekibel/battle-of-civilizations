@@ -437,6 +437,9 @@ interface Standing {
   hull?: Pt[];
   /** see-through: the hex it stands on ("col,row"), so it never hides its own hex. */
   on?: string;
+  /** A soldier: fades only when it hides the selected piece itself, never just a target hex (random soldiers going
+   *  see-through while orbiting read as a bug, David 2026-11-18). */
+  unit?: boolean;
 }
 
 /** A pine: trunk and three stacked tiers, dark on the shaded side and lighter in the sun. */
@@ -700,7 +703,7 @@ export const NO_EFFECTS: Effects = { from: new Map(), hits: [], walks: new Map()
 /** Time for one step of a walk, in ms. */
 export const STEP_MS = 130;
 /** Pieces that fire guns: a quick tracer and smoke instead of an arrow in flight. */
-const GUNS = new Set<UnitTypeId>(['gunslinger', 'championGun', 'rifleman', 'cowboy', 'deputy', 'lineInfantry', 'skirmisher', 'cannon', 'bomber']);
+const GUNS = new Set<UnitTypeId>(['gunslinger', 'championGun', 'rifleman', 'cowboy', 'deputy', 'lineInfantry', 'skirmisher', 'cannon', 'bomber', 'crossbow', 'longRifle', 'rocket']);
 /** When the blow lands after the attack starts (seconds): arrows fly, bullets and blades are quick. */
 /** How long an arrow is in the air (seconds): slow enough to follow with the eye. */
 export const ARROW_S = 0.65;
@@ -1283,7 +1286,7 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
     }
     // In 2.5D a standing piece can cover the hex behind it, so the piece itself is tappable too.
     if (L.tilt) svg = `<g class="tap" data-col="${u.pos.col}" data-row="${u.pos.row}">${svg}</g>`;
-    standing.push({ depth: L.depth(x, y), svg, box: u.id === o.selected ? null : figBox, on: `${u.pos.col},${u.pos.row}` });
+    standing.push({ depth: L.depth(x, y), svg, box: u.id === o.selected ? null : figBox, on: `${u.pos.col},${u.pos.row}`, unit: true });
     if (p) {
       const by = at[1] - lift(L, k) - 17 * k;
       top.push(`<g transform="translate(${(at[0] + 17 * k).toFixed(1)} ${by.toFixed(1)})" class="badge"><circle r="10" fill="#d32f2f"/><text y="4">${p.kills ? '✕' : `−${p.damage}`}</text>${p.covered ? COVER_LEAF : ''}</g>`);
@@ -1505,6 +1508,7 @@ function seeThrough(s: GameState, o: Overlay, v: View, L: Lens, standing: Standi
   // The selected piece itself must show too, or its moves read as coming from nowhere.
   const sel = s.units.find((u) => u.id === o.selected);
   if (sel) hexes.push(sel.pos);
+  const selKey = sel ? `${sel.pos.col},${sel.pos.row}` : '';
   const turn = v.portrait ? Math.PI / 2 : 0;
   let [mnx, mny, mxx, mxy] = [Infinity, Infinity, -Infinity, -Infinity];
   const tg = hexes.map((h) => {
@@ -1536,6 +1540,7 @@ function seeThrough(s: GameState, o: Overlay, v: View, L: Lens, standing: Standi
     const depth = hull ? st.depth + 0.65 * S : st.depth;
     for (const t of tg) {
       if (st.on === t.key || depth <= t.depth + COVER_EPS) continue;
+      if (st.unit && t.key !== selKey) continue;
       let n = 0;
       let centre = false;
       for (let j = 0; j < 7; j++) {
