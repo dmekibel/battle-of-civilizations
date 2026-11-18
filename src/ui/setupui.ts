@@ -75,7 +75,7 @@ export function choiceList(field: string, options: [string, string, string?][], 
 /** The eight turns of a figure, going round. */
 const VIEWS = ['front', 'front-left', 'left', 'back-left', 'back', 'back-right', 'right', 'front-right'];
 let view = 1; // starts three-quarter, like the menus
-let autoPausedUntil = 0;
+let autoPausedUntil = 0; void autoPausedUntil; // kept for the turn-by-hand pause; auto-turn is off
 
 const artOf = (type: UnitTypeId) => (type === 'deputy' ? 'lightInfantry' : type);
 function figSrc(fac: string, type: UnitTypeId, v: string): string | null {
@@ -197,9 +197,5 @@ export function initShowcase() {
   };
   document.addEventListener('pointerup', end);
   document.addEventListener('pointercancel', () => (drag = null));
-  const still = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (!still) setInterval(() => {
-    if (Date.now() < autoPausedUntil || document.hidden || !document.querySelector('.ap-fig')) return;
-    turnFigures(1, false);
-  }, 1600);
+  // No turning on its own (David 2026-11-18): figures turn only when dragged or with the turn buttons.
 }

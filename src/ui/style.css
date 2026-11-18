@@ -1467,3 +1467,17 @@ body:has(.screen.phone) .tut-coach { top: calc(max(6px, env(safe-area-inset-top,
 /* replay: always-visible Exit and New game (2026-11-18) */
 .rp-top { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 10px); right: max(12px, env(safe-area-inset-right, 0px)); z-index: 40; display: flex; gap: 8px; }
 .rp-top button { min-height: 44px; padding: 0 16px; border-radius: 22px; font-weight: 700; }
+.rp-top button { min-height: 44px; padding: 0 16px; border-radius: 22px; font-weight: 700; }
+
+/* Army showcase on wide screens (2026-11-18): a wide sheet and the pieces in a grid of cards. */
+@media (min-width: 820px) {
+  .sheet-body.ap { width: min(1120px, calc(100vw - 48px)); max-width: none; }
+  .ap .ap-hero { grid-template-columns: 72px 1fr; padding: 16px 20px; }
+  .ap .ap-emblem svg { width: 66px; height: 77px; }
+  .ap .ap-blurb { font-size: 15px; max-width: 70ch; }
+  .ap-units { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+  .ap-unit { grid-template-columns: 140px minmax(0, 1fr); }
+  .ap-fig { height: 150px; }
+  .ap-fig img { max-height: 150px; }
+}
+@media (min-width: 1400px) { .ap-units { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); } }
