@@ -306,7 +306,9 @@ function checkStrike(
   const guard = kind === 'shoot' ? cfg.units[t.type].shotGuard ?? 0 : 0;
   const damage = Math.max(0, damageOn(s, t, raw, cfg) - (covered ? 1 : 0) - guard);
   // Spears: cavalry charging into infantry takes a hit back, unless the infantry falls.
-  const counter = kind === 'attack' && cfg.options.spears && mounted(a, cfg) && INFANTRY.has(t.type) && t.hp > damage ? 1 : 0;
+  let counter = kind === 'attack' && cfg.options.spears && mounted(a, cfg) && INFANTRY.has(t.type) && t.hp > damage ? 1 : 0;
+  // Braced spears: riders who charge spearmen are hurt even when the spearman falls.
+  if (kind === 'attack' && mounted(a, cfg)) counter = Math.max(counter, cfg.units[t.type].brace ?? 0);
   return { a, t, cost, damage, counter, covered };
 }
 

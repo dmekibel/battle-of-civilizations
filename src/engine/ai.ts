@@ -124,6 +124,27 @@ function lastFight(s: GameState): number {
   return 0;
 }
 
+/** Shooting strength of one side: each shooter's damage times its reach. */
+function firepower(s: GameState, p: Player, cfg: GameConfig): number {
+  let f = 0;
+  for (const u of s.units) {
+    const r = cfg.units[u.type].ranged;
+    if (u.owner === p && r) f += r.damage * r.maxRange;
+  }
+  return f;
+}
+
+/** The enemy out-shoots this side by half again or more (cached per position). */
+const gunMemo = new WeakMap<GameState, Partial<Record<Player, boolean>>>();
+function outgunned(s: GameState, p: Player, cfg: GameConfig): boolean {
+  const m = gunMemo.get(s) ?? {};
+  if (m[p] === undefined) {
+    m[p] = firepower(s, other(p), cfg) > 1.5 * firepower(s, p, cfg) + 2;
+    gunMemo.set(s, m);
+  }
+  return m[p]!;
+}
+
 function moveScore(s: GameState, u: Unit, to: Hex, cost: number, cfg: GameConfig, fields: Fields): number {
   const left = s.points - cost;
   const rules = cfg.units[u.type];
@@ -146,7 +167,8 @@ function moveScore(s: GameState, u: Unit, to: Hex, cost: number, cfg: GameConfig
   if (!(gain > 0)) return -1;
   // March as an army: pieces running far ahead of the middle of their own line are held back.
   const quiet = s.turn - lastFight(s);
-  const caution = Math.max(0, 1 - Math.max(0, quiet - 3) / 4);
+  // Outgunned: when the enemy shoots much harder than we do, waiting only gets us shot, so fighters press in.
+  const caution = Math.max(0, 1 - Math.max(0, quiet - 3) / 4) * (!rules.ranged && outgunned(s, u.owner, cfg) ? 0.5 : 1);
   const ahead = Math.max(0, line - after - 3) * caution;
   // Archers stop at shooting range rather than walking into the enemy line.
   if (rules.ranged && distance(to, goal) < rules.ranged.minRange) return -1;

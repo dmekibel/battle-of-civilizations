@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG, type GameConfig, type UnitTypeId } from '../src/config';
-import { armyCost, buildBoard, newGame, previewStrike, reachable, shoot, suggestArmy, type GameState, type Player } from '../src/engine';
+import { armyCost, attack, buildBoard, getUnit, newGame, previewStrike, reachable, shoot, suggestArmy, type GameState, type Player } from '../src/engine';
 
 const OPEN: GameConfig = { ...CONFIG, board: { ...CONFIG.board, riverCol: null, bridgeRows: [], forests: [] } };
 
@@ -28,6 +28,26 @@ describe('faction pieces', () => {
     const r = shoot(s, s.units[0].id, s.units[1].id, OPEN);
     if (!r.ok) throw new Error(r.error);
     expect(reachable(r.state, s.units[0].id, OPEN).size).toBe(0);
+  });
+
+  it('braced spears: a rider who charges ashigaru or impi takes a hit back, even when the spearman falls', () => {
+    const s = scenario([['red', 'heavyCavalry', 3, 3], ['blue', 'ashigaru', 3, 4], ['red', 'lightCavalry', 5, 3], ['blue', 'impi', 5, 4]]);
+    expect(previewStrike(s, s.units[0].id, s.units[1].id, 'attack', OPEN)).toMatchObject({ kills: true, counter: 1 });
+    const r = attack(s, s.units[0].id, s.units[1].id, OPEN);
+    if (!r.ok) throw new Error(r.error);
+    expect(getUnit(r.state, s.units[0].id)?.hp).toBe(OPEN.units.heavyCavalry.hp - 1);
+    // A light rider (1 hp) dies on the impi's spears even as it kills him.
+    const r2 = attack(r.state, s.units[2].id, s.units[3].id, OPEN);
+    if (!r2.ok) throw new Error(r2.error);
+    expect(getUnit(r2.state, s.units[2].id)).toBeUndefined();
+    expect(getUnit(r2.state, s.units[3].id)).toBeUndefined();
+  });
+
+  it('chariots stop once they have shot; berserkers run 2 hexes a point', () => {
+    expect(CONFIG.units.chariot.standsAfterAttack).toBe(true);
+    expect(CONFIG.army.cost.chariot).toBe(7);
+    expect(CONFIG.units.berserker.speed).toBe(2);
+    expect([CONFIG.army.cost.berserker, CONFIG.army.cost.axeThrower, CONFIG.army.cost.wildRider]).toEqual([2, 2, 3]);
   });
 
   it('ashigaru spearmen hit mounted pieces twice as hard', () => {
