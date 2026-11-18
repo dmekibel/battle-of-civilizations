@@ -1463,3 +1463,7 @@ body:has(.screen.phone) .tut-coach { top: calc(max(6px, env(safe-area-inset-top,
 .screen.portrait .bar .row button.withicon { flex: none; width: 46px; padding: 0; border-radius: 50%; }
 .screen.portrait .bar .row button[data-act='end'] { white-space: nowrap; }
 /* ===== end space pass ===== */
+
+/* replay: always-visible Exit and New game (2026-11-18) */
+.rp-top { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 10px); right: max(12px, env(safe-area-inset-right, 0px)); z-index: 40; display: flex; gap: 8px; }
+.rp-top button { min-height: 44px; padding: 0 16px; border-radius: 22px; font-weight: 700; }

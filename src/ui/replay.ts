@@ -129,8 +129,8 @@ export const replayState = (): GameState | null => (P ? P.rp.frames[P.i].state :
 
 /** Strings the replay needs, kept here so the shared dictionary stays untouched. */
 const TXT = {
-  en: { watch: 'Watch replay', share: 'Share', exit: 'Back', play: 'Play', pause: 'Pause', speed: 'Speed', of: 'of', lost: 'Pieces lost', turns: 'Turns', title: 'Battle of Civilizations', saved: 'Picture saved', partial: 'Replay stops early: the rules changed since this battle.', next: 'Next turn', prev: 'Previous turn' },
-  ru: { watch: 'Смотреть повтор', share: 'Поделиться', exit: 'Назад', play: 'Играть', pause: 'Пауза', speed: 'Скорость', of: 'из', lost: 'Потеряно фигур', turns: 'Ходов', title: 'Битва цивилизаций', saved: 'Картинка сохранена', partial: 'Повтор обрывается: правила изменились после этой битвы.', next: 'Следующий ход', prev: 'Предыдущий ход' },
+  en: { watch: 'Watch replay', share: 'Share', exit: 'Exit replay', newGame: 'New game', play: 'Play', pause: 'Pause', speed: 'Speed', of: 'of', lost: 'Pieces lost', turns: 'Turns', title: 'Battle of Civilizations', saved: 'Picture saved', partial: 'Replay stops early: the rules changed since this battle.', next: 'Next turn', prev: 'Previous turn' },
+  ru: { watch: 'Смотреть повтор', share: 'Поделиться', exit: 'Выйти из повтора', newGame: 'Новая игра', play: 'Играть', pause: 'Пауза', speed: 'Скорость', of: 'из', lost: 'Потеряно фигур', turns: 'Ходов', title: 'Битва цивилизаций', saved: 'Картинка сохранена', partial: 'Повтор обрывается: правила изменились после этой битвы.', next: 'Следующий ход', prev: 'Предыдущий ход' },
 } as const;
 const tx = (k: keyof (typeof TXT)['en']) => TXT[host?.lang() ?? 'en'][k];
 
@@ -177,6 +177,12 @@ function onControl(act: string) {
   if (act === 'share') return void shareCard(host.live(), host.lang());
   if (!P) return;
   if (act === 'exit') return stop();
+  if (act === 'new') {
+    // Leave the replay, then the result screen's New game (David 2026-11-18: there was no way out to a new game).
+    stop();
+    requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-act="restart"]')?.click());
+    return;
+  }
   if (act === 'play') {
     if (!P.playing && P.i >= P.rp.frames.length - 1) jumpTo(0, false);
     P.playing = !P.playing;
@@ -292,7 +298,8 @@ export function replayControls(): string {
   const play = P.playing
     ? `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z" fill="currentColor"/></svg>`
     : `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M7 4.5v15l12-7.5z" fill="currentColor"/></svg>`;
-  return `${banner}<div class="rp-bar" role="toolbar" aria-label="Replay">
+  const top = `<div class="rp-top"><button data-rp="exit" class="ghost">✕ ${tx('exit')}</button><button data-rp="new" class="primary">${tx('newGame')}</button></div>`;
+  return `${banner}${top}<div class="rp-bar" role="toolbar" aria-label="Replay">
     <div class="rp-line">
       <button data-rp="exit" class="ghost rp-exit" aria-label="${tx('exit')}" title="${tx('exit')} (Esc)"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
       <button data-rp="play" class="rp-play" aria-label="${P.playing ? tx('pause') : tx('play')}" title="${P.playing ? tx('pause') : tx('play')} (Space)">${play}</button>
