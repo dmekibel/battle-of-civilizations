@@ -487,15 +487,8 @@ function scenery(h: Hex, v: View, L: Lens): Standing[] {
   if (seed % 5 > 1) return [];
   // biomes: this land's own props (a cactus, a fern, a hay bale), or the meadow's tufts.
   const bp = propsOf(CONFIG.board);
-  if (biomeOf(CONFIG.board).props === null) return [];
-  if (bp) {
-    const bi = bp.mix[seed % bp.mix.length];
-    const [[bw, bh], btall] = bp.list[bi];
-    const bk = L.size(px, py);
-    const [bx, by] = L.pt(px, py);
-    const [ww, wh] = [(bw / bh) * btall * bk, btall * bk];
-    return [{ depth: L.depth(px, py), svg: pic(bp.url(bi), [bw, bh], bx - ww / 2, by - wh + 0.8 * bk, ww, wh), box: lastPic, on: `${h.col},${h.row}` }];
-  }
+  // The lands' little props (pebbles, mini cacti, tumbleweeds) looked out of place: off for now (David, 2026-11-18).
+  if (biomeOf(CONFIG.board).props === null || bp) return [];
   const pi = PROP_MIX[seed % PROP_MIX.length];
   // Flowers and mushrooms don't come up through snow.
   if (skyNow().kind === 'snow' && (pi === 2 || pi === 3 || pi === 7)) return [];
@@ -523,10 +516,18 @@ function carved(name: SceneryId | string, gx: number, gy: number, turn: number, 
   const k = L.size(px, py);
   const dir = DIRS8[(((seenFrom(v) + turn) % 8) + 8) % 8];
   const size = (SCENERY as Record<string, Pt>)[name] ?? BIOME_SCENERY[name] ?? SCENERY.house; // biomes: a saloon, a yurt, a pagoda...
+  // All 8 sides go into the picture sheet the first time this building is drawn, so turning the board never waits
+  // for a side to load (that wait was a blink on the saloons).
+  if (!SHEETED.has(name)) {
+    SHEETED.add(name);
+    for (const d of DIRS8) sheetId(scUrl(name, d), size[0], size[1]);
+  }
   const f = 0.27 * k * scale;
   const [w, hh] = [size[0] * f, size[1] * f];
-  return { svg: pic((name in SCENERY ? SC_URL(name as SceneryId, dir) : `${import.meta.env.BASE_URL}map/sc-${name}-${dir}.webp?v=2`), size as unknown as Pt, sx - w / 2, sy - hh + 1.5 * k, w, hh), sy };
+  return { svg: pic(scUrl(name, dir), size as unknown as Pt, sx - w / 2, sy - hh + 1.5 * k, w, hh), sy };
 }
+const SHEETED = new Set<string>();
+const scUrl = (name: string, dir: string) => (name in SCENERY ? SC_URL(name as SceneryId, dir) : `${import.meta.env.BASE_URL}map/sc-${name}-${dir}.webp?v=2`);
 
 /** Castle walls, towers, gateways and houses, standing on their hex. In the flat top-down view they are drawn as roofs. */
 function building(t: TerrainId, h: Hex, v: View, L: Lens): Standing[] {
@@ -616,6 +617,12 @@ function trees(h: Hex, v: View, L: Lens): Standing[] {
       const seed = h.col * 7 + h.row * 11 + i * 5;
       const kinds = treeKinds(CONFIG.board); // biomes: cacti, palms, cypresses... (the meadow: pine, spruce, oak)
       const [kind, size] = kinds[seed % kinds.length];
+      const bio = biomeId(CONFIG.board);
+      // All 8 sides into the picture sheet on first sight, so turning never waits for a side to load (a blink).
+      if (bio !== 'meadow' && !SHEETED.has(`tree:${bio}:${kind}`)) {
+        SHEETED.add(`tree:${bio}:${kind}`);
+        for (const d of DIRS8) sheetId(treeUrlOf(bio, kind, d), size[0], size[1]);
+      }
       const dir = L.tilt ? DIRS8[(seenFrom(v) + (seed % 8)) % 8] : 'front';
       const f = (L.tilt ? 0.27 : 0.12) * k * (TREE_SCALE[kind] ?? 1); // biomes: a cactus stands lower than a pine // the tallest tree stands about one and a half soldiers high
       const [w, hh] = [size[0] * f, size[1] * f];
