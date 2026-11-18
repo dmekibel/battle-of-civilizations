@@ -1670,3 +1670,36 @@ body:has(.screen.phone) .tut-coach { top: calc(max(6px, env(safe-area-inset-top,
   .victory .card button.wide { min-height: 56px; font-size: 17px; }
 }
 /* ===== end desktop layout ===== */
+
+/* ===== miniature look (src/ui/mini.ts) =====
+   Out-of-focus bands far (top) and near (bottom) over the board: backdrop-filter blur, faded in by a mask, each only as
+   tall as its band. No blend modes (iPhone Safari draws them over the 3D board as solid colour). */
+.mini { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.mini > div { position: absolute; left: 0; right: 0; pointer-events: none; }
+.mini-far { top: 0; --solid: 40%; -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 var(--solid), transparent 100%); mask-image: linear-gradient(to bottom, #000 0%, #000 var(--solid), transparent 100%); }
+.mini-near { bottom: 0; --solid: 30%; -webkit-mask-image: linear-gradient(to top, #000 0%, #000 var(--solid), transparent 100%); mask-image: linear-gradient(to top, #000 0%, #000 var(--solid), transparent 100%); }
+.mini-tone { inset: 0; }
+.ground-clip.mini-sat { filter: saturate(var(--mini-sat, 1.12)); }
+/* ===== end miniature look ===== */
+
+/* ===== battle intro (main.ts, "battle intro") =====
+   A title card in the carved walnut & brass style for each army while the camera sweeps the field. */
+.intro { position: absolute; inset: 0; pointer-events: none; z-index: 3; overflow: hidden; }
+.intro::before, .intro::after { content: ""; position: absolute; left: 0; right: 0; height: 7%; background: #0b0906; transition: transform .5s ease; }
+.intro::before { top: 0; } .intro::after { bottom: 0; }
+.intro.out::before { transform: translateY(-100%); } .intro.out::after { transform: translateY(100%); }
+.intro-skip { transition: opacity .3s ease; } .intro.out .intro-skip { opacity: 0; }
+.intro-card { position: absolute; left: 50%; bottom: 13%; width: max-content; display: flex; align-items: center; gap: 14px; padding: 12px 22px 12px 14px;
+  transform: translate(-50%, 12px); opacity: 0; transition: opacity .45s ease, transform .6s cubic-bezier(.2, .7, .2, 1);
+  background: linear-gradient(180deg, #2a2115 0%, #1b150d 100%); border-radius: 14px;
+  box-shadow: inset 0 0 0 1px #6e5222, inset 0 0 0 3px #1b150d, inset 0 0 0 4px rgba(240, 214, 151, .35), 0 10px 28px rgba(0, 0, 0, .55); max-width: calc(100% - 32px); box-sizing: border-box; }
+.intro-card.show { opacity: 1; transform: translate(-50%, 0); }
+.intro-card .ic-crest { width: 52px; height: 60px; flex: none; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .6)); }
+.intro-card .ic-crest svg { width: 100%; height: 100%; }
+.intro-card .ic-text { display: grid; gap: 3px; min-width: 0; }
+.intro-card b { font: 400 clamp(22px, 3.4vw, 34px)/1.05 var(--display); color: var(--brass-hi, #f0d697); letter-spacing: .02em; text-shadow: 0 1px 0 #000; overflow-wrap: anywhere; }
+.intro-card small { font: 600 11px/1.2 var(--ui); letter-spacing: .16em; text-transform: uppercase; color: var(--ink-2, #c4b597); }
+.intro-card .ic-rule { display: block; height: 1px; width: 100%; background: linear-gradient(90deg, rgba(240, 214, 151, .55), rgba(240, 214, 151, 0)); }
+.intro-skip { position: absolute; right: 14px; top: calc(7% + 8px); font: 500 12px/1 var(--ui); color: rgba(240, 214, 151, .7); letter-spacing: .06em; }
+@media (prefers-reduced-motion: reduce) { .intro-card { transition: opacity .3s ease; } }
+/* ===== end battle intro ===== */

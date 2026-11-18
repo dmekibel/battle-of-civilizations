@@ -59,6 +59,7 @@ import { paintSideVars, setMine, setSideMode, sideColor, sideMode } from './side
 import { ERAS, ERA_OF, FACTIONS, FACTION_ORDER, factionOf, rosterOf, sides, type FactionId } from './factions';
 import { morph, morphInto } from './morph';
 import { placeWeather, weatherPanel } from './weather';
+import { miniHeldOff, miniOn, miniReset, miniSetPref, miniStats, placeMini, toggleMini } from './mini';
 import { ART_VERSION, SPRITES } from './sprites';
 import { createCode, fetchGame, newId, normCode, pushGame, resolveCode } from './online';
 import { agoText, browserStore, deleteSlot, listSlots, migrate, newSlotId, readSlot, writeSlot } from './saves';
@@ -205,7 +206,10 @@ let menuOpen = false;
 let mode: Mode = saved?.mode === 'ai' ? 'ai' : saved?.mode === 'online' && saved.net ? 'online' : 'pvp';
 let cover = saved ? saved.cover || (mode === 'pvp' && (saved.state.phase === 'draft' || saved.state.phase === 'deploy')) : false;
 /** The "how do you want to play" screen: first launch and every new game. */
-let choosing = !saved;
+// screen memory: a reload keeps the player on the title screen if that is where they were (an invite link still opens its game).
+const SCREEN_KEY = 'boc-screen';
+let shownScreen = (() => { try { return localStorage.getItem(SCREEN_KEY); } catch { return null; } })();
+let choosing = !saved || (shownScreen === 'title' && !new URLSearchParams(location.search).get('g'));
 /** The campaign list, shown in place of the start screen (so the game behind stays paused). */
 let campaignOpen = false;
 let aiTimer: number | null = null;
@@ -308,6 +312,7 @@ function resumeSlot(id: string): boolean {
   unsent = null;
   slotId = id;
   lastSaved = [];
+  introSeen = null; // battle intro: a resumed game never plays it
   mode = d.mode === 'ai' ? 'ai' : d.mode === 'online' && d.net ? 'online' : 'pvp';
   settings = d.settings ? { ...d.settings, options: { ...DADS_RULES, ...d.settings.options } } : loadSettings();
   applySettings(settings);
@@ -411,6 +416,7 @@ async function syncIn() {
   }
   sess = startSession(data.state);
   netState = sess.state;
+  if (first) introSeen = null; // battle intro: joining (or re-joining) an online game never plays it
   net.rev = r.rev;
   selected = null;
   cover = false;
@@ -1434,6 +1440,8 @@ function menuBody(s: GameState): string {
       ${row('smartcam', '#5b6b7a', G.target, t(lang, 'rowSmartCam'), '', smartCam)}
       ${row('sidecols', '#b08a2a', '<circle cx="8" cy="12" r="4.5" fill="none"/><circle cx="16" cy="12" r="4.5" fill="none" stroke-dasharray="2.5 2"/>', t(lang, 'rowSideColors'), sideMode === 'mine' ? t(lang, 'sideMine') : t(lang, 'sideArmy'))}
       ${row('warn', '#b0443a', '<path d="M12 4l9 16H3z" fill="none"/><path d="M12 10v4M12 17v.5" fill="none"/>', t(lang, 'rowWarnings'), '', warnOn)}
+      ${miniHeldOff() ? row('mini', '#3a8f8a', G.target, t(lang, 'rowMini'), t(lang, 'miniHeld')) : row('mini', '#3a8f8a', '<circle cx="12" cy="12" r="3" fill="none"/><path d="M3 7h18M3 17h18" fill="none" stroke-dasharray="2 2"/>', t(lang, 'rowMini'), '', miniOn())}
+      ${row('intro', '#a8811a', '<rect x="3" y="6" width="18" height="12" rx="2" fill="none"/><path d="M10 9.5l5 2.5-5 2.5z"/>', t(lang, 'rowIntro'), '', introOn)}
       ${row('cam-reset', '#5b6b7a', G.target, t(lang, 'camResetMenu'))}
       ${mode === 'pvp' ? row('table', '#a8811a', G.seats, t(lang, 'rowSeating'), table === 'pass' ? t(lang, 'seatPass') : t(lang, 'seatAcross')) : ''}
       ${mode === 'online' && net ? row('share', '#3a6fb0', G.globe, t(lang, 'inviteLink')) : ''}
@@ -1510,6 +1518,142 @@ function bar(s: GameState): string {
   return '';
 }
 
+// ===== battle intro =====
+// When a battle starts (the first turn after both armies are set up, or a quick battle), a short camera move: low and
+// close over one army with its name and crest, a sweep across the field to the other army, then down to the normal
+// play camera. A resumed save, a joined online game, the tutorial and replays never play it. Any tap, click or key skips.
+const INTRO_KEY = 'boc-intro';
+let introOn = (() => { try { return localStorage.getItem(INTRO_KEY) !== '0'; } catch { return true; } })();
+/** What the last drawing showed: 'setup' (armies being chosen or placed), 'battle', or null (not known: just loaded or resumed). */
+let introSeen: 'setup' | 'battle' | null = null;
+/** The battle has just started: the intro plays as soon as nothing else is over the board. */
+let introWaiting = false;
+let introPlaying = false;
+let introEnd: (() => void) | null = null;
+
+/** Called on every drawing: notices the moment the fighting starts. */
+function introCheck(s: GameState) {
+  const now = setupPhase(s) ? 'setup' : 'battle';
+  if (introSeen === 'setup' && now === 'battle' && s.turn === 1 && s.phase !== 'over' && introOn && !tutorialOn() && !replaying()) introWaiting = true;
+  introSeen = now;
+  if (now !== 'battle' || tutorialOn() || replaying() || s.phase === 'over') introWaiting = false;
+  if (introWaiting && !introPlaying && !choosing && !setupOpen && !savesOpen && !cover && !menuOpen && !inviting && !pickingArmy && !campaignOpen && !onlineStep) {
+    introWaiting = false;
+    setTimeout(playIntro, 30);
+  }
+}
+
+/** The two armies' middles on the map, the one the camera ends on last. */
+function introArmies(s: GameState): { first: Player; last: Player; at: Record<Player, [number, number]> } | null {
+  const last: Player = mode === 'ai' ? (AI_SIDE === 'red' ? 'blue' : 'red') : mode === 'online' && net ? net.me : s.current;
+  const first = other(last);
+  const mid = (p: Player): [number, number] | null => {
+    const pts = s.units.filter((u) => u.owner === p).map((u) => hexOnMap(u.pos, { portrait }));
+    return pts.length ? [pts.reduce((a, q) => a + q[0], 0) / pts.length, pts.reduce((a, q) => a + q[1], 0) / pts.length] : null;
+  };
+  const a = mid(first);
+  const b = mid(last);
+  return a && b ? { first, last, at: { [first]: a, [last]: b } as Record<Player, [number, number]> } : null;
+}
+
+function introCard(s: GameState, p: Player): HTMLElement {
+  const d = document.createElement('div');
+  d.className = 'intro-card';
+  const f = factionOf(p);
+  d.innerHTML = `<span class="ic-crest">${f.emblem}</span><span class="ic-text"><b>${playerName(lang, p)}</b><span class="ic-rule"></span><small>${t(lang, p === s.current ? 'introFirst' : 'introSecond')}</small></span>`;
+  return d;
+}
+
+function playIntro() {
+  const s = sess.state;
+  const wrap = app.querySelector<HTMLElement>('.stage-wrap');
+  if (introPlaying || !wrap || choosing || cover || setupPhase(s) || replaying() || tutorialOn()) return;
+  const armies = introArmies(s);
+  if (!armies) return;
+  introPlaying = true;
+  const home: Camera = { ...cam };
+  const [fw, fh] = mapSize(portrait);
+  const end = { x: home.x ?? fw / 2, y: home.y ?? fh / 2, zoom: home.zoom, pitch: home.pitch };
+  const [A, B] = [armies.at[armies.first], armies.at[armies.last]];
+  const toward = (p: [number, number], q: [number, number], k: number): [number, number] => [p[0] + (q[0] - p[0]) * k, p[1] + (q[1] - p[1]) * k];
+  // Close in: about a third of the board across, or nearer on a phone held upright.
+  const close = Math.min(ZOOM_MAX, portrait ? 2.7 : 2.4);
+  const low = tilt ? clampPitch(Math.max(home.pitch, 1.02)) : home.pitch;
+  // Keyframes: [ms, x, y, zoom, pitch].
+  const keys: [number, number, number, number, number][] = [
+    [0, ...A, close * 1.08, low],
+    [1500, ...toward(A, B, 0.07), close * 1.18, low - 0.03],
+    [2700, ...toward(A, B, 0.55), close * 0.62, low - 0.1],
+    [3700, ...toward(B, A, 0.06), close * 1.1, low - 0.04],
+    [4500, ...B, close * 1.16, low - 0.05],
+    [5600, end.x, end.y, end.zoom, end.pitch],
+  ];
+  const total = keys[keys.length - 1][0];
+  // A smooth path through the keyframes (Catmull-Rom; zoom in "times bigger" so it never rushes at one end).
+  const at = (ms: number) => {
+    let i = 0;
+    while (i < keys.length - 2 && ms > keys[i + 1][0]) i++;
+    const [k0, k1, k2, k3] = [keys[Math.max(0, i - 1)], keys[i], keys[i + 1], keys[Math.min(keys.length - 1, i + 2)]];
+    const u0 = Math.min(1, Math.max(0, (ms - k1[0]) / (k2[0] - k1[0])));
+    const u = i === keys.length - 2 ? u0 * u0 * (3 - 2 * u0) : u0; // the last stretch settles gently
+    const cr = (p0: number, p1: number, p2: number, p3: number) => 0.5 * (2 * p1 + (-p0 + p2) * u + (2 * p0 - 5 * p1 + 4 * p2 - p3) * u * u + (-p0 + 3 * p1 - 3 * p2 + p3) * u * u * u);
+    const lz = (k: typeof k0) => Math.log(k[3]);
+    return {
+      x: cr(k0[1], k1[1], k2[1], k3[1]),
+      y: cr(k0[2], k1[2], k2[2], k3[2]),
+      zoom: Math.exp(cr(lz(k0), lz(k1), lz(k2), lz(k3))),
+      pitch: cr(k0[4], k1[4], k2[4], k3[4]),
+    };
+  };
+  const box = document.createElement('div');
+  box.className = 'intro';
+  box.dataset.keep = '1';
+  const cards = [introCard(s, armies.first), introCard(s, armies.last)];
+  const hint = document.createElement('span');
+  hint.className = 'intro-skip';
+  hint.textContent = t(lang, 'introSkip');
+  box.append(...cards, hint);
+  wrap.append(box);
+  const t0 = performance.now();
+  let raf = 0;
+  const finish = () => {
+    if (!introPlaying) return;
+    introPlaying = false;
+    introEnd = null;
+    cancelAnimationFrame(raf);
+    for (const [ev, fn] of listeners) window.removeEventListener(ev, fn, true);
+    box.classList.add('out');
+    cards.forEach((c) => c.classList.remove('show'));
+    setTimeout(() => box.remove(), 500);
+    cam = { ...home };
+    camDone();
+  };
+  introEnd = finish;
+  // Any tap, click, key or wheel skips at once, and does nothing else.
+  const skip = (e: Event) => {
+    e.stopPropagation();
+    if (e.type === 'keydown') e.preventDefault();
+    if (e.type === 'pointerdown' || e.type === 'touchstart' || e.type === 'mousedown') swallowNextClick();
+    finish();
+  };
+  const listeners: [string, (e: Event) => void][] = ['pointerdown', 'mousedown', 'touchstart', 'keydown', 'wheel'].map((ev) => [ev, skip]);
+  for (const [ev, fn] of listeners) window.addEventListener(ev, fn, true);
+  const step = () => {
+    if (!introPlaying) return;
+    const ms = performance.now() - t0;
+    cards[0].classList.toggle('show', ms > 250 && ms < 1900);
+    cards[1].classList.toggle('show', ms > 3300 && ms < 4900);
+    box.classList.toggle('out', ms > 4800);
+    const c = at(Math.min(ms, total));
+    cam = { ...cam, x: c.x, y: c.y, zoom: Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, c.zoom)), pitch: clampPitch(c.pitch) };
+    camFrame();
+    if (ms >= total) return finish();
+    raf = requestAnimationFrame(step);
+  };
+  raf = requestAnimationFrame(step);
+}
+// ===== end battle intro =====
+
 // ---------- render ----------
 
 /** The painted ground: one picture kept between renders (so it never reloads), laid under the board. */
@@ -1573,6 +1717,33 @@ function placeGround() {
   clip.querySelectorAll<HTMLElement>('.gpart').forEach((im, i) => (im.style.transform = `${T} translate(${parts[i].x}px, ${parts[i].y}px)`));
   // Weather and light: tints, puddles, rain, snow and fog around the board.
   placeWeather(wrap, clip, T, view());
+  // miniature look: depth of field and the model-photo grade (src/ui/mini.ts).
+  const v = view();
+  const focus = miniFocus();
+  placeMini(wrap, v, focus, miniDepth(v, focus));
+}
+/** miniature look: how far the ground at a screen height lies from the ground in focus, as a share of the camera's
+ *  distance (the camera stands 2.4 board radii away; only the part along the view direction is depth). */
+function miniDepth(v: ReturnType<typeof view>, focus: number | null): (y: number) => number {
+  const [fw, fh] = mapSize(v.portrait);
+  const dist = Math.hypot(fw, fh) * 1.2;
+  const sinA = v.tilt ? Math.sin((76 * v.cam.pitch * Math.PI) / 180) : 0;
+  const g = (y: number) => screenToGround(v, v.vw / 2, y * v.vh);
+  const [fx, fy] = g(focus ?? 0.5);
+  return (y) => {
+    const [x, yy] = g(y);
+    const d = (Math.hypot(x - fx, yy - fy) * sinA) / dist;
+    return Number.isFinite(d) ? d : Infinity;
+  };
+}
+/** miniature look: the screen height (0..1) kept in focus: the selected piece, else the middle of the screen. */
+function miniFocus(): number | null {
+  if (!miniOn() || !stageSize[1]) return null;
+  const st = replayState() ?? sess.state;
+  const u = selected ? getUnit(st, selected) : undefined;
+  if (!u) return null;
+  const y = hexScreen(st, view(), u.pos)[1] / stageSize[1];
+  return Number.isFinite(y) && y > 0 && y < 1 ? y : null;
 }
 
 /** Re-rendering replaces the board, so keep where the player had scrolled the zoomed map to. */
@@ -1803,7 +1974,14 @@ function draw() {
   app.classList.toggle('upside', upsideDown());
   document.documentElement.lang = lang;
   document.title = t(lang, 'title');
+  // screen memory: which screen a reload should come back to.
+  const where = choosing || setupOpen ? 'title' : 'game';
+  if (where !== shownScreen) {
+    shownScreen = where;
+    try { localStorage.setItem(SCREEN_KEY, where); } catch { /* private window */ }
+  }
   saveGame();
+  introCheck(s);
   syncOut();
   scheduleAi();
   scheduleRoll();
@@ -1813,11 +1991,11 @@ function draw() {
 let rollTimer: number | null = null;
 function scheduleRoll() {
   const s = sess.state;
-  if (rollTimer !== null || rolling || cover || choosing || s.phase !== 'roll' || notMine(s)) return;
+  if (rollTimer !== null || rolling || cover || choosing || introPlaying || introWaiting || s.phase !== 'roll' || notMine(s)) return;
   rollTimer = window.setTimeout(() => {
     rollTimer = null;
     const st = sess.state;
-    if (!rolling && !cover && !choosing && st.phase === 'roll' && !notMine(st)) roll(selected);
+    if (!rolling && !cover && !choosing && !introPlaying && st.phase === 'roll' && !notMine(st)) roll(selected);
   }, 600);
 }
 
@@ -1850,7 +2028,7 @@ function aiSetup() {
 function scheduleAi() {
   const s = sess.state;
   if (camHome && !notMine(s) && !rolling) comeHome();
-  if (aiTimer !== null || rolling || cover || choosing || !aiTurn(s)) return;
+  if (aiTimer !== null || rolling || cover || choosing || introPlaying || introWaiting || !aiTurn(s)) return;
   // Each computer attack gets its own beat: the target is marked first, then the hit lands,
   // so a volley never looks like one click doing several attacks at once.
   const next = s.phase === 'act' ? (tutorialOn() ? tutorialEnemy(s) : aiNextAction(s, undefined, settings.difficulty ?? 'normal')) : null;
@@ -1879,7 +2057,7 @@ function scheduleAi() {
     aiTimer = null;
     aiAim = null;
     const st = sess.state;
-    if (rolling || cover || choosing || !aiTurn(st)) return;
+    if (rolling || cover || choosing || introPlaying || !aiTurn(st)) return;
     if (st.phase === 'roll') return roll();
     const a = tutorialOn() ? tutorialEnemy(st) : aiNextAction(st, undefined, settings.difficulty ?? 'normal');
     if (a) {
@@ -1981,6 +2159,7 @@ function autoEndIfDone() {
 function restart(state: GameState) {
   if (!(mode === 'online' && net)) slotId = newSlotId(); // saved games: never overwrite the last game
   sess = startSession(state);
+  introSeen = 'setup'; // battle intro: a new battle plays it when the fighting starts (at once for a quick battle)
   selected = null;
   message = null;
   draft = {};
@@ -2502,6 +2681,13 @@ app.addEventListener('click', (e) => {
       if (u) lookAtHex(u.pos);
       return;
     }
+    case 'mini':
+      toggleMini();
+      return render();
+    case 'intro':
+      introOn = !introOn;
+      setFlag(INTRO_KEY, introOn);
+      return render();
     case 'smartcam':
       smartCam = !smartCam;
       setFlag(SMART_KEY, smartCam);
@@ -3401,6 +3587,36 @@ if (import.meta.env.DEV) {
     get cam() { return cam; },
     set cam(c: Camera) { cam = c; render(); },
     scheduleAi,
+    // miniature look / battle intro (dev measurements): mini.on(false) switches the look for a measurement only.
+    mini: { stats: miniStats, reset: miniReset, on: (v: boolean) => { miniSetPref(v); render(); } },
+    intro() { introSeen = 'setup'; introCheck(sess.state); },
+    get introPlaying() { return introPlaying; },
+    skipIntro() { introEnd?.(); },
+    /** Orbits and pans the camera for `ms` the way a finger would (camera frames only) and returns the frame times. */
+    orbit(ms = 3000): Promise<{ frames: number; median: number; p90: number; mean: number }> {
+      const start = { ...cam };
+      const t0 = performance.now();
+      const dts: number[] = [];
+      let prev = t0;
+      return new Promise((done) => {
+        const step = () => {
+          const now = performance.now();
+          if (now > t0 + 1) dts.push(now - prev);
+          prev = now;
+          const k = (now - t0) / ms;
+          cam = { ...start, yaw: start.yaw + Math.sin(k * Math.PI * 2) * 0.6, x: (start.x ?? mapSize(portrait)[0] / 2) + Math.sin(k * Math.PI * 4) * 60 };
+          camFrame();
+          if (now - t0 < ms) requestAnimationFrame(step);
+          else {
+            cam = start;
+            camDone();
+            const sorted = [...dts].sort((a, b) => a - b);
+            done({ frames: dts.length, median: sorted[Math.floor(sorted.length / 2)], p90: sorted[Math.floor(sorted.length * 0.9)], mean: dts.reduce((a, b) => a + b, 0) / dts.length });
+          }
+        };
+        requestAnimationFrame(step);
+      });
+    },
     /** Starts a quick battle on any map, shelved ones too (e.g. boc.loadMap('ridge') for the raised high ground). */
     loadMap(map: MapId, size?: 'standard' | 'large') {
       settings = { ...settings, map, ...(size ? { size } : {}) };
@@ -3408,6 +3624,7 @@ if (import.meta.env.DEV) {
       selected = null;
       choosing = false;
       cover = false;
+      introSeen = null; // battle intro: dev screenshots start without it (boc.intro() plays it)
       sess = startSession(quickStart());
       render();
     },
