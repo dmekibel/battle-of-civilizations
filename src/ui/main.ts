@@ -475,7 +475,8 @@ function saveCam() {
     /* keep the camera for this visit only */
   }
 }
-const clampPitch = (p: number) => Math.min(1, Math.max(0, p));
+// Up to 1.1 (about 84°): the board can be looked at almost edge-on (David 2026-11-18).
+const clampPitch = (p: number) => Math.min(1.1, Math.max(0, p));
 /** smart camera: on selecting a piece, glide just enough that its targets show (menu switch, on by default). */
 const SMART_KEY = 'boc-smartcam';
 let smartCam = (() => { try { return localStorage.getItem(SMART_KEY) !== '0'; } catch { return true; } })();
