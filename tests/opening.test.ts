@@ -69,7 +69,7 @@ describe('forest cover', () => {
 
 describe('facing', () => {
   const cfg = field();
-  it('a moving piece faces its last step; a striking piece faces its target until it moves again', () => {
+  it('a striking piece faces its target until it moves again; walking faces forward', () => {
     let s = battle(cfg, [['red', 'archer', 10, 7], ['red', 'heavyInfantry', 12, 7], ['blue', 'lightInfantry', 7, 7], ['blue', 'lightInfantry', 13, 7], ['red', 'king', 0, 0], ['blue', 'king', 24, 0]], 30);
     // Shoot backwards (west) at (7,7).
     s = ok(shoot(s, 'red-archer-0', 'blue-lightInfantry-2', cfg));
@@ -82,15 +82,10 @@ describe('facing', () => {
     // Kept through the end of the turn.
     s = ok(endTurn(s, cfg));
     expect(s.units.find((u) => u.id === 'red-archer-0')!.face).toEqual([{ col: 10, row: 7 }, { col: 7, row: 7 }]);
-    // Moving replaces it with the last step walked.
+    // Moving turns it forward again (no stored facing: its side's usual way).
     s = { ...s, current: 'red', phase: 'act', points: 10 };
     s = ok(moveUnit(s, 'red-archer-0', { col: 10, row: 8 }, cfg));
-    expect(s.units.find((u) => u.id === 'red-archer-0')!.face).toEqual([{ col: 10, row: 7 }, { col: 10, row: 8 }]);
-    // A longer walk faces along its last step.
-    s = ok(moveUnit({ ...s, units: s.units.map((u) => ({ ...u, moved: false, ran: 0 })) }, 'red-heavyInfantry-1', { col: 15, row: 7 }, { ...cfg, options: { ...cfg.options, stepMoves: false } }));
-    const f = s.units.find((u) => u.id === 'red-heavyInfantry-1')!.face!;
-    expect(f[1]).toEqual({ col: 15, row: 7 });
-    expect(distance(f[0], f[1])).toBe(1);
+    expect(s.units.find((u) => u.id === 'red-archer-0')!.face).toBeUndefined();
   });
 
   it('faces survive a save and the replay shows them', () => {

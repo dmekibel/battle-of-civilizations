@@ -372,9 +372,9 @@ export function moveUnit(s: GameState, unitId: string, to: Hex, cfg: GameConfig 
   if (!r) return fail('unreachable');
   const hexes = r.steps;
   const path = routeTo(s, unitId, to, cfg);
-  // A walking piece faces the way it walks: along its last step.
-  const face: [Hex, Hex] = [path.length > 1 ? path[path.length - 2] : u.pos, to];
-  const units = s.units.map((x) => (x.id === unitId ? { ...x, pos: to, moved: true, ran: (x.ran ?? 0) + hexes, face } : x));
+  // A walking piece faces forward again (its side's usual way): turning to each hex step looked awkward
+  // (David 2026-11-18). Only an attack or a shot turns it, until it next moves.
+  const units = s.units.map((x) => (x.id === unitId ? { ...x, pos: to, moved: true, ran: (x.ran ?? 0) + hexes, face: undefined } : x));
   const next: GameState = { ...s, units, points: s.points - r.cost, advance: null };
   return {
     ok: true,
@@ -430,7 +430,7 @@ export function takeHex(s: GameState): Result {
   const a = s.advance;
   const u = a && getUnit(s, a.unitId);
   if (!a || !u || unitAt(s, a.to)) return fail('nothingToTake');
-  const units = s.units.map((x) => (x.id === u.id ? { ...x, pos: a.to, face: [u.pos, a.to] as [Hex, Hex] } : x));
+  const units = s.units.map((x) => (x.id === u.id ? { ...x, pos: a.to, face: undefined } : x));
   return {
     ok: true,
     state: withLog({ ...s, units, advance: null }, { kind: 'move', turn: s.turn, player: s.current, unit: u.type, from: u.pos, to: a.to, cost: 0 }),
