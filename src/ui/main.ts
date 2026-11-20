@@ -677,7 +677,8 @@ function overlay(s: GameState): Overlay {
     // Only your own finished pieces dim; the other side's turn shows every piece at full strength.
     spent: s.phase === 'act' && !notMine(s) ? spentUnits(s) : new Set(),
     trail: battle ? lastEnemyTurn(s) : { moves: [], kills: [] },
-    rings: own && CONFIG.units[own.type].ranged && !setupPhase(s) ? shotZone(s, own) : [],
+    // Range rings only for your own shooters: the computer's archer taking aim shouldn't light up as if you were playing it.
+    rings: own && CONFIG.units[own.type].ranged && !setupPhase(s) && !notMine(s) ? shotZone(s, own) : [],
     danger: dangerOn && battle ? threatZone(s) : [],
     threat: warnOn && battle && !replaying() ? threats(s, sideMine(s)).mine : undefined,
     route: mine && pending ? routeTo(s, own.id, pending) : [],
@@ -1834,6 +1835,9 @@ const nearSide = (p: Player) => (mode === 'ai' ? p !== AI_SIDE : mode === 'onlin
 /** When the animations now on the board are over (ms clock); the computer waits for it before redrawing. */
 let fxUntil = 0;
 
+/** Shots of the last blow still in flight (see draw). */
+let flying: { hits: Effects['hits']; until: number } | null = null;
+
 /** Effects and sounds for log entries added since the last render. */
 function effects(s: GameState): Effects {
   const fresh: LogEntry[] = s.log.length > prevLog ? s.log.slice(prevLog) : [];
@@ -1922,6 +1926,11 @@ function draw() {
   setMine(sideMine(s));
   paintSideVars();
   const fx = effects(s);
+  // Arrows still in the air: a redraw right after a shot (the computer putting its archer down) would wipe them
+  // mid-flight, so enemy arrows never showed. They are drawn again, flight only, on the same board timeline.
+  if (fx.hits.length) flying = { hits: fx.hits.filter((h) => h.shotFrom).map((h) => ({ ...h, flightOnly: true })), until: Date.now() + ARROW_S * 1000 + 300 };
+  else if (flying && Date.now() < flying.until) fx.hits = flying.hits;
+  else flying = null;
   score(s);
   portrait = isPortrait();
   desktop = isDesktop();
@@ -1992,7 +2001,7 @@ function draw() {
     ${over}
     ${replayControls()}
     ${menuOpen && !withPanel() ? menu(s) : ''}`;
-  morphInto(app, html, fx.from.size > 0 || fx.hits.length > 0 || fx.walks.size > 0);
+  morphInto(app, html, fx.from.size > 0 || fx.hits.some((h) => !h.flightOnly) || fx.walks.size > 0);
   if (thumbJobs.size) void fillThumbs();
   app.classList.toggle('upside', upsideDown());
   document.documentElement.lang = lang;

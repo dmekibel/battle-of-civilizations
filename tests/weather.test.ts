@@ -22,14 +22,14 @@ const shotAt = (cfg: GameConfig, d: number) => {
 
 describe('weather rules', () => {
   it('rain: shooters reach one hex less, only with the rule on', () => {
-    expect(shotAt(sky('rain', false), 6)).not.toBeNull();
-    expect(shotAt(sky('rain', true), 6)).toBeNull();
-    expect(shotAt(sky('rain', true), 5)).not.toBeNull();
-    expect(shotAt(sky('clear', true), 6)).not.toBeNull();
+    expect(shotAt(sky('rain', false), 5)).not.toBeNull();
+    expect(shotAt(sky('rain', true), 5)).toBeNull();
+    expect(shotAt(sky('rain', true), 4)).not.toBeNull();
+    expect(shotAt(sky('clear', true), 5)).not.toBeNull();
   });
 
   it('fog: no shot reaches past 4 hexes, only with the rule on', () => {
-    expect(shotAt(sky('fog', false), 6)).not.toBeNull();
+    expect(shotAt(sky('fog', false), 5)).not.toBeNull();
     expect(shotAt(sky('fog', true), 5)).toBeNull();
     expect(shotAt(sky('fog', true), 4)).not.toBeNull();
   });

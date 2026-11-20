@@ -195,7 +195,8 @@ export function selectVoice(army: string, type: UnitTypeId, unitId: string) {
     if (playLine(army, type, 'entrance', true)) return;
   }
   playLine(army, type, 'select', true);
-  if (CONFIG.units[type]?.mounted && Math.random() < 0.35) sound('snort', 0.08);
+  // No snort for the chariot: it read as a strange noise from a cart (David 2026-11-20).
+  if (CONFIG.units[type]?.mounted && type !== 'chariot' && Math.random() < 0.35) sound('snort', 0.08);
 }
 
 /** Footsteps or hoofbeats for each hex walked (a splash at a ford, a hollow thud on a bridge), and the piece's "Moving!". */
@@ -246,7 +247,8 @@ export function fightSounds(b: Blow, attArmy: string, defArmy: string, nearAtt: 
   if (b.killed) {
     voice(defArmy, b.target, 'death', { delay: lands + 0.1, near: nearDef });
     sound('death', lands + 0.15, nearDef);
-  } else if (b.damage > 0) voice(defArmy, b.target, 'hit', { delay: lands + 0.08, near: nearDef });
+  }
+  // No grunt when a piece is hurt: they sounded awkward (David 2026-11-20); the blow's own sound carries it.
   // Spears struck back and killed the rider.
   if (b.attackerKilled) {
     voice(attArmy, b.unit, 'death', { delay: lands + 0.7, near: nearAtt });

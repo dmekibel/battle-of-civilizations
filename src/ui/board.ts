@@ -694,6 +694,8 @@ export interface Effects {
     at: Hex; damage: number; killed: boolean; type: UnitTypeId; owner: Player; shotFrom: Hex | null;
     /** The attacker's type and where it struck from; whether it stepped into the hex after a kill. */
     by?: UnitTypeId; from?: Hex; advanced?: boolean;
+    /** Drawn again only for its arrow still in flight (no flash, number or fall). */
+    flightOnly?: boolean;
   }[];
   /** Unit id -> every hex of the walk it just made, start first, so it walks the route step by step. */
   walks: Map<string, Hex[]>;
@@ -1266,7 +1268,7 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
     if (o.threat?.has(u.id)) onHex(u.pos, `<ellipse class="threat-ring" cx="${at[0].toFixed(1)}" cy="${(at[1] + (L.tilt ? k : 0)).toFixed(1)}" rx="${(23 * k).toFixed(1)}" ry="${((L.tilt ? 7.5 : 21) * k).toFixed(1)}" pointer-events="none"/>`);
     const p = o.targets.get(u.id);
     if (p) onHex(u.pos, `<polygon points="${corners(u.pos, v, L, S - 3)}" fill="#e53935" fill-opacity=".2" stroke="#d32f2f" stroke-width="3" stroke-dasharray="6 4"/>`);
-    const hit = fx.hits.find((h) => !h.killed && same(h.at, u.pos));
+    const hit = fx.hits.find((h) => !h.killed && !h.flightOnly && same(h.at, u.pos));
     lastPic = null;
     let svg = piece(u.type, u.owner, u.hp, L, at, k, o.spent.has(u.id) ? 'spent' : '', lookOf(u, v, looks));
     const figBox = figureBoxAt(L, at, k);
@@ -1323,17 +1325,16 @@ export function renderBoard(s: GameState, o: Overlay, v: View, fx: Effects = NO_
         // The arrow flies in an arc, turning to follow its path, and lands on the target.
         const mx = (sx + hx) / 2;
         const my = (y0 + ty) / 2 - (Math.hypot(hx - sx, ty - y0) * 0.28 + 10);
-        // The arrow is seen from the angle it flies at, like the pieces: towards the viewer, diagonally, side on,
-        // or away; side and diagonal views are mirrored when it flies to the left (an arrow has no left or right hand).
-        const rx = hx - sx, ry = (ty - y0) / Math.max(0.2, Math.cos(tiltAngle(v)));
-        const av = ARROW_VIEWS[Math.round(Math.atan2(Math.abs(rx), ry) / (Math.PI / 4))];
-        const [aw, ah] = ARROWS[av].map((n) => n * (46 / ARROWS.side[0]));
-        const amirror = rx < 0 && av !== 'toward' && av !== 'away' ? ' transform="scale(-1 1)"' : '';
-        top.push(`<g class="flight"><image decoding="sync" href="${import.meta.env.BASE_URL}pieces/arrow-${av}.webp?v=${ART_VERSION}" x="${(-aw / 2).toFixed(1)}" y="${(-ah / 2).toFixed(1)}" width="${aw.toFixed(1)}" height="${ah.toFixed(1)}"${amirror}/>
-          <animateMotion dur="${d}s" fill="freeze" path="M${sx.toFixed(1)} ${y0.toFixed(1)}Q${mx.toFixed(1)} ${my.toFixed(1)} ${hx.toFixed(1)} ${ty.toFixed(1)}"/>
+        // The carved arrow side on, turned along its arc as it flies (rotate="auto"), so it always points the way it goes.
+        // Real scale: about a third of a figure's height (it was a hand-span across the screen, David 2026-11-20).
+        const ka = L.size(fx0, fy0);
+        const [aw, ah] = [Math.max(7, 15 * ka), Math.max(1.6, 15 * ka * ARROWS.side[1] / ARROWS.side[0])];
+        top.push(`<g class="flight"><image decoding="sync" href="${import.meta.env.BASE_URL}pieces/arrow-side.webp?v=${ART_VERSION}" x="${(-aw / 2).toFixed(1)}" y="${(-ah / 2).toFixed(1)}" width="${aw.toFixed(1)}" height="${ah.toFixed(1)}"/>
+          <animateMotion dur="${d}s" fill="freeze" rotate="auto" path="M${sx.toFixed(1)} ${y0.toFixed(1)}Q${mx.toFixed(1)} ${my.toFixed(1)} ${hx.toFixed(1)} ${ty.toFixed(1)}"/>
           <animate attributeName="opacity" values="1;1;0" keyTimes="0;.8;1" dur="${d + 0.25}s" fill="freeze"/></g>`);
       }
     }
+    if (h.flightOnly) continue;
     top.push(`<g transform="translate(${hx.toFixed(1)} ${ty.toFixed(1)})"><path class="spark" style="animation-delay:${d}s" d="${RAYS}"/></g>`);
     if (h.killed) {
       onHex(h.at, `<g transform="translate(${hx.toFixed(1)} ${hy.toFixed(1)})"><ellipse class="dust" style="animation-delay:${d + 0.25}s" rx="${(16 * k).toFixed(1)}" ry="${((L.tilt ? 6 : 12) * k).toFixed(1)}"/></g>`);

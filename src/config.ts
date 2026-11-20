@@ -346,7 +346,7 @@ export const CONFIG: GameConfig = {
       moveCost: 4,
       attack: 0,
       hp: 1,
-      ranged: { cost: 1, minRange: 2, maxRange: 6, damage: 1 }, // range 2-6 per David, 2026-11-16
+      ranged: { cost: 1, minRange: 2, maxRange: 5, damage: 1 }, // 2-6 per David 2026-11-16; 2-5 since 2026-11-20 (arrows felt too strong)
       heavy: false,
     },
   },

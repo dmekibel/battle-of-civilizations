@@ -183,7 +183,11 @@ export const DIFFICULTIES: Difficulty[] = ['easy', 'normal', 'hard'];
 
 /** The next action for the side to move at this difficulty, or null to end the turn. The same state
  *  always gives the same answer (Easy's randomness comes from the position itself). */
-export function aiNextAction(s: GameState, cfg: GameConfig = CONFIG, level: Difficulty = 'normal'): AiAction | null {
+export function aiNextAction(s: GameState, cfg0: GameConfig = CONFIG, level: Difficulty = 'normal'): AiAction | null {
+  // The computer plans one point of walking at a time, even though players walk a whole move in one go: planning
+  // whole moves at once, it charged straight at the King and battles ended in 2-3 rounds (sim, 2026-11-20).
+  // A shorter move is always allowed, so its moves stay legal under free walking.
+  const cfg = cfg0.options.stepMoves ? cfg0 : { ...cfg0, options: { ...cfg0.options, stepMoves: true } };
   // While the armies are still far apart, the whole army marches forward in one go (after any reroll).
   // Only an army marches: a handful of pieces still pick their own way. Only on close battle lines: from the
   // edges the greedy advance below reaches the enemy sooner than a march in formation.

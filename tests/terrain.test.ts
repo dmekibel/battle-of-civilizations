@@ -18,9 +18,9 @@ describe('terrain', () => {
   it('from a hill an archer reaches one hex further and sees over forest', () => {
     const flat = land({ forests: [[3, 4]] });
     const hill = land({ forests: [[3, 4]], hills: [[3, 1]] });
-    const units: [Player, UnitTypeId, number, number][] = [['red', 'archer', 3, 1], ['blue', 'heavyInfantry', 3, 8], ['blue', 'heavyInfantry', 3, 6]];
+    const units: [Player, UnitTypeId, number, number][] = [['red', 'archer', 3, 1], ['blue', 'heavyInfantry', 3, 7], ['blue', 'heavyInfantry', 3, 6]];
     const a = scenario(flat, units);
-    expect(previewStrike(a, a.units[0].id, a.units[1].id, 'shoot', flat)).toBeNull(); // 7 hexes: too far
+    expect(previewStrike(a, a.units[0].id, a.units[1].id, 'shoot', flat)).toBeNull(); // 6 hexes: too far
     expect(previewStrike(a, a.units[0].id, a.units[2].id, 'shoot', flat)).toBeNull(); // behind the trees
     const b = scenario(hill, units);
     expect(previewStrike(b, b.units[0].id, b.units[1].id, 'shoot', hill)?.damage).toBe(1);
