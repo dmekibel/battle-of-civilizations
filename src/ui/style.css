@@ -923,9 +923,10 @@ button.primary.ready { animation: ready 2.2s ease-in-out infinite; }
 .start .langs { align-self: flex-end; width: auto; padding: 3px; }
 .start .langs button { min-height: 36px; padding: 6px 12px; font-size: 13px; }
 .hero { padding: 6px 0 8px; }
-.duel { position: relative; display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; justify-items: center; height: 150px; margin: 0 -6px 2px; }
+.duel { container-type: inline-size; position: relative; display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; justify-items: center; height: 150px; margin: 0 -6px 2px; }
 .duel::before { content: ''; position: absolute; left: 8%; right: 8%; bottom: 2px; height: 34px; border-radius: 50%; background: radial-gradient(ellipse, rgba(240, 200, 120, .16), transparent 70%); }
-.duel .figpic { position: relative; height: calc(140px * var(--hs, 1)); max-width: 100%; object-fit: contain; filter: drop-shadow(0 10px 10px rgba(0, 0, 0, .6)); }
+/* One scale for both kings: the taller fills the height unless the wider would overflow its half. */
+.duel .figpic { position: relative; --fit: min(calc(140px / var(--H)), calc((50cqw - 30px) * 1.5 / var(--W))); height: calc(var(--fit) * var(--H)); max-width: none; object-fit: contain; filter: drop-shadow(0 10px 10px rgba(0, 0, 0, .6)); }
 .duel .logo { align-self: center; }
 .hero .logo svg { width: 66px; height: 77px; filter: drop-shadow(0 8px 14px rgba(0, 0, 0, .6)); }
 .hero h2 { font-size: 36px; margin: 14px 0 6px; line-height: 1.02; }
@@ -1332,8 +1333,9 @@ button.primary.ready { animation: ready 2.2s ease-in-out infinite; }
 .ap-unit { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: 12px; align-items: center; padding: 8px 12px 10px 6px; border-radius: var(--r-lg); border: 1px solid var(--hair);
   background: radial-gradient(ellipse 55% 85% at 16% 60%, #2d2318 0%, #1a140d 80%); box-shadow: var(--sh-1); }
 .ap-unit.king, .ap-unit.champ { border-color: var(--brass); box-shadow: inset 0 0 0 1px var(--brass), 0 0 16px rgba(212, 173, 98, .16); }
-.ap-fig { height: 124px; display: grid; place-items: center; touch-action: pan-y; cursor: grab; user-select: none; -webkit-user-select: none; }
-.ap-fig img { max-width: 100%; max-height: 124px; object-fit: contain; filter: drop-shadow(0 5px 6px rgba(0, 0, 0, .5)); pointer-events: none; }
+.ap-fig { height: 124px; container-type: size; display: flex; align-items: flex-end; justify-content: center; touch-action: pan-y; cursor: grab; user-select: none; -webkit-user-select: none; }
+/* One scale per army (see armyShowcase): the tallest picture fills the box, the widest may poke out a little. */
+.ap-fig img { height: calc(min(100cqh / var(--H), 160cqw / var(--W)) * var(--h)); width: auto; max-width: none; max-height: none; object-fit: contain; filter: drop-shadow(0 5px 6px rgba(0, 0, 0, .5)); pointer-events: none; }
 .ap-info { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
 .ap-info b { font: 400 19px/1.1 var(--display); color: var(--ink); }
 .ap-info small { font-size: 12.5px; line-height: 1.35; color: var(--ink-3); }
@@ -1477,7 +1479,6 @@ body:has(.screen.phone) .tut-coach { top: calc(max(6px, env(safe-area-inset-top,
   .ap-units { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
   .ap-unit { grid-template-columns: 140px minmax(0, 1fr); }
   .ap-fig { height: 150px; }
-  .ap-fig img { max-height: 150px; }
 }
 @media (min-width: 1400px) { .ap-units { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); } }
 
@@ -1515,7 +1516,7 @@ body:has(.screen.phone) .tut-coach { top: calc(max(6px, env(safe-area-inset-top,
   .card.start:has(.duel) .hero { padding: 0; }
   .card.start:has(.duel) .duel { height: min(46vh, 420px); margin: 0; column-gap: 8px; }
   .card.start:has(.duel) .duel::before { height: 70px; left: 4%; right: 4%; bottom: -6px; background: radial-gradient(ellipse, rgba(240, 200, 120, .2), transparent 70%); }
-  .card.start:has(.duel) .duel .figpic { height: calc(min(44vh, 400px) * var(--hs, 1)); filter: drop-shadow(0 18px 18px rgba(0, 0, 0, .65)); }
+  .card.start:has(.duel) .duel .figpic { --fit: min(calc(min(44vh, 400px) / var(--H)), calc((50cqw - 50px) * 1.5 / var(--W))); height: calc(var(--fit) * var(--H)); filter: drop-shadow(0 18px 18px rgba(0, 0, 0, .65)); }
   .card.start:has(.duel) .hero .logo svg { width: 118px; height: 138px; }
   .card.start:has(.duel) .hero h2 { font-size: clamp(48px, 4.6vw, 72px); margin: 22px 0 8px; letter-spacing: .02em; }
   .card.start:has(.duel) .hero p { font-size: 18px; color: var(--ink-3); }
@@ -1606,7 +1607,7 @@ body:has(.screen.phone) .tut-coach { top: calc(max(6px, env(safe-area-inset-top,
   .ap-unit { grid-template-columns: 1fr; grid-template-rows: auto auto; align-items: start; gap: 6px; padding: 14px 18px 18px;
     background: radial-gradient(ellipse 70% 52% at 50% 40%, #33281b 0%, #1a140d 78%); }
   .ap-fig { height: clamp(260px, 36vh, 340px); }
-  .ap-fig img { max-height: 100%; height: 100%; width: auto; filter: drop-shadow(0 14px 12px rgba(0, 0, 0, .55)); image-rendering: auto; }
+  .ap-fig img { filter: drop-shadow(0 14px 12px rgba(0, 0, 0, .55)); image-rendering: auto; }
   .ap-info { align-items: center; text-align: center; }
   .ap-info b { font-size: 24px; }
   .ap-info small { font-size: 14px; max-width: 40ch; }
@@ -1676,8 +1677,8 @@ body:has(.screen.phone) .tut-coach { top: calc(max(6px, env(safe-area-inset-top,
    tall as its band. No blend modes (iPhone Safari draws them over the 3D board as solid colour). */
 .mini { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .mini > div { position: absolute; left: 0; right: 0; pointer-events: none; }
-.mini-far { top: 0; --solid: 40%; -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 var(--solid), transparent 100%); mask-image: linear-gradient(to bottom, #000 0%, #000 var(--solid), transparent 100%); }
-.mini-near { bottom: 0; --solid: 30%; -webkit-mask-image: linear-gradient(to top, #000 0%, #000 var(--solid), transparent 100%); mask-image: linear-gradient(to top, #000 0%, #000 var(--solid), transparent 100%); }
+.mini-far { top: 0; --solid: 40%; -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 var(--solid), rgba(0,0,0,0.85) calc(var(--solid) + (100% - var(--solid)) * 0.25), rgba(0,0,0,0.5) calc(var(--solid) + (100% - var(--solid)) * 0.5), rgba(0,0,0,0.15) calc(var(--solid) + (100% - var(--solid)) * 0.75), transparent 100%); mask-image: linear-gradient(to bottom, #000 0%, #000 var(--solid), rgba(0,0,0,0.85) calc(var(--solid) + (100% - var(--solid)) * 0.25), rgba(0,0,0,0.5) calc(var(--solid) + (100% - var(--solid)) * 0.5), rgba(0,0,0,0.15) calc(var(--solid) + (100% - var(--solid)) * 0.75), transparent 100%); }
+.mini-near { bottom: 0; --solid: 30%; -webkit-mask-image: linear-gradient(to top, #000 0%, #000 var(--solid), rgba(0,0,0,0.85) calc(var(--solid) + (100% - var(--solid)) * 0.25), rgba(0,0,0,0.5) calc(var(--solid) + (100% - var(--solid)) * 0.5), rgba(0,0,0,0.15) calc(var(--solid) + (100% - var(--solid)) * 0.75), transparent 100%); mask-image: linear-gradient(to top, #000 0%, #000 var(--solid), rgba(0,0,0,0.85) calc(var(--solid) + (100% - var(--solid)) * 0.25), rgba(0,0,0,0.5) calc(var(--solid) + (100% - var(--solid)) * 0.5), rgba(0,0,0,0.15) calc(var(--solid) + (100% - var(--solid)) * 0.75), transparent 100%); }
 .mini-tone { inset: 0; }
 .ground-clip.mini-sat { filter: saturate(var(--mini-sat, 1.12)); }
 /* ===== end miniature look ===== */
@@ -1703,3 +1704,8 @@ body:has(.screen.phone) .tut-coach { top: calc(max(6px, env(safe-area-inset-top,
 .intro-skip { position: absolute; right: 14px; top: calc(7% + 8px); font: 500 12px/1 var(--ui); color: rgba(240, 214, 151, .7); letter-spacing: .06em; }
 @media (prefers-reduced-motion: reduce) { .intro-card { transition: opacity .3s ease; } }
 /* ===== end battle intro ===== */
+
+/* Saved games: Delete all, under the list. */
+.slots-all { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; margin-top: 12px; }
+.slots-all.slot-ask { align-items: stretch; }
+.sheet-body > h2 .back { padding: 2px 8px; margin: 0 2px 0 -8px; font-size: 22px; line-height: 1; color: var(--ink-2); }

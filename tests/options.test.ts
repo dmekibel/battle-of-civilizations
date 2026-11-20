@@ -27,7 +27,7 @@ const sixes = () => 5.5 / 6;
 
 describe('optional rules', () => {
   it('all are off by default', () => {
-    expect(CONFIG.options).toEqual({ firstTurnBonus: 0, carryMax: 0, routAt: null, shieldWall: false, spears: false, longShotFrom: null, volleys: null, charge: false, kingAura: false, zoneOfControl: false, rerolls: 0, kingsGuard: false, flanking: false, stepMoves: true, toughness: 1, unitSpeeds: false, runLimit: 6, rainRange: false, snowCavalry: false, fogCap: false, forestCover: false, battleLines: 'normal' });
+    expect(CONFIG.options).toEqual({ firstTurnBonus: 0, carryMax: 0, routAt: null, shieldWall: false, spears: false, longShotFrom: null, volleys: null, charge: false, kingAura: false, zoneOfControl: false, rerolls: 0, kingsGuard: false, flanking: false, stepMoves: false, toughness: 1, unitSpeeds: false, runLimit: 6, rainRange: false, snowCavalry: false, fogCap: false, forestCover: false, battleLines: 'normal' });
   });
 
   it('first-turn bonus: the second player gets extra points on turn 1 only', () => {
@@ -166,8 +166,8 @@ describe('optional rules', () => {
     expect(previewStrike(s, s.units[0].id, s.units[2].id, 'shoot', cfg)?.damage).toBe(1);
   });
 
-  it('one step at a time: a move goes one point of hexes, and the piece can move again', () => {
-    const cfg = withRule({});
+  it('one step at a time (engine rule, no longer offered in the menu): a move goes one point of hexes, and the piece can move again', () => {
+    const cfg = withRule({ stepMoves: true });
     let s = scenario(cfg, [['red', 'lightInfantry', 3, 3], ['red', 'lightCavalry', 6, 3], ['blue', 'king', 20, 0]]);
     const foot = [...reachable(s, s.units[0].id, cfg).values()];
     expect(Math.max(...foot.map((r) => r.steps))).toBe(1);

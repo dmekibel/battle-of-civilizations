@@ -90,6 +90,11 @@ function figSrc(fac: string, type: UnitTypeId, v: string): string | null {
   const pick = set?.[v] ? v : set?.front ? 'front' : null;
   return pick ? `${import.meta.env.BASE_URL}pieces/${fac}/${artOf(type)}-${pick}.webp?v=${ART_VERSION}` : null;
 }
+/** The height of the picture figSrc picks, in board pixels. */
+const figH = (fac: string, type: UnitTypeId, v: string) => {
+  const set = SPRITES[fac]?.[artOf(type)];
+  return (set?.[v] ?? set?.front)?.[1] ?? 330;
+};
 const nameOf = (lang: Lang, fac: FactionId, u: UnitTypeId) => FACTIONS[fac].names?.[u]?.[lang] || unitName(lang, u);
 
 function chips(lang: Lang, type: UnitTypeId): string {
@@ -113,19 +118,19 @@ export function armyShowcase(lang: Lang, fac: FactionId, back: string, choose?: 
   const f = FACTIONS[fac];
   const era = ERA_OF[fac];
   const units = ['king', ...f.roster] as UnitTypeId[];
-  // True scale inside the army: each figure as tall as it stands on the board, against the army's tallest
-  // (one Comanche looked like a giant next to the rest, David 2026-11-18).
-  const hOf = (u: UnitTypeId) => SPRITES[fac]?.[artOf(u)]?.front?.[1] ?? 0;
-  const tallest = Math.max(1, ...units.map(hOf));
+  // True scale inside the army: every figure at its board size times one factor for the whole army (and every turn of
+  // it), so none is a giant beside the rest (David 2026-11-18, again 2026-11-20). --H / --W: the army's largest picture.
+  const sizes = units.flatMap((u) => VIEWS.map((v) => SPRITES[fac]?.[artOf(u)]?.[v]).filter((x): x is [number, number] => !!x));
+  const H = Math.max(1, ...sizes.map((x) => x[1]));
+  const W = Math.max(1, ...sizes.map((x) => x[0]));
   const cards = units.map((u) => {
     const src = figSrc(fac, u, VIEWS[view]);
-    const sc = Math.max(0.55, hOf(u) / tallest);
     const king = u === 'king';
     const champ = CHAMPS.includes(u);
     const label = king ? st(lang, 'king') : champ ? st(lang, 'champion') : '';
     const badge = label && label !== nameOf(lang, fac, u) ? label : '';
     return `<div class="ap-unit ${king ? 'king' : ''} ${champ ? 'champ' : ''}">
-      <div class="ap-fig" data-fac="${fac}" data-type="${u}">${src ? `<img src="${src}" alt="" draggable="false" style="transform:scale(${sc.toFixed(3)});transform-origin:50% 100%">` : ''}</div>
+      <div class="ap-fig" data-fac="${fac}" data-type="${u}">${src ? `<img src="${src}" alt="" draggable="false" style="--h:${figH(fac, u, VIEWS[view])}">` : ''}</div>
       <div class="ap-info">${badge ? `<span class="ap-badge">${badge}</span>` : ''}<b>${nameOf(lang, fac, u)}</b><small>${ROLE[u]?.[lang === 'ru' ? 1 : 0] ?? ''}</small>${champ && f.champion ? `<small class="ap-champ">${f.champion[lang]}</small>` : ''}${chips(lang, u)}</div>
     </div>`;
   }).join('');
@@ -140,7 +145,7 @@ export function armyShowcase(lang: Lang, fac: FactionId, back: string, choose?: 
         <p class="ap-blurb">${f.blurb[lang]}</p>
       </div>
       <div class="ap-turnbar"><button data-act="ap-turn" data-dir="-1" class="ghost" aria-label="${st(lang, 'turnL')}">⟲</button><small>${st(lang, 'dragTurn')}</small><button data-act="ap-turn" data-dir="1" class="ghost" aria-label="${st(lang, 'turnR')}">⟳</button></div>
-      <div class="ap-units">${cards}</div>
+      <div class="ap-units" style="--H:${H};--W:${W}">${cards}</div>
     </div>
     ${choose ? `<div class="sheet-foot"><button data-act="faction" data-side="${choose.side}" data-value="${fac}" class="primary wide">${st(lang, 'chooseArmy')}</button></div>` : ''}
   </div></div>`;
@@ -179,7 +184,10 @@ export function turnFigures(d: number, byHand = true) {
   document.querySelectorAll<HTMLElement>('.ap-fig').forEach((el) => {
     const src = figSrc(el.dataset.fac!, el.dataset.type as UnitTypeId, VIEWS[view]);
     const im = el.querySelector('img');
-    if (src && im && im.getAttribute('src') !== src) im.setAttribute('src', src);
+    if (src && im && im.getAttribute('src') !== src) {
+      im.setAttribute('src', src);
+      im.style.setProperty('--h', String(figH(el.dataset.fac!, el.dataset.type as UnitTypeId, VIEWS[view])));
+    }
   });
 }
 

@@ -202,7 +202,8 @@ describe('battle lines', () => {
     const contact = (lines: 'close' | 'normal') => {
       let sum = 0;
       for (const map of ['river', 'open', 'forest'] as MapId[]) {
-        const cfg = cfgFor(map, lines);
+        // Walking one point at a time, so the distance between the lines shows (moving freely, both meet on turn 1).
+        const cfg = { ...cfgFor(map, lines), options: { ...cfgFor(map, lines).options, stepMoves: true } };
         for (let g = 0; g < 3; g++) {
           const rng = seeded(500 + g);
           let s = newGame(cfg);

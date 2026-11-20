@@ -95,6 +95,8 @@ export function loadSettings(): Settings {
       const rec = (Object.keys(RECOMMENDED) as (keyof typeof RECOMMENDED)[]).every((k) => k === 'forestCover' || k === 'battleLines' || s.options[k] === undefined || s.options[k] === RECOMMENDED[k]);
       if (rec) s.options = { ...s.options, forestCover: true, battleLines: 'close' };
     }
+    // One step at a time is gone from the game (2026-11-20): every saved setting walks freely.
+    if (s && typeof s.budget === 'number' && s.options) s.options.stepMoves = false;
     if (s && typeof s.budget === 'number') return { ...DEFAULT_SETTINGS, ...s, options: { ...DADS_RULES, ...s.options }, sides: { red: known(s.sides?.red, 'novgorod'), blue: known(s.sides?.blue, 'teutonic') }, difficulty: s.difficulty === 'easy' || s.difficulty === 'hard' ? s.difficulty : 'normal' };
   } catch {
     /* fall through to the defaults */

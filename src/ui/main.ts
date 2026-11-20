@@ -855,10 +855,24 @@ function figurePic(fac: string, type: UnitTypeId, view = 'front-left'): string {
   const art = type === 'deputy' ? 'lightInfantry' : type;
   const set = SPRITES[fac]?.[art];
   const v = set?.[view] ? view : set?.front ? 'front' : null;
-  // --hs: this figure's height on the board against a typical foot figure (330), so pictures shown side by side
-  // keep the same scale (the Russian prince looked bigger than the German grand master on the title screen).
-  const hs = Math.min(1.3, Math.max(0.75, (set?.[v ?? '']?.[1] ?? 330) / 330));
-  return v ? `<img class="figpic" style="--hs:${hs.toFixed(3)}" src="${import.meta.env.BASE_URL}pieces/${fac}/${art}-${v}.webp?v=${ART_VERSION}" alt="" draggable="false">` : '';
+  if (!v) return '';
+  // --h / --w: the picture's size on the board, so a pair shown side by side (the title kings) can share one scale.
+  const [w, h] = set![v]!;
+  return `<img class="figpic" style="--w:${w};--h:${h}" src="${import.meta.env.BASE_URL}pieces/${fac}/${art}-${v}.webp?v=${ART_VERSION}" alt="" draggable="false">`;
+}
+
+/** Two figures facing off at one shared scale: --H / --W are the larger height and width of the pair, so the
+ *  wider one isn't squeezed smaller than the other (one king looked twice the other, David 2026-11-20). */
+function duelPics(a: [string, UnitTypeId, string], b: [string, UnitTypeId, string]): { pics: [string, string]; vars: string } {
+  const size = ([fac, type, view]: [string, UnitTypeId, string]) => {
+    const set = SPRITES[fac]?.[type === 'deputy' ? 'lightInfantry' : type];
+    return set?.[view] ?? set?.front ?? [1, 1];
+  };
+  // Both drawn the same height (the art differs by a few percent, which read as one king towering over the other);
+  // --W is the wider of the two at that height, so neither spills out of its half.
+  const [sa, sb] = [size(a), size(b)];
+  const H = Math.max(sa[1], sb[1]);
+  return { pics: [figurePic(...a), figurePic(...b)], vars: `--W:${Math.round(Math.max(sa[0] * H / sa[1], sb[0] * H / sb[1]))};--H:${H}` };
 }
 
 function draftSheet(s: GameState): string {
@@ -883,7 +897,7 @@ function draftSheet(s: GameState): string {
   }).join('');
   return `<div class="sheet ${s.current}">
     <div class="sheet-body">
-      <h2><span class="dot ${s.current}"></span>${playerName(lang, s.current)}: ${t(lang, 'build')}</h2>
+      <h2>${mode !== 'online' && !settings.scenario ? `<button data-act="resetup" class="ghost back" aria-label="${lang === 'ru' ? 'Сменить армии или карту' : 'Change armies or map'}" title="${lang === 'ru' ? 'Сменить армии или карту' : 'Change armies or map'}">‹</button>` : ''}<span class="dot ${s.current}"></span>${playerName(lang, s.current)}: ${t(lang, 'build')}</h2>
       <div class="budget"><b id="left">${left}</b> / ${budgetNow()} ${t(lang, 'pointsLeft')}
         <div class="meter"><i id="meter" style="width:${(spent / budgetNow()) * 100}%"></i></div></div>
       <div class="sheet-scroll">
@@ -922,7 +936,6 @@ const RULES: { key: keyof Settings['options']; on: Settings['options'][keyof Set
   { key: 'charge', on: true },
   { key: 'kingAura', on: true },
   { key: 'zoneOfControl', on: true },
-  { key: 'stepMoves', on: true },
   { key: 'kingsGuard', on: true },
   { key: 'flanking', on: true },
   { key: 'longShotFrom', on: 4 },
@@ -980,7 +993,7 @@ const RULE_ICON: Record<keyof Settings['options'], string> = {
 const RULE_GROUPS: { title: Key; color: string; keys: (keyof Settings['options'])[] }[] = [
   { title: 'groupCombat', color: '#c2453a', keys: ['toughness', 'flanking', 'shieldWall', 'spears', 'charge', 'kingAura', 'kingsGuard'] },
   { title: 'groupRanged', color: '#3f8f5a', keys: ['longShotFrom', 'volleys', 'forestCover'] },
-  { title: 'groupMove', color: '#3a6fb0', keys: ['stepMoves', 'unitSpeeds', 'zoneOfControl'] },
+  { title: 'groupMove', color: '#3a6fb0', keys: ['unitSpeeds', 'zoneOfControl'] },
   { title: 'groupTurn', color: '#a8811a', keys: ['routAt', 'carryMax', 'rerolls', 'firstTurnBonus'] },
   { title: 'groupWeather', color: '#5a7f9e', keys: ['rainRange', 'snowCavalry', 'fogCap'] },
 ];
@@ -1238,10 +1251,11 @@ function startScreen(): string {
   const slots = listSlots<SlotInfo>(store);
   const cur = slotId ? slots.find((m) => m.id === slotId && m.info && FACTIONS[m.info.red] && FACTIONS[m.info.blue]) : undefined;
   const curText = cur ? `${FACTIONS[cur.info.red].name[lang]} ${t(lang, 'vs')} ${FACTIONS[cur.info.blue].name[lang]}` : '';
+  const duel = duelPics([settings.sides.red, 'king', 'front-right'], [settings.sides.blue, 'king', 'front-left']);
   return `<div class="cover"><div class="card start">
     <div class="seg langs" role="radiogroup">${pick('en', 'English')}${pick('ru', 'Русский')}</div>
     <div class="hero">
-      <div class="duel">${figurePic(settings.sides.red, 'king', 'front-right')}<div class="logo">${LOGO}</div>${figurePic(settings.sides.blue, 'king', 'front-left')}</div>
+      <div class="duel" style="${duel.vars}">${duel.pics[0]}<div class="logo">${LOGO}</div>${duel.pics[1]}</div>
       <h2>${t(lang, 'title')}</h2>
       <p>${t(lang, 'chooseMode')}</p>
     </div>
@@ -1334,6 +1348,9 @@ function savesScreen(): string {
   return `<div class="cover saves"><div class="card start saves-card">
     <div class="chero"><button data-act="saves-back" class="ghost">‹ ${t(lang, 'back')}</button><h2>${t(lang, 'savedGames')}</h2><p>${t(lang, 'savesSub')}</p></div>
     ${rows ? `<ol class="slots">${rows}</ol>` : `<p class="slots-empty">${t(lang, 'noSaves')}</p>`}
+    ${rows ? (confirmDelete === '*'
+      ? `<div class="slot-ask slots-all"><p>${lang === 'ru' ? 'Удалить все сохранённые игры? Это нельзя отменить.' : 'Delete every saved game? This can’t be undone.'}</p><div class="slot-btns"><button data-act="slot-delete-all-yes" class="danger">${lang === 'ru' ? 'Удалить все' : 'Delete all'}</button><button data-act="slot-delete-no" class="ghost">${t(lang, 'keepGame')}</button></div></div>`
+      : `<div class="slots-all"><button data-act="slot-delete-all" class="ghost">${lang === 'ru' ? 'Удалить все' : 'Delete all'}</button></div>`) : ''}
   </div></div>`;
 }
 
@@ -1386,6 +1403,9 @@ function victory(s: GameState, w: Player): string {
   </div></div>`;
 }
 
+/** The New battle screen was opened from a battle (Change armies or map), so its Back returns there. */
+let setupFromGame = false;
+
 /** The winner's screen can be put away to look at the final board. */
 let overHidden = false;
 
@@ -1396,6 +1416,7 @@ function passScreen(s: GameState): string {
       <h2>${t(lang, 'battle')}</h2>
       <p>${t(lang, 'battleText')} <b class="${s.current}">${playerName(lang, s.current)}</b>.</p>
       <button data-act="ack" class="primary wide">${t(lang, 'startBattle')}</button>
+      ${mode !== 'online' && !settings.scenario ? `<button data-act="resetup" class="ghost wide">${lang === 'ru' ? '‹ Сменить армии или карту' : '‹ Change armies or map'}</button>` : ''}
     </div></div>`;
   }
   return `<div class="cover ${s.current}"><div class="card">
@@ -1452,6 +1473,8 @@ function menuBody(s: GameState): string {
     </div>
     <div class="mgroup">
       ${row('saves', '#a8811a', '<path d="M5 4h11l3 3v13H5z" fill="none"/><path d="M8 4v5h7V4M8 20v-6h8v6" fill="none"/>', t(lang, 'savedGames'), String(listSlots(store).length))}
+      ${mode !== 'online' && !settings.scenario ? row('replay', '#3f8f5a', ICON.reroll, lang === 'ru' ? 'Начать бой заново' : 'Restart battle') : ''}
+      ${mode !== 'online' && !settings.scenario ? row('resetup', '#3a6fb0', '<path d="M4 6h16M4 12h10M4 18h6" fill="none"/>', lang === 'ru' ? 'Сменить армии или карту' : 'Change armies or map') : ''}
       ${row('quick', '#c2453a', G.bolt, t(lang, 'quick'))}
       ${row('tutorial', '#3a8f8a', '<circle cx="12" cy="12" r="8.5" fill="none"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .8-1 1.5v.7M12 16.5v.5" fill="none"/>', tutorialLabel(lang))}
       ${row('home', '#c2453a', '<path d="M4 11l8-7 8 7M6.5 9.5V20h11V9.5" fill="none"/><path d="M10 20v-5h4v5" fill="none"/>', lang === 'ru' ? 'Главное меню' : 'Main menu')}
@@ -2375,6 +2398,14 @@ app.addEventListener('click', (e) => {
       return;
     }
     case 'setup-back':
+      // Opened from a battle (Change armies or map): Back returns to that battle as it was.
+      if (setupFromGame) {
+        setupFromGame = false;
+        setupOpen = false;
+        setupPage = apFac = null;
+        settings = loadSettings();
+        return render();
+      }
       // Picked the wrong mode: back to "how do you want to play?" (online: back to Host or Join).
       setupOpen = false;
       choosing = true;
@@ -2429,6 +2460,21 @@ app.addEventListener('click', (e) => {
       return void resumeSlot(btn!.getAttribute('data-value') ?? '');
     case 'slot-delete':
       confirmDelete = btn!.getAttribute('data-value');
+      return render();
+    case 'slot-delete-all':
+      confirmDelete = '*';
+      return render();
+    case 'slot-delete-all-yes':
+      // Delete all: every saved game goes; the one on screen (if any) stops saving and the title comes back.
+      for (const m of listSlots(store)) deleteSlot(store, m.id);
+      confirmDelete = null;
+      if (slotId) {
+        slotId = null;
+        if (!choosing) {
+          if (net) leaveNet();
+          choosing = true;
+        }
+      }
       return render();
     case 'slot-delete-no':
       confirmDelete = null;
@@ -2560,7 +2606,23 @@ app.addEventListener('click', (e) => {
       settings = { ...settings, options: { ...settings.options, [k]: on ? DADS_RULES[k] : rule.on } };
       return render();
     }
+    case 'replay':
+      // Restart battle: same armies, map and rules, a fresh fight (the old one stays in Saved games).
+      saveGame();
+      applySettings(settings);
+      return restart(newGame());
+    case 'resetup':
+      // Back to the New battle screen with this battle's armies and map; Back there returns to the battle.
+      saveGame();
+      menuOpen = false;
+      cover = false;
+      setupFromGame = true;
+      setupOpen = true;
+      pickSide = 'red';
+      setupPage = apFac = null;
+      return render();
     case 'begin':
+      setupFromGame = false;
       setupOpen = false;
       setupPage = apFac = null;
       saveSettings(settings);

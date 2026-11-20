@@ -367,7 +367,7 @@ export const CONFIG: GameConfig = {
     rerolls: 0,
     kingsGuard: false,
     flanking: false,
-    stepMoves: true,
+    stepMoves: false, // off for good (David 2026-11-20): a piece walks as far as it likes in one go
     toughness: 1,
     unitSpeeds: false,
     runLimit: 6, // 6 per David, 2026-11-17 (3, then 4, felt too strict)

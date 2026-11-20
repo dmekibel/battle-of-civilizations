@@ -85,8 +85,9 @@ export function placeMini(wrap: HTMLElement, v: View, focusY: number | null, dep
   // Blur in screen pixels, scaled to the picture's size (a phone screen needs less for the same look).
   const px = Math.min(1.25, Math.max(0.6, Math.min(v.vw, v.vh * 1.6) / 900));
   const lowQ = auto === 'low';
-  const far = 4.8 * Math.pow(k, 0.7) * px * (lowQ ? 0.7 : 1);
-  const near = 2.2 * Math.pow(k, 0.7) * px * (lowQ ? 0.7 : 1);
+  // About half what it was: a strong blur read as a cheap smear rather than a lens (David 2026-11-20).
+  const far = 2.6 * Math.pow(k, 0.7) * px * (lowQ ? 0.7 : 1);
+  const near = 1.2 * Math.pow(k, 0.7) * px * (lowQ ? 0.7 : 1);
   // Where the blur starts and where it is full, by real depth: a thin slice of focus, thinner closer in (a macro lens).
   const zoom = Math.max(0.7, v.cam.zoom);
   const [r1, r2] = [0.1 / Math.pow(zoom, 0.8), 0.3 / Math.pow(zoom, 0.8)];
@@ -109,9 +110,9 @@ export function placeMini(wrap: HTMLElement, v: View, focusY: number | null, dep
   const [farStart, farFull] = scan(-1, 1);
   const [nearStart, nearFull] = scan(1, nearMul);
   // Tilt-shift: whatever the depth, a soft band along the very top and bottom when the camera is tilted.
-  const fa = Math.max(farStart, 0.18 * k);
+  const fa = Math.max(farStart, 0.1 * k);
   const ff = Math.min(fa, Math.max(farFull, 0.07 * k));
-  const na = Math.min(nearStart, 1 - 0.14 * k);
+  const na = Math.min(nearStart, 1 - 0.08 * k);
   const nf = Math.max(na, Math.min(nearFull, 1 - 0.05 * k));
   const key = `${far.toFixed(1)}|${near.toFixed(1)}|${fa.toFixed(3)}|${ff.toFixed(3)}|${na.toFixed(3)}|${nf.toFixed(3)}`;
   if (key !== last) {

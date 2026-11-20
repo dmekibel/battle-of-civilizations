@@ -16,6 +16,8 @@ const PRIORITY: Record<Moment, number> = { select: 1, move: 1, attack: 2, hit: 3
 /** Seconds before another pick or move line may play. */
 const COOLDOWN: Partial<Record<Moment, number>> = { select: 0.6, move: 0.5 };
 const VOL = 0.9;
+/** Grunts and war cries sit under the fight's clash (they were too loud, David 2026-11-20); death cries a little less so. */
+const MOMENT_VOL: Partial<Record<Moment, number>> = { hit: 0.4, attack: 0.5, death: 0.7 };
 
 // ---------- settings ----------
 const VOICE_KEY = 'boc-voices';
@@ -164,7 +166,7 @@ function playLine(army: string, type: UnitTypeId, moment: Moment, near: boolean)
   src.buffer = buf;
   src.playbackRate.value = 0.98 + Math.random() * 0.04;
   const gain = c.createGain();
-  gain.gain.value = VOL;
+  gain.gain.value = MOMENT_VOL[moment] ?? VOL;
   src.connect(gain).connect(outlet(c, 'voice', near));
   src.start(t);
   const mine: Playing = { src, gain, prio, ends: t + buf.duration };
